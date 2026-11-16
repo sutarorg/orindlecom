@@ -158,6 +158,9 @@ describe("quoted test counts", () => {
      * This reads the counts the runner just produced from the JSON report rather
      * than re-counting test declarations, so it measures what executed.
      */
+    // Written by `npm run test:count` from the runner's own JSON report. Absent in a
+    // plain `npm test` run, in which case the check is skipped rather than failing on
+    // a file that is only produced by the other script.
     const countsFile = path.join(ROOT, ".verify", "test-counts.json");
     let expected: { tests: number; files: number };
     try {
