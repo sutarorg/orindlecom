@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, CreditCard, FileText, Lock, Minus, Receipt } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/dialog";
@@ -9,6 +10,8 @@ import { PLANS, formatPrice, resolvePrice, type Plan } from "@/config/pricing";
 import { formatBytes, formatDate } from "@/lib/drive/format";
 import type { Subscription } from "@/lib/drive/types";
 import { cn } from "@/lib/utils";
+import { startCheckout } from "@/lib/billing/checkout";
+import { api } from "@/lib/drive/client";
 
 /**
  * Billing.
@@ -18,15 +21,75 @@ import { cn } from "@/lib/utils";
  * payment provider isn't connected, because a simulated success is the one
  * thing that would make this screen actively dangerous.
  *
- * `checkout()` is the seam for Razorpay. When it lands, only the body of that
- * function changes — the plan table, the summary and the pending state are
- * already shaped around a real async call.
+ * `checkout()` opens Razorpay's overlay with an order the server created, then
+ * sends the payment id and signature back for verification. It resolves to success
+ * only when the server has confirmed the signature AND activated the plan, so the
+ * success toast cannot appear for a payment that did not happen.
  */
 
 const CURRENCY = "INR" as const;
+/**
+ * Monthly only. No annual price has been approved, and inventing a discounted
+ * yearly figure to fill the toggle would be the exact thing the price list forbids.
+ */
+const PERIOD = "monthly" as const;
 
 export function BillingView({ subscription }: { subscription: Subscription }) {
   const { toast } = useToast();
+  const router = useRouter();
+  /**
+   * Cancel at the end of the period.
+   *
+   * The server returns the updated subscription, and the toast quotes the date from
+   * it rather than the date this component expected. Access does not end here.
+   */
+  const cancelSubscription = async () => {
+    const result = await api.post<{ status: string; currentPeriodEnd: string | null }>(
+      "/api/billing/cancel",
+    );
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Nothing was cancelled", description: result.message });
+      return;
+    }
+
+    const end = result.data.currentPeriodEnd ? formatDate(result.data.currentPeriodEnd) : null;
+    toast({
+      tone: "success",
+      title: "Subscription cancelled",
+      description: end
+        ? `Your plan stays active until ${end}, then drops to Free. Nothing is deleted.`
+        : "Your plan stays active until the end of the period, then drops to Free. Nothing is deleted.",
+    });
+    router.refresh();
+  };
+
+  /**
+   * Switch to a smaller plan, effective at period end.
+   *
+   * The server schedules it; nothing changes immediately. The note it returns is
+   * shown verbatim so the explanation of what happens to files cannot drift from
+   * what the server actually does.
+   */
+  const switchPlan = async (plan: Plan) => {
+    const result = await api.post<{ effectiveAt: string; note: string }>(
+      "/api/billing/change-plan",
+      { planId: plan.id },
+    );
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Plan didn't change", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: `Switching to ${plan.name}`,
+      description: result.data.note,
+    });
+    router.refresh();
+  };
+
   const [busyPlan, setBusyPlan] = React.useState<string | null>(null);
   const [pendingDowngrade, setPendingDowngrade] = React.useState<Plan | null>(null);
   const [cancelOpen, setCancelOpen] = React.useState(false);
@@ -36,16 +99,34 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
 
   const checkout = async (plan: Plan) => {
     setBusyPlan(plan.id);
-    // Seam for Razorpay: create an order server-side, open checkout, and only
-    // resolve once the signature has been verified.
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    setBusyPlan(null);
-    toast({
-      tone: "error",
-      title: "Payments aren't connected yet",
-      description:
-        "Nothing was charged. Orindle's payment provider is the next piece of the backend — checkout will open here once it's live.",
+
+    const outcome = await startCheckout({
+      planId: plan.id,
+      planName: plan.name,
+      period: PERIOD,
+      currency: CURRENCY,
     });
+
+    setBusyPlan(null);
+
+    if (outcome.ok) {
+      // Only reached once the server verified the signature and activated the plan.
+      toast({
+        tone: "success",
+        title: `${plan.name} is active`,
+        description: "Your new allowance is available now.",
+      });
+      router.refresh();
+      return;
+    }
+
+    if (outcome.code === "cancelled") {
+      // Closing the overlay is not a failure, so it does not get an error tone.
+      toast({ tone: "info", title: "Checkout closed", description: outcome.message });
+      return;
+    }
+
+    toast({ tone: "error", title: "Payment wasn't completed", description: outcome.message });
   };
 
   return (
@@ -225,12 +306,7 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
         onClose={() => setCancelOpen(false)}
         onConfirm={() => {
           setCancelOpen(false);
-          toast({
-            tone: "error",
-            title: "Nothing was cancelled",
-            description:
-              "You don't have a paid subscription to cancel, and payments aren't connected yet.",
-          });
+          void cancelSubscription();
         }}
         title="Cancel your subscription?"
         confirmLabel="Cancel subscription"
@@ -247,14 +323,7 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
         onConfirm={() => {
           const plan = pendingDowngrade;
           setPendingDowngrade(null);
-          if (plan) {
-            toast({
-              tone: "error",
-              title: "Plan didn't change",
-              description:
-                "Payments aren't connected yet, so no plan change was made. Nothing was charged.",
-            });
-          }
+          if (plan) void switchPlan(plan);
         }}
         title={`Switch to ${pendingDowngrade?.name ?? "a smaller plan"}?`}
         confirmLabel="Switch plan"

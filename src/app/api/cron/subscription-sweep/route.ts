@@ -40,6 +40,45 @@ export async function GET(request: Request) {
   const supabase = getServiceClient();
   const now = new Date();
 
+  // 0. Scheduled downgrades that have come due.
+  //
+  // A downgrade request records the intent and the effective date rather than
+  // rewriting plan_id immediately, because the customer has paid for the current
+  // period. This is where the intent becomes real.
+  const { data: dueChanges } = await supabase
+    .from("subscriptions")
+    .select("id, owner_id, plan_id, pending_plan_id")
+    .not("pending_plan_id", "is", null)
+    .lte("pending_plan_effective_at", now.toISOString())
+    .eq("status", "active")
+    .limit(200);
+
+  let downgraded = 0;
+  for (const sub of dueChanges ?? []) {
+    // plan_id changes; plan_id is what the allowance is derived from. Nothing is
+    // touched in public.files — if the account is now over the new limit, uploads are
+    // blocked by the quota check and every file stays readable.
+    const { error } = await supabase
+      .from("subscriptions")
+      .update({
+        plan_id: sub.pending_plan_id,
+        pending_plan_id: null,
+        pending_plan_effective_at: null,
+      })
+      .eq("id", sub.id);
+
+    if (error) continue;
+    downgraded += 1;
+
+    await supabase.from("activity_events").insert({
+      actor_id: sub.owner_id,
+      subject_type: "subscription",
+      subject_id: sub.id,
+      kind: "subscription.downgraded",
+      metadata: { fromPlan: sub.plan_id, toPlan: sub.pending_plan_id },
+    });
+  }
+
   // 1. Lapsed: the paid period ended and the customer did not renew.
   const { data: lapsed } = await supabase
     .from("subscriptions")
@@ -82,13 +121,13 @@ export async function GET(request: Request) {
     .lt("recovery_ends_at", now.toISOString())
     .limit(200);
 
-  let downgraded = 0;
+  let recoveryClosed = 0;
   for (const sub of recovered ?? []) {
     const { error } = await supabase
       .from("subscriptions")
       .update({ status: "none" })
       .eq("id", sub.id);
-    if (!error) downgraded += 1;
+    if (!error) recoveryClosed += 1;
   }
 
   // 3. Warnings: 0, 7, 30, 60 and 83 days into the window. Emails are queued
@@ -128,6 +167,6 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    data: { expired, downgraded, warned },
+    data: { downgraded, expired, recoveryClosed, warned },
   });
 }
