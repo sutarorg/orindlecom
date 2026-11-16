@@ -155,3 +155,65 @@ describe(".env.example", () => {
     expect(example).toContain("MALWARE_SCAN_ENABLED=false");
   });
 });
+
+describe("deployment guide", () => {
+  it("states the correct number of migrations", async () => {
+    const files = await readdir(path.join(ROOT, "supabase", "migrations"));
+    const count = files.filter((f) => f.endsWith(".sql")).length;
+
+    const guide = await readFile(
+      path.join(ROOT, "docs", "deployment", "deployment-guide.md"),
+      "utf8",
+    );
+
+    // Prose numbers drift faster than any other documentation claim, and "apply the
+    // nine migrations" is an instruction someone will follow literally.
+    const words: Record<number, string> = {
+      1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
+      7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve",
+      13: "thirteen", 14: "fourteen",
+    };
+    expect(words[count], `add ${count} to the word map`).toBeTruthy();
+    expect(guide).toContain(`${words[count]} migrations`);
+  });
+
+  it("states the correct number of cron jobs", async () => {
+    const raw = await readFile(path.join(ROOT, "vercel.json"), "utf8");
+    const config = JSON.parse(raw) as { crons: { path: string }[] };
+    const count = config.crons.length;
+
+    const guide = await readFile(
+      path.join(ROOT, "docs", "deployment", "deployment-guide.md"),
+      "utf8",
+    );
+
+    const words: Record<number, string> = {
+      6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+    };
+    expect(words[count], `add ${count} to the word map`).toBeTruthy();
+    expect(guide).toContain(`${words[count]} jobs`);
+  });
+});
+
+describe("environment-variables.md", () => {
+  it("lists every server-only variable the code reads", async () => {
+    const doc = await readFile(
+      path.join(ROOT, "docs", "deployment", "environment-variables.md"),
+      "utf8",
+    );
+
+    // The two capability flags were missing from this table while the code read
+    // them, which is how a reviewer concludes a switch does not exist.
+    for (const name of [
+      "RAZORPAY_INTERNATIONAL_ENABLED",
+      "RAZORPAY_RECURRING_ENABLED",
+      "MALWARE_SCAN_ENABLED",
+      "CRON_SECRET",
+      "TRASH_RETENTION_DAYS",
+      "RECOVERY_WINDOW_DAYS",
+      "SUPABASE_SERVICE_ROLE_KEY",
+    ]) {
+      expect(doc, `${name} is undocumented`).toContain(name);
+    }
+  });
+});

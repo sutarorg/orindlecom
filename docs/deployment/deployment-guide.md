@@ -51,16 +51,20 @@ Vercel dashboard, never in the repository.
 
 ### 3.1 First production deploy checklist
 
-1. Production Supabase project created; migrations applied (`supabase db push` or the
-   reviewed SQL in order — `database-schema.md` §11).
+1. Production Supabase project created; all twelve migrations applied in filename
+   order (`supabase db push`, or the reviewed SQL — `database-schema.md` §11). The
+   order is load-bearing: 0001 defines the helper functions every later policy uses.
 2. RLS verified: enable and policies applied table by table in the same migration.
 3. Production R2 bucket created; **versioning on**; CORS configured for presigned
    PUT/GET from the site origin only.
 4. Razorpay live keys set; webhook endpoint registered with the live secret.
 5. Resend domain verified; `RESEND_FROM_ADDRESS` points at it.
 6. `NEXT_PUBLIC_SITE_URL` is the production origin (metadata, sitemap, canonical URLs).
-7. `CRON_SECRET` set and the six cron jobs registered.
-8. Health endpoint reports no `mismatch`.
+7. `CRON_SECRET` set. The seven jobs are declared in `vercel.json`, so they register
+   themselves on deploy — but confirm on the Vercel dashboard that all seven appear,
+   because a job that fails to register looks identical to one that runs.
+8. Health endpoint reports no `mismatch`. It reads configuration presence only and
+   never returns a value.
 9. Restore rehearsal completed (`backup-and-recovery.md` §6).
 
 ---

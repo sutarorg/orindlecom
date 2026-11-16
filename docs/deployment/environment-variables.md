@@ -45,10 +45,23 @@ always fails is worse than no button, which is why this is manual rather than de
 | `RESEND_FROM_ADDRESS` | Verified sender | Dev sandbox address; delivery only to the account owner |
 | `CRON_SECRET` | Bearer check on cron routes | Cron routes 404 |
 | `MALWARE_SCAN_ENABLED` | Whether a scanner is wired | `false`; nothing may claim scanning |
+| `RAZORPAY_INTERNATIONAL_ENABLED` | Whether the merchant account may charge non-INR cards | `false`; an international order is **refused before it is created** |
+| `RAZORPAY_RECURRING_ENABLED` | Whether auto-renewing subscriptions are enabled on the account | `false`; a recurring order is refused likewise |
 | `TRASH_RETENTION_DAYS` | Trash retention | 30 |
 | `RECOVERY_WINDOW_DAYS` | Post-expiry recovery window | 90 |
 
-### 2.1 A correction that matters
+### 2.1 The two capability flags are refusals, not defaults
+
+`RAZORPAY_INTERNATIONAL_ENABLED` and `RAZORPAY_RECURRING_ENABLED` both default to
+`false`, and while false the server **refuses** the matching order instead of creating
+one Razorpay will reject. That is deliberate: promising a payment method the merchant
+account has not been approved for is the failure mode the price list forbids, and a
+refused order charges nothing and says so.
+
+Turning either on is a deliberate act, taken only after confirming the capability on
+the actual account. Neither is confirmed today — see `production-readiness.md` §6.
+
+### 2.2 A correction that matters
 
 The existing `.env.example` says the service-role key must never be added because
 "nothing in this codebase reads it". That was true and is now obsolete: trash cleanup,
