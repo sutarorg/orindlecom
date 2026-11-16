@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, BookOpen, MessageCircleQuestion } from "lucide-react";
 import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/marketing/section-heading";
-import { FaqSearch } from "@/components/marketing/faq-section";
+import { FaqExplorer } from "@/components/help/faq-explorer";
 import { ALL_FAQ } from "@/config/faq";
 import { SITE } from "@/config/site";
 import { pageMetadata } from "@/lib/seo";
@@ -15,43 +16,82 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export default function FaqPage() {
+  const categoriesWithAnswers = new Set(ALL_FAQ.map((item) => item.category)).size;
+
   return (
     <SiteShell>
-      <section className="relative overflow-hidden pt-10 sm:pt-14 lg:pt-16">
+      <section className="relative overflow-hidden border-b border-[var(--brand-border-soft)] pt-10 pb-9 sm:pt-14">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[400px] bg-[radial-gradient(70%_100%_at_50%_0%,rgba(231,226,253,0.6),rgba(255,255,255,0)_72%)]"
         />
         <div className="container-or">
           <PageIntro
-            eyebrow="Help centre"
+            eyebrow="FAQ"
             title="Questions, answered plainly."
-            description="Search across every answer, or read by topic. Where a policy is still open, the answer says so instead of inventing a rule."
+            description={`${ALL_FAQ.length} answers across ${categoriesWithAnswers} topics. Where a policy is still open, the answer says so instead of inventing a rule.`}
           />
         </div>
       </section>
 
-      <section className="pb-16 pt-9 sm:pb-20 sm:pt-12">
+      <section className="pb-14 pt-8 sm:pb-20 sm:pt-10">
         <div className="container-or">
-          <div className="mx-auto max-w-[760px]">
-            <FaqSearch items={ALL_FAQ} />
+          <div className="mx-auto max-w-[820px]">
+            <FaqExplorer items={ALL_FAQ} />
 
-            <div className="mt-8 rounded-[14px] border border-[var(--brand-border)] bg-[var(--brand-canvas)] p-5">
-              <p className="text-[13px] font-bold text-ink">Still need an answer?</p>
-              <p className="mt-1.5 text-[12.5px] leading-relaxed text-text-muted">
-                Send it through the{" "}
-                <Link href="/contact" className="font-semibold text-primary-ink underline underline-offset-2">
-                  contact form
-                </Link>{" "}
-                or email{" "}
-                <a
-                  href={`mailto:${SITE.supportEmail}`}
-                  className="font-semibold text-primary-ink underline underline-offset-2"
+            {/* Where to go next */}
+            <div className="mt-12 grid gap-3 sm:grid-cols-2">
+              <Link
+                href="/help"
+                className="group flex items-start gap-3 rounded-[14px] border border-[var(--brand-border)] bg-white p-4 transition-colors hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-ink"
                 >
-                  {SITE.supportEmail}
-                </a>
-                . If a question comes up often enough, it is added to this page.
-              </p>
+                  <BookOpen className="h-4 w-4" strokeWidth={2} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5 text-[13.5px] font-bold text-ink">
+                    Help centre
+                    <ArrowRight
+                      className="h-3.5 w-3.5 text-text-subtle transition-transform group-hover:translate-x-0.5"
+                      strokeWidth={2.2}
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <span className="mt-0.5 block text-[12px] leading-[1.55] text-text-muted">
+                    Longer walkthroughs for the tasks that need steps rather than a sentence.
+                  </span>
+                </span>
+              </Link>
+
+              <Link
+                href="/contact?subject=support"
+                className="group flex items-start gap-3 rounded-[14px] border border-[var(--brand-border)] bg-white p-4 transition-colors hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pastel-mint text-ink"
+                >
+                  <MessageCircleQuestion className="h-4 w-4" strokeWidth={2} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5 text-[13.5px] font-bold text-ink">
+                    Ask a person
+                    <ArrowRight
+                      className="h-3.5 w-3.5 text-text-subtle transition-transform group-hover:translate-x-0.5"
+                      strokeWidth={2.2}
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <span className="mt-0.5 block text-[12px] leading-[1.55] text-text-muted">
+                    If the answer is not here, write to{" "}
+                    <span className="font-medium text-ink">{SITE.supportEmail}</span> and a person
+                    replies.
+                  </span>
+                </span>
+              </Link>
             </div>
           </div>
         </div>
