@@ -2,7 +2,7 @@
   "name": "orindle",
   "version": "0.1.0",
   "private": true,
-  "description": "Orindle \u2014 personal and business cloud storage. Public website and product frontend.",
+  "description": "Orindle — personal and business cloud storage. Public website and product frontend.",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
@@ -13,6 +13,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1169.0",
+    "@aws-sdk/s3-request-presigner": "^3.1169.0",
     "@fontsource-variable/plus-jakarta-sans": "5.3.0",
     "@radix-ui/react-accordion": "1.3.1",
     "@radix-ui/react-slot": "1.3.1",

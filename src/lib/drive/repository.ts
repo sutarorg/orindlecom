@@ -21,7 +21,6 @@ import type {
   ShareLink,
   StorageUsage,
   Subscription,
-  UploadTask,
 } from "./types";
 
 export type DriveErrorCode =
@@ -100,9 +99,6 @@ export interface DriveRepository {
   changeEmail(input: { email: string }): Promise<DriveResult<null>>;
   changePassword(input: { current: string; next: string }): Promise<DriveResult<null>>;
   deleteAccount(input: { confirmation: string }): Promise<DriveResult<null>>;
-
-  /** Upload tasks currently in flight, for the shell's progress tray. */
-  uploadTasks(): Promise<DriveResult<UploadTask[]>>;
 }
 
 /**

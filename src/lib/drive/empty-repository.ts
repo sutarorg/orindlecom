@@ -33,6 +33,11 @@ export function createEmptyDriveRepository(): DriveRepository {
           planName: plan.name,
           used: 0,
           total: plan.storageBytes,
+          // Nothing is connected, so nothing is committed, reserved or in the
+          // bin. These are zero because it is true, not because they are unknown.
+          reserved: 0,
+          trash: 0,
+          available: plan.storageBytes,
           byCategory: {},
           fileCount: 0,
           folderCount: 0,
@@ -96,6 +101,5 @@ export function createEmptyDriveRepository(): DriveRepository {
     changePassword: async () => notConnected(),
     deleteAccount: async () => notConnected(),
 
-    uploadTasks: async () => ({ ok: true as const, data: [] }),
   };
 }

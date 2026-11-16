@@ -90,6 +90,25 @@ export interface StorageUsage {
   folderCount: number;
   /** True when the figures came from the backend rather than a default. */
   authoritative: boolean;
+
+  /**
+   * In-flight bytes claimed by uploads that have started but not finished.
+   *
+   * Separated from `used` because "you have used 3 GB" and "3 GB is committed,
+   * 1 GB is mid-upload" answer different questions — and only the second one
+   * explains why a new upload was refused.
+   */
+  reserved: number;
+  /**
+   * Bytes sitting in the bin, still inside the retention window.
+   *
+   * Already included in `used`: the objects are still in the bucket and still
+   * cost money. Showing it separately lets the UI say "emptying the bin frees
+   * 400 MB" without ever implying that the space is already free.
+   */
+  trash: number;
+  /** `total - used`, clamped at zero. What can still be uploaded. */
+  available: number;
 }
 
 /* ------------------------------------------------------------------ */
