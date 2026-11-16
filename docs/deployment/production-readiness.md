@@ -36,14 +36,14 @@ Anything claiming otherwise contradicts this table.
 | No secret in the repository | grep over tracked files |
 | Contact success gated on provider 2xx | implemented |
 | Storage units consistent (decimal) | fixed and re-verified |
-| RLS across 20 tables | 20 negative tests in `tests/db/rls.test.ts` |
+| RLS across 20 tables | `tests/db/rls.test.ts` (20) plus `rls-coverage.test.ts` (7), which enumerates tables from the catalogue rather than a list |
 | Quota cannot be bypassed by parallel uploads | 13 tests in `tests/db/storage.test.ts` |
 | Signature verification rejects replay and tampering | `tests/unit/billing-signature.test.ts` |
 | Rate limiting is atomic across instances | `tests/db/rate-limit.test.ts` |
 | Domain layer cannot see a request | `tests/unit/architecture.test.ts` |
 | Docs cannot claim an unbuilt route | `tests/unit/docs-fidelity.test.ts` |
 | Cron schedules resolve to real routes | `tests/unit/deployment-config.test.ts` |
-| 106 tests, 9 files | `npm test` |
+| 136 tests, 12 files | `npm test` |
 
 Every one of those runs against a real PostgreSQL engine (PGlite) or a real build,
 not a mock. What none of them proves is the same code against hosted Supabase, R2 or

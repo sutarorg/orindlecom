@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:count": "vitest run --reporter=json --outputFile=.verify/test-counts.json --silent && node -e \"const r=require('./.verify/test-counts.json');require('fs').writeFileSync('.verify/test-counts.json',JSON.stringify({tests:r.numTotalTests,files:r.numPassedTestSuites}))\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1169.0",

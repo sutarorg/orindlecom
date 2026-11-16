@@ -150,7 +150,7 @@ Legend: ✅ verified in this repo · 🟡 designed, not implemented · ⬜ open 
 
 **Verified today:** secret hygiene in the repo, the contact form's honest failure
 behaviour, absence of fake success anywhere in the UI, the visual/a11y gate, the
-approved price list, RLS across 20 tables (33 database tests), the upload quota
+approved price list, RLS across 20 tables (50 database tests), the upload quota
 functions under concurrency, signature verification including replay and tampered
 bodies, cron authorisation, security headers on a live response, and rate limiting
 against the real Postgres engine.
@@ -159,7 +159,7 @@ against the real Postgres engine.
 described as unbuilt — RLS policies with negative tests, the 13-step upload flow with
 transactional reservations, storage accounting with reconciliation, Razorpay order
 and webhook verification with idempotent activation, six Vercel cron jobs, Resend
-templates with retry, and 101 tests.
+templates with retry, and 136 tests across 12 files.
 
 **Open and named:**
 

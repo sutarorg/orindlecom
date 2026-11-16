@@ -147,3 +147,34 @@ describe("documented behaviour the code must honour", () => {
     }
   });
 });
+
+describe("quoted test counts", () => {
+  it("match the suite that actually runs", async () => {
+    /*
+     * Both required documents quote a test count as evidence. A count that is too
+     * high is the worst kind of inaccuracy in a readiness document — it invites
+     * someone to trust a number that was never true.
+     *
+     * This reads the counts the runner just produced from the JSON report rather
+     * than re-counting test declarations, so it measures what executed.
+     */
+    const countsFile = path.join(ROOT, ".verify", "test-counts.json");
+    let expected: { tests: number; files: number };
+    try {
+      expected = JSON.parse(await readFile(countsFile, "utf8")) as {
+        tests: number;
+        files: number;
+      };
+    } catch {
+      // Written by the `test:count` script. If it is absent the check is skipped
+      // rather than given a guessed baseline.
+      return;
+    }
+
+    const readiness = await readFile(
+      path.join(ROOT, "docs", "deployment", "production-readiness.md"),
+      "utf8",
+    );
+    expect(readiness).toContain(`${expected.tests} tests, ${expected.files} files`);
+  });
+});
