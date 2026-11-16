@@ -90,7 +90,7 @@ export function PlanCard({
       </div>
 
       <Link
-        href={plan.id === "free" ? "/sign-up" : `/sign-up?plan=${plan.id}`}
+        href={plan.id === "free" ? "/signup" : `/signup?plan=${plan.id}`}
         className={cn(
           "mt-4 inline-flex h-[27px] items-center justify-center rounded-full text-[10.5px] font-semibold leading-none tracking-[-0.005em] transition-colors duration-150",
           highlighted

@@ -43,7 +43,7 @@ export function Hero() {
                 pill
                 className="h-[38px] px-[14px] text-[12.5px] tracking-[-0.005em] lg:h-11 lg:px-5 lg:text-[13.5px]"
               >
-                <Link href="/sign-up">
+                <Link href="/signup">
                   Get 10 GB Free
                   <ArrowRight className="h-[15px] w-[15px]" strokeWidth={2.2} />
                 </Link>
