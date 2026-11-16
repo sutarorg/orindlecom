@@ -11,6 +11,7 @@ import { NewFolderDialog } from "./new-folder-dialog";
 import { UploadTray, useUploadManager, UploadManagerProvider } from "./upload-manager";
 import { UploadDropzone } from "./upload-dropzone";
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from "@/config/dashboard";
+import type { BusinessRole } from "@/lib/business/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,17 +34,27 @@ export function DashboardShell({
   crumbs,
   user,
   usage,
+  workspace = { kind: "personal", organization: null, viewerRole: null },
 }: {
   children: React.ReactNode;
   crumbs: Crumb[];
   user: { name: string; email: string; initials: string };
   usage: { used: number; total: number; label: string } | null;
+  /**
+   * Which workspace's navigation the sidebar renders. Defaults to personal so
+   * every existing call site keeps working unchanged.
+   */
+  workspace?: {
+    kind: "personal" | "business";
+    organization: { name: string; shortName: string; initials: string } | null;
+    viewerRole: BusinessRole | null;
+  };
 }) {
   return (
     <ToastProvider>
       <UploadManagerProvider>
         <SearchBridgeProvider>
-          <ShellInner crumbs={crumbs} user={user} usage={usage}>
+          <ShellInner crumbs={crumbs} user={user} usage={usage} workspace={workspace}>
             {children}
           </ShellInner>
         </SearchBridgeProvider>
@@ -57,11 +68,17 @@ function ShellInner({
   crumbs,
   user,
   usage,
+  workspace,
 }: {
   children: React.ReactNode;
   crumbs: Crumb[];
   user: { name: string; email: string; initials: string };
   usage: { used: number; total: number; label: string } | null;
+  workspace: {
+    kind: "personal" | "business";
+    organization: { name: string; shortName: string; initials: string } | null;
+    viewerRole: BusinessRole | null;
+  };
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
@@ -164,6 +181,7 @@ function ShellInner({
             onNewUpload={() => setPickerOpen(true)}
             onNewFolder={() => setNewFolderOpen(true)}
             usage={usage}
+            workspace={workspace}
           />
         </aside>
 
@@ -202,6 +220,7 @@ function ShellInner({
                   setNewFolderOpen(true);
                 }}
                 usage={usage}
+                workspace={workspace}
               />
             </div>
           </div>
