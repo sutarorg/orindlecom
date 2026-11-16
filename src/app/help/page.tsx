@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
 import { HelpHome } from "@/components/help/help-home";
-import { pageMetadata } from "@/lib/seo";
+import { approvedMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Help centre",
-  description:
-    "Answers about your account, storage, files, sharing, billing and business workspaces — written to describe what Orindle actually does.",
-  path: "/help",
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.help);
 
 export default function HelpPage() {
   return <HelpHome />;

@@ -37,8 +37,8 @@ export const DATA_DELETION_POLICY: LegalDocument = {
         {
           type: "note",
           tone: "info",
-          title: "There is no self-service delete-account button yet",
-          text: "Account deletion is currently handled as a request. This is the honest description of the product as it exists. When the flow ships, this section changes with it.",
+          title: "Account deletion is self-service, with a seven-day grace period",
+          text: "Start it from your account settings. You confirm by typing your email address, and nothing is deleted for seven days. Signing in during that window cancels the request automatically. On day eight the account and its files are permanently removed.",
         },
       ],
     },
@@ -74,7 +74,14 @@ export const DATA_DELETION_POLICY: LegalDocument = {
           type: "p",
           text: "Deletion runs in this order: sharing links are revoked first so nothing remains reachable from outside, then files are removed from primary storage, then the account record is deleted, then the remaining copies in backups age out on the rolling cycle.",
         },
-        { type: "placeholder", key: "deletionSla" },
+        {
+          type: "p",
+          text: "Account deletion runs in two stages. When you request it, your account is marked for deletion and becomes read-only: you can still sign in, and signing in cancels the request. After seven days, the purge runs and the data is removed permanently. The seven days exist so that a deletion made in error, or by someone who has gained access to your account, can still be undone.",
+        },
+        {
+          type: "p",
+          text: "The purge itself runs in this order: objects are deleted from file storage first, then database rows, then the authentication record last, so a failed run leaves an account that can be retried rather than orphaned files nobody can find. A deletion confirmation is emailed to you when the request is made.",
+        },
         {
           type: "p",
           text: "Anyone you shared files with loses access when the link is revoked. Files they already downloaded onto their own devices are outside Orindle's control and are not affected.",

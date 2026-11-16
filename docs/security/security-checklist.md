@@ -159,7 +159,7 @@ against the real Postgres engine.
 described as unbuilt — RLS policies with negative tests, the 13-step upload flow with
 transactional reservations, storage accounting with reconciliation, Razorpay order
 and webhook verification with idempotent activation, six Vercel cron jobs, Resend
-templates with retry, and 151 tests across 13 files.
+templates with retry, and 186 tests across 14 files.
 
 **Open and named:**
 

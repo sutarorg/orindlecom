@@ -9,16 +9,11 @@ import { FaqSection } from "@/components/marketing/faq-section";
 import { FileManager, SAMPLE_FOLDERS } from "@/components/product/file-manager";
 import { StorageMeter } from "@/components/product/storage-meter";
 import { ALL_FAQ } from "@/config/faq";
-import { pageMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
+import { approvedMetadata } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Features",
-  description:
-    "See how Orindle works: organised folders, a working file manager, sharing with real permissions, storage you can read at a glance, and access from any device.",
-  path: "/features",
-  keywords: ["cloud storage features", "file sharing", "folder organisation"],
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.features);
 
 const FEATURE_FAQ = ALL_FAQ.filter((item) =>
   ["Files & sharing", "Storage & plans"].includes(item.category),
@@ -70,7 +65,7 @@ export default function FeaturesPage() {
         <div className="container-or">
           <PageIntro
             eyebrow="Features"
-            title="The storage product, shown honestly."
+            title="Everything you need. Nothing you don't."
             description="Every screen below is a working component of Orindle, not an illustration. Where a capability is not built yet, we say so instead of drawing it."
           />
         </div>

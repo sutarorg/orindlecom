@@ -5,14 +5,10 @@ import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/marketing/section-heading";
 import { ContactForm } from "@/components/forms/contact-form";
 import { SITE } from "@/config/site";
-import { pageMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
+import { approvedMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Contact",
-  description:
-    "Questions about plans, storage, billing or privacy? Send Orindle a message and you will get a reply from a real person.",
-  path: "/contact",
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.contact);
 
 export default async function ContactPage({
   searchParams,
@@ -33,7 +29,7 @@ export default async function ContactPage({
         <div className="container-or">
           <PageIntro
             eyebrow="Contact"
-            title="Talk to us directly."
+            title="We're here to help."
             description="Whether it is a plan question, a bug, or something that concerns your data, this reaches a person rather than a ticket queue."
           />
         </div>

@@ -5,14 +5,10 @@ import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/marketing/section-heading";
 import { LEGAL_DOCUMENTS } from "@/config/legal";
 import { OPEN_PLACEHOLDER_COUNT, PLACEHOLDER_DEFINITIONS } from "@/config/legal/placeholders";
-import { pageMetadata } from "@/lib/seo";
+import { approvedMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Legal",
-  description:
-    "Orindle's legal documents: privacy, terms, cookies, acceptable use and data deletion. Drafts, with every open question visible.",
-  path: "/legal",
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.legal);
 
 /**
  * Legal index.
@@ -28,7 +24,7 @@ export default function LegalIndexPage() {
         <div className="container-or">
           <PageIntro
             eyebrow="Legal"
-            title="The rules, in plain language."
+            title="Legal information and policies."
             description="Five documents covering what we hold, what you may store, and what happens when you leave. They are drafts: every undecided question is shown as open rather than filled in."
           />
         </div>

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-16T09:21:57.524Z",
-  "base": "http://localhost:4080",
+  "generatedAt": "2026-11-16T10:02:31.463Z",
+  "base": "http://localhost:4102",
   "report": [
     {
       "name": "home",
@@ -716,6 +716,141 @@
     {
       "name": "data-deletion",
       "route": "/data-deletion",
+      "width": 1440,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog",
+      "route": "/blog",
+      "width": 390,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog",
+      "route": "/blog",
+      "width": 768,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog",
+      "route": "/blog",
+      "width": 1024,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog",
+      "route": "/blog",
+      "width": 1280,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog",
+      "route": "/blog",
+      "width": 1440,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article",
+      "route": "/blog/best-google-drive-alternatives",
+      "width": 390,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article",
+      "route": "/blog/best-google-drive-alternatives",
+      "width": 768,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article",
+      "route": "/blog/best-google-drive-alternatives",
+      "width": 1024,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article",
+      "route": "/blog/best-google-drive-alternatives",
+      "width": 1280,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article",
+      "route": "/blog/best-google-drive-alternatives",
+      "width": 1440,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article-long",
+      "route": "/blog/how-to-move-files-from-google-drive",
+      "width": 390,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article-long",
+      "route": "/blog/how-to-move-files-from-google-drive",
+      "width": 768,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article-long",
+      "route": "/blog/how-to-move-files-from-google-drive",
+      "width": 1024,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article-long",
+      "route": "/blog/how-to-move-files-from-google-drive",
+      "width": 1280,
+      "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "blog-article-long",
+      "route": "/blog/how-to-move-files-from-google-drive",
       "width": 1440,
       "status": 304,
       "over": 0,

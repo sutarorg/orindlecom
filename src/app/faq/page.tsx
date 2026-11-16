@@ -6,14 +6,10 @@ import { PageIntro } from "@/components/marketing/section-heading";
 import { FaqExplorer } from "@/components/help/faq-explorer";
 import { ALL_FAQ } from "@/config/faq";
 import { SITE } from "@/config/site";
-import { pageMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
+import { approvedMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Frequently asked questions",
-  description:
-    "Answers about Orindle plans, storage, sharing, billing, privacy and business accounts — with open questions named rather than guessed at.",
-  path: "/faq",
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.faq);
 
 export default function FaqPage() {
   const categoriesWithAnswers = new Set(ALL_FAQ.map((item) => item.category)).size;
@@ -28,7 +24,7 @@ export default function FaqPage() {
         <div className="container-or">
           <PageIntro
             eyebrow="FAQ"
-            title="Questions, answered plainly."
+            title="Frequently asked questions."
             description={`${ALL_FAQ.length} answers across ${categoriesWithAnswers} topics. Where a policy is still open, the answer says so instead of inventing a rule.`}
           />
         </div>
