@@ -115,7 +115,7 @@ export function PermissionsView({
           </p>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto [contain:paint]">
           <table className="w-full min-w-[520px] border-collapse text-left">
             <caption className="sr-only">Capabilities by role</caption>
             <thead>

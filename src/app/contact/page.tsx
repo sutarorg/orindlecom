@@ -62,7 +62,7 @@ export default async function ContactPage({
                 body={
                   <a
                     href={`mailto:${SITE.supportEmail}`}
-                    className="font-semibold text-primary-ink underline decoration-[var(--brand-primary-soft-2)] underline-offset-2 hover:decoration-primary"
+                    className="inline-flex min-h-[28px] items-center font-semibold text-primary-ink underline decoration-[var(--brand-primary-soft-2)] underline-offset-2 hover:decoration-primary"
                   >
                     {SITE.supportEmail}
                   </a>

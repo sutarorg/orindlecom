@@ -42,7 +42,7 @@ export function FolderDetail({
               <ChevronRight className="h-3 w-3 text-text-subtle" strokeWidth={2.2} aria-hidden="true" />
               <Link
                 href={`/dashboard/folders/${ancestor.id}`}
-                className="max-w-[140px] truncate rounded px-1 py-0.5 font-medium text-text-muted transition-colors hover:bg-[var(--brand-surface-muted)] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex min-h-[28px] max-w-[140px] items-center truncate rounded px-1 py-0.5 font-medium text-text-muted transition-colors hover:bg-[var(--brand-surface-muted)] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {ancestor.name}
               </Link>

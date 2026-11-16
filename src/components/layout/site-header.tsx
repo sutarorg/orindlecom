@@ -154,7 +154,11 @@ export function SiteHeader() {
       {/* Mobile sheet */}
       <div
         className={cn(
-          "fixed inset-0 z-[70] md:hidden",
+          // When closed the panel is translated off-screen but still laid out,
+          // which makes the document horizontally scrollable on mobile.
+          // overflow-hidden clips it at the viewport edge so the slide
+          // transition is untouched but no sideways scroll can appear.
+          "fixed inset-0 z-[70] overflow-hidden md:hidden",
           open ? "pointer-events-auto" : "pointer-events-none",
         )}
         aria-hidden={!open}

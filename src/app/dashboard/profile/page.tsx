@@ -111,7 +111,7 @@ export default async function ProfilePage() {
         </p>
         <Link
           href="/dashboard/settings"
-          className="mt-2 inline-flex min-h-6 items-center gap-1 rounded text-[11.5px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="mt-2 inline-flex min-h-[28px] items-center gap-1 rounded text-[11.5px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           Manage account security
           <ArrowRight className="h-3 w-3" aria-hidden="true" />

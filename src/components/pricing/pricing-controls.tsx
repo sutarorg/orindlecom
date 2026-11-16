@@ -59,7 +59,7 @@ export function BillingToggle({
             onClick={() => onChange(option.id)}
             className={cn(
               "rounded-full font-semibold leading-none transition-colors duration-150",
-              size === "large" ? "h-8 px-4 text-[12.5px]" : "h-[22px] px-3.5 text-[11px]",
+              size === "large" ? "h-8 px-4 text-[12.5px]" : "h-[28px] px-3.5 text-[11px]",
               selected
                 ? "bg-primary text-white shadow-[var(--brand-shadow-primary)]"
                 : "text-ink hover:bg-[var(--brand-surface-muted)]",
