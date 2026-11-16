@@ -58,8 +58,12 @@ export function FoldersView({
   const canManage = can(viewerRole, "folders.manageAccess");
   const canDelete = can(viewerRole, "folders.delete");
 
-  const reportUnbacked = async (title: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 450));
+  /**
+   * Organisation folders have no route yet. This reports that immediately rather
+   * than simulating a request: a fake delay teaches people to wait for something
+   * that was never sent.
+   */
+  const reportUnbacked = (title: string) => {
     toast({ tone: "error", title, description: BUSINESS_NOT_CONNECTED });
   };
 
@@ -183,7 +187,7 @@ export function FoldersView({
         onClose={() => setRenameTarget(null)}
         onSubmit={async () => {
           setRenameTarget(null);
-          await reportUnbacked("Folder wasn't renamed");
+          reportUnbacked("Folder wasn't renamed");
         }}
       />
 
@@ -194,7 +198,7 @@ export function FoldersView({
         onClose={() => setCreateOpen(false)}
         onSubmit={async () => {
           setCreateOpen(false);
-          await reportUnbacked("Folder wasn't created");
+          reportUnbacked("Folder wasn't created");
         }}
       />
 

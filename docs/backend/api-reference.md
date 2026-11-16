@@ -178,8 +178,9 @@ existed" are different for the person holding it.
 | ✅ | `GET` | `/api/users/me` | | Profile |
 | ✅ | `PATCH` | `/api/users/me` | | `{ fullName }` |
 | ⬜ | `POST` | `/api/users/me/email` | | Change email (re-verification required) |
-| ⬜ | `POST` | `/api/users/me/password` | | `{ current, next }` — re-authenticates |
-| ✅ | `POST` | `/api/users/me/delete` | | `{ confirmation }` — typed confirmation required |
+| ✅ | `POST` | `/api/users/me/password` | | `{ current, next }` — re-authenticates with the current password first |
+| ✅ | `POST` | `/api/users/me/delete` | | `{ confirmation }` — typed confirmation required; schedules deletion, removes nothing |
+| ✅ | `DELETE` | `/api/users/me/delete` | | Cancel a pending deletion |
 | ⬜ | `GET` | `/api/users/me/export` | | Data export: a signed bundle link |
 | ✅ | `GET` | `/api/auth/oauth/:provider/start` | | Begin a social sign-in; redirects to the provider |
 

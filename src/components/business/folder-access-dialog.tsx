@@ -110,10 +110,9 @@ export function FolderAccessDialog({
       return next;
     });
 
-  const save = async () => {
-    setPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 550));
-    setPending(false);
+  const save = () => {
+    // Organisation folder access has no route yet, so nothing is saved and the
+    // dialog stays open with the changes intact. No simulated request.
     toast({
       tone: "error",
       title: "Access wasn't changed",

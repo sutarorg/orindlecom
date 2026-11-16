@@ -201,14 +201,26 @@ function SecuritySection({
 
     setError(null);
     setPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const result = await api.post<{ changed: boolean }>("/api/users/me/password", {
+      current,
+      next,
+    });
+
     setPending(false);
+
+    if (!result.ok) {
+      // Keep the dialog open and the typed values in place so the person can correct
+      // the current password rather than starting over.
+      setError(result.message);
+      return;
+    }
+
     setOpen(false);
     toast({
-      tone: "error",
-      title: "Password wasn't changed",
-      description:
-        "Password changes aren't available yet. Your current password still works.",
+      tone: "success",
+      title: "Password changed",
+      description: "Use your new password next time you sign in.",
     });
   };
 

@@ -122,3 +122,29 @@ describe("expiry never deletes files", () => {
     }
   });
 });
+
+describe("no simulated latency", () => {
+  it("never fakes a request with a timer", async () => {
+    /*
+     * A component that awaits a timeout and then reports "not available" is
+     * imitating a network call. It teaches the person to wait for a request that
+     * was never sent, and it is indistinguishable from a working button that
+     * failed. The honest pattern is to report the state immediately.
+     *
+     * `setTimeout` is still allowed where it is genuinely doing UI work — a toast
+     * auto-dismissing, for example — so this only rejects the seeded-promise form
+     * that exists purely to look like latency.
+     */
+    const files = await walk(path.join(SRC, "components"));
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      const source = await read(file);
+      if (/new Promise\(\(resolve\)\s*=>\s*setTimeout\(resolve/.test(source)) {
+        offenders.push(file.replace(`${SRC}/`, ""));
+      }
+    }
+
+    expect(offenders, `simulated request latency in: ${offenders.join(", ")}`).toEqual([]);
+  });
+});

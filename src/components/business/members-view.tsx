@@ -77,7 +77,10 @@ export function MembersView({
   const [roleTarget, setRoleTarget] = React.useState<Member | null>(null);
   const [removeTarget, setRemoveTarget] = React.useState<Member | null>(null);
   const [revokeTarget, setRevokeTarget] = React.useState<Member | null>(null);
-  const [pendingAction, setPendingAction] = React.useState(false);
+  // Always false: no member action issues a request yet, so nothing is ever pending.
+  // Kept as a named value rather than deleting the plumbing, which the pending prop
+  // below still reads.
+  const pendingAction = false;
 
   const canInvite = can(viewerRole, "members.invite");
   const canRemove = can(viewerRole, "members.remove");
@@ -110,11 +113,11 @@ export function MembersView({
 
   const filteredBySearch = search.trim().length > 0 || status !== "all";
 
-  /** Every write reports honestly: nothing was saved. */
-  const reportUnbacked = async (title: string) => {
-    setPendingAction(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    setPendingAction(false);
+  /**
+   * Member management has no route yet. Reported immediately, with no simulated
+   * request: the honest answer is available without waiting.
+   */
+  const reportUnbacked = (title: string) => {
     toast({ tone: "error", title, description: BUSINESS_NOT_CONNECTED });
   };
 
