@@ -14,7 +14,7 @@
  */
 
 import type { Metadata } from "next";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getTeamDirectory } from "@/lib/admin/service";
 import { pagination, searchTerm } from "@/lib/admin/validation";
 import { FilterBar } from "@/components/admin/filter-bar";
@@ -50,7 +50,7 @@ export default async function AdminTeamsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const ctx = await requirePlatformAdmin("view_operations");
+  const ctx = await requireAdminPageContext("view_operations");
   const params = await searchParams;
 
   const page = pagination(

@@ -9,7 +9,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Users } from "lucide-react";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getUserDirectory } from "@/lib/admin/service";
 import {
   PLANS,
@@ -63,7 +63,7 @@ export default async function AdminUsersPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const ctx = await requirePlatformAdmin("view_operations");
+  const ctx = await requireAdminPageContext("view_operations");
   const params = await searchParams;
 
   const page = pagination(

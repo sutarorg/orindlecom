@@ -19,7 +19,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getAuditLogs, getOperationalCounts } from "@/lib/admin/service";
 import { dateRange, oneOf, pagination, optionalUuid } from "@/lib/admin/validation";
 import { FilterBar } from "@/components/admin/filter-bar";
@@ -83,7 +83,7 @@ export default async function AdminLogsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const ctx = await requirePlatformAdmin("view_audit_log");
+  const ctx = await requireAdminPageContext("view_audit_log");
   const params = await searchParams;
 
   const page = pagination(

@@ -13,7 +13,7 @@
  */
 
 import type { Metadata } from "next";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getBillingSummary } from "@/lib/admin/service";
 import {
   AdminCard,
@@ -45,7 +45,7 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 export default async function AdminBillingPage() {
-  const ctx = await requirePlatformAdmin("view_operations");
+  const ctx = await requireAdminPageContext("view_operations");
   const summary = await getBillingSummary(ctx);
 
   // Subscription counts by status, summed across plans and currencies. A count is

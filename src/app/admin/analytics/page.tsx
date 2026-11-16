@@ -13,7 +13,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AlertTriangle, BarChart3, Plug } from "lucide-react";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getAnalyticsProvider, searchConsoleState } from "@/lib/admin/analytics";
 import { ANALYTICS_TABS, type AnalyticsTab } from "@/lib/admin/analytics-types";
 import { getOverviewStats } from "@/lib/admin/service";
@@ -52,7 +52,7 @@ export default async function AdminAnalyticsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const ctx = await requirePlatformAdmin("view_operations");
+  const ctx = await requireAdminPageContext("view_operations");
   const params = await searchParams;
 
   const rawTab = Array.isArray(params.tab) ? params.tab[0] : params.tab;

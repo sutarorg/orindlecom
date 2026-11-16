@@ -10,7 +10,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getSupportTicket } from "@/lib/admin/service";
 import { ReplyBox, TicketActions } from "@/components/admin/support-ticket";
 import {
@@ -35,7 +35,7 @@ export default async function AdminTicketPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const ctx = await requirePlatformAdmin("manage_support");
+  const ctx = await requireAdminPageContext("manage_support");
   const { id } = await params;
 
   if (!UUID_RE.test(id)) notFound();

@@ -5,8 +5,10 @@
  * remember to check. That is the same argument the dashboard's middleware gate is
  * built on: a per-page check means the page that forgets is the hole.
  *
- * `requirePlatformAdmin` throws, and `redirect` turns an authenticated non-admin
- * away without rendering anything. Note the split:
+ * The layout resolves the administrator itself and redirects, so the wrong person
+ * gets a page rather than an error. Pages use `requireAdminPageContext`, which is
+ * the same resolution with the same redirects — a page cannot rely on this layout
+ * having finished first, because the two render concurrently. Note the split:
  *
  *   - no session      → /login?next=/admin (they can fix that)
  *   - not an admin    → /access-denied, a page outside this segment that says

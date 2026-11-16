@@ -15,7 +15,7 @@
  */
 
 import type { Metadata } from "next";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import {
   getLargestAccounts,
   getOverviewStats,
@@ -54,7 +54,7 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 export default async function AdminStoragePage() {
-  const ctx = await requirePlatformAdmin("view_operations");
+  const ctx = await requireAdminPageContext("view_operations");
 
   const [stats, byPlan, largest, openReservations] = await Promise.all([
     getOverviewStats(ctx),

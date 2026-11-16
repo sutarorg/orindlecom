@@ -30,6 +30,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { redirect } from "next/navigation";
 import { AppError } from "@/domain/auth/errors";
 import { resolveActor } from "@/domain/auth/actor";
 import { createSupabaseServerClient } from "@/lib/auth/supabase/server";
@@ -201,4 +202,44 @@ export async function requirePlatformAdmin(
 export async function requireAdminPage(permission?: PlatformPermission): Promise<PlatformAdmin> {
   const { admin } = await requirePlatformAdmin(permission);
   return admin;
+}
+
+/**
+ * The page variant: same authorization, but a refusal redirects instead of throwing.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * A layout and its page render concurrently in the App Router, so a page cannot
+ * rely on the layout having redirected first. When the page throws instead, Next
+ * logs the error and serves the `error.tsx` boundary — and a redirect from the
+ * layout that lands on the right screen does not undo the error entry. The visitor
+ * sees the correct refusal page; the logs fill with 500s, which is how a real
+ * outage gets missed.
+ *
+ * So: **API routes throw** (they need a JSON status code and `adminRoute` maps the
+ * `AppError`), and **pages redirect**. Same `resolvePlatformAdmin` underneath, same
+ * order of operations, same refusal page — only the failure transport differs.
+ */
+export async function requireAdminPageContext(
+  permission?: PlatformPermission,
+): Promise<AdminContext> {
+  const result = await resolvePlatformAdmin();
+
+  if (!result.ok) {
+    if (result.code === "unauthenticated") redirect("/login?next=/admin");
+    if (result.code === "email_unverified") redirect("/verify-email?next=/admin");
+    if (result.code === "not_configured") redirect("/access-denied?reason=not-configured");
+    redirect("/access-denied");
+  }
+
+  if (permission && !roleCan(result.admin.role, permission)) {
+    // An `admin` reaching an owner-only page gets the same page as a customer.
+    // Telling them "you are an admin, but not enough of one" is a permission map
+    // disclosure they have no use for.
+    redirect("/access-denied");
+  }
+
+  if (!isServiceConfigured()) redirect("/access-denied?reason=not-configured");
+
+  return { admin: result.admin, db: getServiceClient() };
 }

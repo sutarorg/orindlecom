@@ -16,7 +16,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ShieldAlert } from "lucide-react";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getUserDetail } from "@/lib/admin/service";
 import {
   AdminCard,
@@ -45,7 +45,7 @@ export default async function AdminUserDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const ctx = await requirePlatformAdmin("view_operations");
+  const ctx = await requireAdminPageContext("view_operations");
   const { id } = await params;
 
   // A malformed id is a 404, not a 500: it is a URL a person typed or a stale

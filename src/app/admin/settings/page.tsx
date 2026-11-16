@@ -13,7 +13,7 @@
  */
 
 import type { Metadata } from "next";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getPriceCatalogue, listPlatformAdmins } from "@/lib/admin/service";
 import { getEmailState } from "@/lib/resend/client";
 import { isAuthConfigured } from "@/lib/auth/supabase/server";
@@ -103,7 +103,7 @@ function razorpayRow(): IntegrationRow {
 }
 
 export default async function AdminSettingsPage() {
-  const ctx = await requirePlatformAdmin("view_settings");
+  const ctx = await requireAdminPageContext("view_settings");
 
   const emailState = getEmailState();
 

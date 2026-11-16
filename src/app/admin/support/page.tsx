@@ -9,7 +9,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import { getSupportTickets } from "@/lib/admin/service";
 import { SUPPORT_CATEGORIES, TICKET_STATUSES, oneOf, pagination, searchTerm } from "@/lib/admin/validation";
 import { FilterBar } from "@/components/admin/filter-bar";
@@ -60,7 +60,7 @@ export default async function AdminSupportPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const ctx = await requirePlatformAdmin("manage_support");
+  const ctx = await requireAdminPageContext("manage_support");
   const params = await searchParams;
 
   const page = pagination(

@@ -13,7 +13,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { requirePlatformAdmin } from "@/lib/admin/auth";
+import { requireAdminPageContext } from "@/lib/admin/auth";
 import {
   getGrowthSeries,
   getMrr,
@@ -45,7 +45,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminOverviewPage() {
   // The layout already authorized. This call is `cache`d per request, so it costs
   // nothing and gives the page the operator plus the privileged client it needs.
-  const ctx = await requirePlatformAdmin("view_operations");
+  const ctx = await requireAdminPageContext("view_operations");
 
   const [stats, mrr, growth, activity] = await Promise.all([
     getOverviewStats(ctx),

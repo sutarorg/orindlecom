@@ -158,3 +158,39 @@ describe("no anti-abuse surface exists in the admin layer", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("refusal transport", () => {
+  /*
+   * A layout and its page render concurrently, so a page that throws on a refusal
+   * logs an error even though the layout's redirect lands the visitor on the right
+   * screen. The screenshots looked correct while the server log filled with 500s,
+   * which is exactly how a real outage gets missed.
+   *
+   * The rule: pages redirect, API routes throw.
+   */
+  it("has every admin page use the redirecting variant", async () => {
+    const pages = (await walk(path.join(ROOT, "src/app/admin"))).filter((f) =>
+      f.endsWith("page.tsx"),
+    );
+    expect(pages.length).toBeGreaterThanOrEqual(10);
+    for (const page of pages) {
+      const code = stripComments(await readFile(page, "utf8"));
+      expect(code, `${path.relative(ROOT, page)} must not throw on a refusal`).not.toContain(
+        "requirePlatformAdmin(",
+      );
+      expect(code, path.relative(ROOT, page)).toContain("requireAdminPageContext(");
+    }
+  });
+
+  it("has the layout resolve and redirect rather than throw", async () => {
+    const layout = await readFile(path.join(ROOT, "src/app/admin/layout.tsx"), "utf8");
+    const code = stripComments(layout);
+    expect(code).toContain("redirect(");
+    expect(code).not.toContain("requirePlatformAdmin(");
+  });
+
+  it("keeps the throwing variant for API routes", async () => {
+    const route = await readFile(path.join(ROOT, "src/lib/admin/route-helpers.ts"), "utf8");
+    expect(route).toContain("requirePlatformAdmin(");
+  });
+});
