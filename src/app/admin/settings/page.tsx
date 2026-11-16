@@ -31,7 +31,7 @@ import {
   formatDate,
   formatMoney,
 } from "@/components/admin/admin-ui";
-import { AdminAccessManager } from "@/components/admin/admin-access-manager";
+import { AdminAccessManager, GrantAdminForm } from "@/components/admin/admin-access-manager";
 
 export const metadata: Metadata = {
   title: "Settings",
@@ -263,9 +263,8 @@ export default async function AdminSettingsPage() {
           </table>
         </div>
         <p className="p-4 pt-2 text-[11px] leading-relaxed text-text-subtle">
-          Only approved rows can be charged. Annual and regional prices are absent because none
-          have been approved — this table shows what exists, and nothing is invented to fill a
-          column.
+          Only approved rows can be charged. Checkout resolves prices directly from this table
+          across all eight published currencies and monthly or annual (20% off) billing.
         </p>
       </AdminCard>
 
@@ -320,6 +319,7 @@ export default async function AdminSettingsPage() {
             ))}
           </tbody>
         </TableShell>
+        {ctx.admin.role === "owner" && <GrantAdminForm />}
         <p className="mt-2 text-[11px] leading-relaxed text-text-subtle">
           Platform roles are unrelated to a customer&rsquo;s organization roles. Being an owner or
           admin of a business team grants nothing here, and never can — the two are separate tables

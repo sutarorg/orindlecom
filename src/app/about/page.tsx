@@ -70,7 +70,7 @@ export default function AboutPage() {
                 <p>
                   Orindle is an attempt to make that whole category forgettable. One library. One
                   allowance, shared across every device you sign in on. A free tier that is genuinely
-                  usable at 10 GB, and paid tiers that go up to 10 TB in one flat step each.
+                  usable at 10 GB, and paid tiers that go up to 5 TB in one flat step each.
                 </p>
                 <p>
                   It is built as a web product first, because that is the one client every device

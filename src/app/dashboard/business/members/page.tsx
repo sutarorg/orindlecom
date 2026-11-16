@@ -34,6 +34,7 @@ export default async function BusinessMembersPage() {
 
   return (
     <MembersView
+      organizationId={organization?.id ?? "workspace"}
       members={list}
       viewerRole={organization?.viewerRole ?? "member"}
       viewerId={viewer.authenticated ? viewer.email : null}

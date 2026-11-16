@@ -1,18 +1,23 @@
 /**
  * POST /api/billing/checkout
  *
- * Takes a plan id and a period. It does NOT take an amount: the price is
- * resolved from an approved row in the database. A tampered request can choose
- * no price at all — it can only choose a plan, and either that plan has an
- * approved price in that currency or the request is refused.
+ * Takes a plan id, period (monthly | yearly) and currency (any of the 8
+ * approved currencies). It does NOT take an amount: the price is resolved from
+ * an `approved` row in `public.plan_prices`.
  */
 
 import { enforceRateLimit, handle, ok, readJson, requireString, withActor } from "@/lib/api";
 import { LIMITS, userBucket } from "@/lib/rate-limit";
 import { AppError } from "@/domain/auth/errors";
-import { createOrder, createOrderGuard, resolveApprovedPrice, receiptRef } from "@/domain/billing/razorpay";
+import {
+  createOrder,
+  createOrderGuard,
+  isBillingConfigured,
+  receiptRef,
+  resolveApprovedPrice,
+} from "@/domain/billing/razorpay";
+import { isSupportedCurrency } from "@/config/pricing";
 import { getServiceClient } from "@/lib/supabase/service";
-import { isBillingConfigured } from "@/domain/billing/razorpay";
 
 export const runtime = "nodejs";
 
@@ -42,20 +47,20 @@ export async function POST(request: Request) {
       throw new AppError("validation_failed", "Choose monthly or yearly.");
     }
 
-    // The billing currency is stored on the subscription at creation and never
-    // follows the visitor's region afterwards, so a new subscription picks it up
-    // once, here.
-    const currency = (body.currency === "USD" ? "USD" : "INR") as "INR" | "USD";
+    const currencyRaw =
+      typeof body.currency === "string" ? body.currency.trim().toUpperCase() : "INR";
+    if (!isSupportedCurrency(currencyRaw)) {
+      throw new AppError(
+        "unsupported",
+        "Choose one of our eight published currencies: INR, USD, GBP, EUR, AED, SGD, AUD or CAD.",
+      );
+    }
 
-    const price = await resolveApprovedPrice(planId, currency, periodRaw);
+    const price = await resolveApprovedPrice(planId, currencyRaw, periodRaw);
     createOrderGuard(price);
 
     const order = await createOrder(price, receiptRef(), auth.actor.userId);
 
-    // Remember which user an order belongs to. The webhook arrives with no
-    // session, so the owner has to be recorded at order time — otherwise
-    // activation would have to guess, and guessing is how a payment credits the
-    // wrong account.
     const supabase = getServiceClient();
     await supabase.from("activity_events").insert({
       actor_id: auth.actor.userId,

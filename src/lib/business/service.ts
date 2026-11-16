@@ -1,26 +1,36 @@
 /**
  * Where UI code gets its business repository.
  *
- * Swapping to a live organization backend means replacing this factory; no
- * component changes. The repository is stateless, so a module-level singleton is
- * safe here in a way it would not be for something cookie-bound.
+ * Uses the Supabase-backed organization service whenever authentication and
+ * the service role are configured, and degrades cleanly to the honest empty
+ * repository otherwise (so local builds and unconfigured previews still render).
  */
 
 import "server-only";
 
+import { isAuthConfigured } from "@/lib/auth/supabase/server";
+import { isServiceConfigured } from "@/lib/supabase/service";
 import { createEmptyBusinessRepository } from "./empty-repository";
+import { createSupabaseBusinessRepository } from "./supabase-repository";
 import type { BusinessRepository } from "./repository";
 
-let cached: BusinessRepository | null = null;
+let override: BusinessRepository | null = null;
+let supabaseRepo: BusinessRepository | null = null;
+let emptyRepo: BusinessRepository | null = null;
 
 export function getBusinessRepository(): BusinessRepository {
-  cached ??= createEmptyBusinessRepository();
-  return cached;
+  if (override) return override;
+  if (isAuthConfigured() && isServiceConfigured()) {
+    supabaseRepo ??= createSupabaseBusinessRepository();
+    return supabaseRepo;
+  }
+  emptyRepo ??= createEmptyBusinessRepository();
+  return emptyRepo;
 }
 
-/** Verification hook — the harness swaps in a fixture-backed repository. */
-export function setBusinessRepository(repository: BusinessRepository) {
-  cached = repository;
+/** Verification hook — tests can inject a fixture-backed repository. */
+export function setBusinessRepository(repository: BusinessRepository | null) {
+  override = repository;
 }
 
 export function isBusinessConfigured(): boolean {

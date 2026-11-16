@@ -3,6 +3,7 @@ import { PlanIcon } from "@/components/brand/plan-icon";
 import {
   currencyMeta,
   formatPrice,
+  resolveAnnualTotal,
   resolvePrice,
   type BillingPeriod,
   type CurrencyCode,
@@ -13,10 +14,10 @@ import { cn } from "@/lib/utils";
 /**
  * Plan card.
  *
- * Measured from the reference at 941px: 134px wide, 156px tall, 14px radius,
- * 14px padding, internal order icon → name → capacity → price → CTA pinned to
- * the bottom. The highlighted card carries a 2px primary border, a shadow and
- * a "Most Popular" pill on its top edge.
+ * Displays icon → name → capacity → price (monthly or annual per-month
+ * equivalent with billed-yearly total) → CTA pinned to the bottom. The
+ * highlighted card (Premium · 1 TB) carries a 2px primary border, shadow and
+ * "Most Popular" pill.
  */
 export function PlanCard({
   plan,
@@ -32,6 +33,7 @@ export function PlanCard({
   className?: string;
 }) {
   const price = resolvePrice(plan, currency, billing);
+  const annualTotal = billing === "yearly" ? resolveAnnualTotal(plan, currency) : null;
   const published = price !== null;
   const isFree = published && price === 0;
   const meta = currencyMeta(currency);
@@ -73,8 +75,12 @@ export function PlanCard({
                 </span>
               )}
             </p>
-            <p className="mt-1 text-[10px] leading-none text-text-subtle">
-              {isFree ? "Free forever" : `${meta.code} · billed monthly`}
+            <p className="mt-1 text-[10px] leading-snug text-text-subtle">
+              {isFree
+                ? "Free forever"
+                : billing === "yearly" && annualTotal !== null
+                  ? `${formatPrice(annualTotal, currency)}/yr · save 20%`
+                  : `${meta.code} · billed monthly`}
             </p>
           </>
         ) : (

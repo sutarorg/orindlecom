@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Folder, Loader2, Mail, Send } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import { BUSINESS_NOT_CONNECTED } from "@/lib/business/repository";
+import { api } from "@/lib/drive/client";
 import { can } from "@/lib/business/roles";
 import {
   FOLDER_ACCESS_DESCRIPTION,
@@ -13,6 +14,7 @@ import {
   type BusinessFolder,
   type BusinessRole,
   type FolderAccess,
+  type Member,
 } from "@/lib/business/types";
 import { RoleBoundaryNote, RoleSelector } from "./role-selector";
 import { cn } from "@/lib/utils";
@@ -20,29 +22,26 @@ import { cn } from "@/lib/utils";
 /**
  * Invitation modal.
  *
- * The role is chosen here, by the person accountable for the decision, and
- * stored on the invitation — never picked by the invitee. That is a security
- * boundary, not a layout preference: an invitation that lets the recipient
- * choose would let anyone invite themselves as an admin.
- *
- * Validation runs on submit rather than per keystroke, so typing the first
- * letter of an address isn't already an error.
+ * The role is chosen here by an Owner or Admin and persisted on the invitation
+ * via `POST /api/organizations/:id/members`.
  */
 export function InviteDialog({
   open,
   onClose,
+  organizationId = "workspace",
   actorRole,
   folders,
   defaultFolderId,
 }: {
   open: boolean;
   onClose: () => void;
+  organizationId?: string;
   actorRole: BusinessRole;
   folders: BusinessFolder[];
-  /** Pre-selected folder when opening from a folder's own share action. */
   defaultFolderId?: string | null;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState<Exclude<BusinessRole, "owner">>("member");
   const [folderId, setFolderId] = React.useState<string>("");
@@ -75,14 +74,32 @@ export function InviteDialog({
     }
 
     setError(undefined);
-    // No organisation service exists yet, so there is nothing to await. The dialog
-    // stays open with the address still in it, and the toast says plainly that
-    // nothing was sent — no simulated request in between.
+    setPending(true);
+
+    const result = await api.post<{ member: Member }>(
+      `/api/organizations/${encodeURIComponent(organizationId)}/members`,
+      {
+        email: trimmed,
+        role,
+        folderId: folderId || null,
+        folderAccess: folderId ? access : undefined,
+      },
+    );
+
+    setPending(false);
+
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+
     toast({
-      tone: "error",
-      title: "Invitation wasn't sent",
-      description: BUSINESS_NOT_CONNECTED,
+      tone: "success",
+      title: `Invited ${trimmed}`,
+      description: `Invitation sent as ${role}. Expires in ${INVITATION_EXPIRY_DAYS} days.`,
     });
+    onClose();
+    router.refresh();
   };
 
   return (
@@ -94,7 +111,6 @@ export function InviteDialog({
       size="md"
     >
       <form onSubmit={submit} noValidate>
-        {/* Email */}
         <label htmlFor={emailId} className="mb-1.5 block text-[12px] font-semibold text-ink">
           Email address
         </label>
@@ -107,7 +123,6 @@ export function InviteDialog({
           <input
             id={emailId}
             type="email"
-            multiple
             value={email}
             onChange={(event) => {
               setEmail(event.target.value);
@@ -137,7 +152,6 @@ export function InviteDialog({
           </p>
         )}
 
-        {/* Role */}
         <div className="mt-4">
           <p className="mb-1.5 text-[12px] font-semibold text-ink">Role</p>
           <RoleSelector
@@ -149,7 +163,6 @@ export function InviteDialog({
           />
         </div>
 
-        {/* Optional folder grant */}
         {canAttachFolder && (
           <div className="mt-4 rounded-xl border border-[var(--brand-border)] p-2.5">
             <label
@@ -200,7 +213,7 @@ export function InviteDialog({
         <div className="mt-3">
           <RoleBoundaryNote>
             Invitations can be sent as Admin or Member, never as Owner. Ownership is transferred from
-            Settings, and only by the current owner.
+            Members or Settings, and only by the current owner.
           </RoleBoundaryNote>
         </div>
 

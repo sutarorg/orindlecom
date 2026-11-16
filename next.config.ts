@@ -52,22 +52,26 @@ const connectSrc = [
   r2PublicHost,
   "https://api.razorpay.com",
   "https://checkout.razorpay.com",
+  "https://challenges.cloudflare.com",
 ]
   .filter(Boolean)
   .join(" ");
 
+const r2Origins = [r2PublicHost, r2Host].filter(Boolean).join(" ");
+
 const csp = [
   "default-src 'self'",
-  // Next's runtime and Razorpay's checkout script.
-  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
+  // Next's runtime, Razorpay checkout, and Cloudflare Turnstile widget.
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://challenges.cloudflare.com",
   // Tailwind and Next emit inline style attributes; a nonce cannot cover them.
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: " + [r2PublicHost, r2Host].filter(Boolean).join(" "),
+  `img-src 'self' data: blob: ${r2Origins}`,
+  `media-src 'self' blob: ${r2Origins}`,
   "font-src 'self' data:",
-  // Uploads go straight to R2; auth and payments are fetches.
+  // Uploads go straight to R2; auth, Turnstile, and payments are fetches.
   `connect-src ${connectSrc}`,
-  // Razorpay's checkout runs in a frame.
-  "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
+  // Razorpay checkout, Cloudflare Turnstile widget, and signed PDF previews.
+  `frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://challenges.cloudflare.com ${r2Origins}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

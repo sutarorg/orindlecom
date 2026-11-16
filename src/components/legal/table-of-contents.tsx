@@ -174,10 +174,12 @@ export function TableOfContents({
           );
         })}
       </ol>
-      <p className="mt-3 flex items-start gap-1.5 pl-1 text-[10.5px] leading-[1.5] text-text-subtle">
-        <ReviewDot />
-        Needs legal review before publication
-      </p>
+      {entries.some((entry) => entry.needsReview) && (
+        <p className="mt-3 flex items-start gap-1.5 pl-1 text-[10.5px] leading-[1.5] text-text-subtle">
+          <ReviewDot />
+          Needs review
+        </p>
+      )}
     </nav>
   );
 }

@@ -21,7 +21,7 @@ const CAPABILITIES = [
   {
     icon: Users,
     title: "Members with roles",
-    body: "Invite people into the organisation and give them an owner, editor or viewer role. Access is granted to a person, not shared through a password everyone knows.",
+    body: "Invite people into the organisation and assign them an Owner, Admin or Member role. Access is granted to a person at invite time, never shared through a password everyone knows.",
   },
   {
     icon: HardDrive,
@@ -57,7 +57,7 @@ export default function BusinessPage() {
           <PageIntro
             eyebrow="Business"
             title="A simpler space for your team's files."
-            description="An organisation account gives your team one pool of space, clear roles and folder permissions that hold. Everything below is the shape the product is being built to."
+            description="An organisation workspace gives your team one shared pool of space, clear Owner / Admin / Member roles, and folder permissions that hold — included under your Orindle storage plan with no per-seat fee."
           />
         </div>
       </section>
@@ -88,26 +88,26 @@ export default function BusinessPage() {
           <div className="grid gap-6 rounded-[16px] border border-[var(--brand-border)] bg-[var(--brand-canvas)] p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:items-center lg:gap-10">
             <div>
               <h2 className="text-[length:var(--brand-body-size)] font-bold text-ink">
-                Business plans are not published yet
+                Included with your plan — no per-seat fee
               </h2>
               <p className="mt-2 max-w-[60ch] text-[length:var(--brand-body-sm-size)] leading-[1.65] text-text-muted">
-                Seat pricing for teams has not been approved, so there is no price to show you.
-                Rather than invent one, we would rather talk: tell us the team size and how much
-                storage you need, and you will get a straight answer. Personal plans are available
-                today and every one of them includes the sharing features above.
+                Every Business workspace inherits the organisation owner&rsquo;s active storage
+                plan — from 10 GB Free up to 5 TB Max — with no separate per-user seat surcharge.
+                Create your organisation right from your dashboard, invite teammates as Admins or
+                Members, and manage folder permissions in one place.
               </p>
               <div className="mt-4 flex flex-wrap gap-2.5">
                 <Link
-                  href="/contact?subject=business"
+                  href="/dashboard/business"
                   className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-[13px] font-semibold text-white transition-colors hover:bg-primary-hover"
                 >
-                  Talk to us about a team
+                  Open Business workspace
                 </Link>
                 <Link
                   href="/pricing"
                   className="inline-flex h-9 items-center rounded-full border border-[var(--brand-border-strong)] bg-white px-4 text-[13px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)]"
                 >
-                  See personal plans
+                  Compare storage plans
                 </Link>
               </div>
             </div>

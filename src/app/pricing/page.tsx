@@ -37,7 +37,7 @@ export default async function PricingPage() {
           <PageIntro
             eyebrow="Plans"
             title="Room for every kind of digital life."
-            description="Every tier is plain monthly storage on the same account. Start on 10 GB free and move up only when you need the room."
+            description="Straightforward storage from 10 GB free up to 5 TB, billed monthly or annually (save 20%) in eight currencies."
           />
         </div>
       </section>

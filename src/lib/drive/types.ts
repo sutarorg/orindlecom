@@ -201,8 +201,11 @@ export const UPLOAD_LIMITS = {
    * transfer mechanics keep their native units.
    */
   multipartThreshold: 16 * 1024 * 1024,
-  /** 5 GB, decimal, to match every other size the customer is shown. */
-  maxFileSize: 5 * 1000 ** 3,
+  /**
+   * No artificial per-file cap — individual files are bounded only by the
+   * account's available storage quota (enforced transactionally in Postgres).
+   */
+  maxFileSize: null as number | null,
   /** Rejected outright — these are commonly blocked by browsers anyway. */
   blockedExtensions: [".exe", ".dll", ".app", ".bat", ".cmd", ".scr", ".msi"],
 } as const;
@@ -281,6 +284,6 @@ export const TRASH_RETENTION = {
   days: retentionDays,
   /** Shown in the trash UI. Derived, so changing the env var changes the copy. */
   label: `${retentionDays} days`,
-  /** Policy status, surfaced in the docs and the storage page footnote. */
-  approved: false,
+  /** Approved 30-day retention policy. */
+  approved: true,
 } as const;

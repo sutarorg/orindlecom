@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
@@ -18,7 +19,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/dashboard/page-header";
-import { BUSINESS_NOT_CONNECTED } from "@/lib/business/repository";
+import { api } from "@/lib/drive/client";
 import { can, roleName } from "@/lib/business/roles";
 import {
   FOLDER_ACCESS_DESCRIPTION,
@@ -31,17 +32,6 @@ import { OrganizationHeader } from "./organization-header";
 import { RoleBoundaryNote } from "./role-selector";
 import { cn } from "@/lib/utils";
 
-/**
- * Organization settings.
- *
- * Grouped by who is affected: the profile affects how the organization appears,
- * the defaults affect new members, and governance affects what can be undone.
- *
- * Sections that would need a backend capability we don't have are shown as
- * "not available yet" with the reason — never as a switch that flips and saves
- * nothing. An organization settings page full of inert toggles is the fastest
- * way to make an admin lose trust in every other setting on it.
- */
 export function BusinessSettingsView({
   organization,
   memberCount: _memberCount,
@@ -67,7 +57,7 @@ export function BusinessSettingsView({
 
       <div className="space-y-4">
         <ProfileSection organization={organization} canEdit={canEdit} />
-        <DefaultsSection canEdit={canEdit} />
+        <DefaultsSection organization={organization} canEdit={canEdit} />
         <InvitationsSection canEdit={canEdit} />
         <GovernanceSection organization={organization} memberCount={activeMemberCount} />
         {canDelete && <DangerZone organization={organization} />}
@@ -87,9 +77,10 @@ function ProfileSection({
   canEdit: boolean;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [name, setName] = React.useState(organization.name);
   const [initials, setInitials] = React.useState(organization.initials);
-  const pending = false;
+  const [pending, setPending] = React.useState(false);
   const nameId = React.useId();
   const initialsId = React.useId();
 
@@ -100,12 +91,27 @@ function ProfileSection({
 
   const dirty = name.trim() !== organization.name || initials.trim() !== organization.initials;
 
-  const save = (event: React.FormEvent) => {
+  const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!dirty) return;
-    // Organisation settings have no route yet. Reported immediately, with the form
-    // still holding the edits, rather than behind a simulated request.
-    toast({ tone: "error", title: "Settings weren't saved", description: BUSINESS_NOT_CONNECTED });
+    setPending(true);
+    const result = await api.patch<{ organization: Organization }>(
+      `/api/organizations/${encodeURIComponent(organization.id)}`,
+      { name: name.trim(), initials: initials.trim() || undefined },
+    );
+    setPending(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Settings weren't saved", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Organization updated",
+      description: "Changes apply across your workspace immediately.",
+    });
+    router.refresh();
   };
 
   return (
@@ -180,14 +186,37 @@ function ProfileSection({
   );
 }
 
-function DefaultsSection({ canEdit }: { canEdit: boolean }) {
+function DefaultsSection({
+  organization,
+  canEdit,
+}: {
+  organization: Organization;
+  canEdit: boolean;
+}) {
   const { toast } = useToast();
+  const router = useRouter();
   const [access, setAccess] = React.useState<FolderAccess>("viewer");
-  const pending = false;
+  const [pending, setPending] = React.useState(false);
 
-  const save = () => {
-    // No organisation route yet. Reported immediately rather than behind a timer.
-    toast({ tone: "error", title: "Default wasn't saved", description: BUSINESS_NOT_CONNECTED });
+  const save = async () => {
+    setPending(true);
+    const result = await api.patch(
+      `/api/organizations/${encodeURIComponent(organization.id)}`,
+      { defaultFolderAccess: access },
+    );
+    setPending(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Default wasn't saved", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Team default saved",
+      description: `New shared folders default to ${FOLDER_ACCESS_LABEL[access].toLowerCase()}.`,
+    });
+    router.refresh();
   };
 
   return (
@@ -248,7 +277,7 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
         {canEdit && (
           <button
             type="button"
-            onClick={save}
+            onClick={() => void save()}
             disabled={pending}
             className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--brand-border-strong)] bg-white px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
           >
@@ -296,11 +325,11 @@ function InvitationsSection({ canEdit }: { canEdit: boolean }) {
               Reminder emails
             </p>
             <p className="text-[10.5px] text-text-subtle">
-              Not available yet — no scheduled email delivery exists.
+              You can resend any pending invitation manually from the Members page.
             </p>
           </div>
           <span className="shrink-0 rounded-full bg-[var(--brand-surface-muted)] px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.05em] text-text-subtle">
-            Planned
+            Manual
           </span>
         </li>
         <li className="flex items-center justify-between gap-3 px-4 py-2.5">
@@ -345,8 +374,8 @@ function GovernanceSection({
           <div className="min-w-0">
             <p className="text-[12px] font-medium text-ink">Transfer ownership</p>
             <p className="mt-0.5 max-w-[460px] text-[10.5px] leading-relaxed text-text-subtle">
-              Moves the owner role to another admin. You become an admin in the same step, so the
-              organization is never ownerless.
+              Moves the owner role to another active member. You become an admin in the same atomic
+              step, so the organization is never ownerless.
             </p>
           </div>
           <Link
@@ -361,7 +390,7 @@ function GovernanceSection({
           <div className="min-w-0">
             <p className="text-[12px] font-medium text-ink">Your role</p>
             <p className="text-[10.5px] text-text-subtle">
-              Assigned by whoever invited you.
+              Assigned by whoever invited you or created the organization.
             </p>
           </div>
           <span className="shrink-0 text-[11px] font-semibold text-ink">
@@ -384,7 +413,31 @@ function GovernanceSection({
 
 function DangerZone({ organization }: { organization: Organization }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
+
+  const removeOrganization = async () => {
+    setOpen(false);
+    setPending(true);
+    const result = await api.delete(`/api/organizations/${encodeURIComponent(organization.id)}`, {
+      confirmation: organization.name,
+    });
+    setPending(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Organization wasn't deleted", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: `${organization.name} deleted`,
+      description: "Your personal account and personal files are untouched.",
+    });
+    router.push("/dashboard");
+    router.refresh();
+  };
 
   return (
     <>
@@ -403,10 +456,11 @@ function DangerZone({ organization }: { organization: Organization }) {
           </div>
           <button
             type="button"
+            disabled={pending}
             onClick={() => setOpen(true)}
-            className="h-8 shrink-0 rounded-lg border border-[#E5B4B4] bg-white px-2.5 text-[11.5px] font-semibold text-[#C93B2B] transition-colors hover:bg-[#FDF3F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D6455D]"
+            className="h-8 shrink-0 rounded-lg border border-[#E5B4B4] bg-white px-2.5 text-[11.5px] font-semibold text-[#C93B2B] transition-colors hover:bg-[#FDF3F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D6455D] disabled:opacity-50"
           >
-            Delete organization
+            {pending ? "Deleting…" : "Delete organization"}
           </button>
         </div>
       </section>
@@ -414,14 +468,7 @@ function DangerZone({ organization }: { organization: Organization }) {
       <ConfirmDialog
         open={open}
         onClose={() => setOpen(false)}
-        onConfirm={() => {
-          setOpen(false);
-          toast({
-            tone: "error",
-            title: "Organization wasn't deleted",
-            description: BUSINESS_NOT_CONNECTED,
-          });
-        }}
+        onConfirm={() => void removeOrganization()}
         title={`Delete ${organization.name}?`}
         confirmLabel="Delete organization"
         destructive

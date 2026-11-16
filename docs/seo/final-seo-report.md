@@ -74,7 +74,7 @@ meta keywords, H1, canonical — is in `page-metadata.md`.
 
 ## 4. The blog
 
-Ten articles, 11,247 words, each complete and sourced.
+Ten articles, 11,264 words, each complete and sourced.
 
 | Article | Words | Sources | Checked |
 | --- | --- | --- | --- |

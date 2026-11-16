@@ -82,11 +82,13 @@ function loadScript(): Promise<boolean> {
   return scriptPromise;
 }
 
+import type { CurrencyCode } from "@/config/pricing";
+
 export interface StartCheckoutInput {
   planId: string;
   planName: string;
   period: "monthly" | "yearly";
-  currency: "INR" | "USD";
+  currency: CurrencyCode;
 }
 
 /**

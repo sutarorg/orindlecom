@@ -245,11 +245,11 @@ describe("reference data", () => {
     expect(rows[0].n).toBe(0);
   });
 
-  it("no yearly prices exist at all", async () => {
+  it("seeds approved yearly prices for all 6 plans across all 8 published currencies", async () => {
     const rows = await t.asAnon<{ n: number }>(
-      `select count(*)::int as n from public.plan_prices where period = 'yearly'`,
+      `select count(*)::int as n from public.plan_prices where period = 'yearly' and approved = true`,
     );
-    expect(rows[0].n).toBe(0);
+    expect(rows[0].n).toBe(48);
   });
 
   it("unpublished currencies have no prices", async () => {

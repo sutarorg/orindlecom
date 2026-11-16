@@ -1,15 +1,13 @@
 # API Reference
 
-**Status:** Partly implemented. Each row below is marked:
+**Status:** Implemented. Every endpoint below is marked:
 
 - ✅ **Built** — the route exists in `src/app/api/` and is exercised on this deployment.
-- ⬜ **Specified, not built** — the route is designed and its envelope is fixed, but
-  there is no handler yet. Calling it returns 404.
+- ⬜ **Specified, not built** — reserved for future routes whose handler does not yet exist.
 
 This distinction is enforced by `tests/unit/docs-fidelity.test.ts`, which fails if a
 route marked ✅ is missing or a built route is undocumented, so the two cannot drift
-apart. Nothing in the UI calls a ⬜ route today; the components whose actions depend
-on them report that the action isn't available rather than pretending it worked.
+apart.
 
 ---
 
@@ -128,7 +126,7 @@ navigation.
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
 | ✅ | `GET` | `/api/storage` | | `StorageUsage`: total, committed, reserved, trash, available, byCategory |
-| ⬜ | `GET` | `/api/storage/breakdown` | | Per-category and per-folder detail for the storage page |
+| ✅ | `GET` | `/api/storage/breakdown` | | Per-category and per-folder detail for the storage page |
 
 `authoritative` is `true` only when the figures came from the database. It is `false`
 in the current deployment, and the UI says so rather than pretending.
@@ -177,11 +175,11 @@ existed" are different for the person holding it.
 | --- | --- | --- | --- |
 | ✅ | `GET` | `/api/users/me` | | Profile |
 | ✅ | `PATCH` | `/api/users/me` | | `{ fullName }` |
-| ⬜ | `POST` | `/api/users/me/email` | | Change email (re-verification required) |
+| ✅ | `POST` | `/api/users/me/email` | | Change email (re-verification required) |
 | ✅ | `POST` | `/api/users/me/password` | | `{ current, next }` — re-authenticates with the current password first |
 | ✅ | `POST` | `/api/users/me/delete` | | `{ confirmation }` — typed confirmation required; schedules deletion, removes nothing |
 | ✅ | `DELETE` | `/api/users/me/delete` | | Cancel a pending deletion |
-| ⬜ | `GET` | `/api/users/me/export` | | Data export: a signed bundle link |
+| ✅ | `GET` | `/api/users/me/export` | | Data export: signed JSON export of account metadata, files, folders, shares, subscriptions, invoices, activity |
 | ✅ | `GET` | `/api/auth/oauth/:provider/start` | | Begin a social sign-in; redirects to the provider |
 
 `/api/auth/oauth/:provider/start` only accepts providers listed in
@@ -205,9 +203,9 @@ come from the business routes and are scoped to members.
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
-| ⬜ | `GET` | `/api/billing/subscription` | | Current plan, status, period end, recovery window |
-| ⬜ | `GET` | `/api/billing/invoices` | | The actor's invoices only |
-| ✅ | `POST` | `/api/billing/checkout` | | `{ planId, period }` → order + redirect/authorisation data |
+| ✅ | `GET` | `/api/billing/subscription` | | Current plan, status, period end, recovery window |
+| ✅ | `GET` | `/api/billing/invoices` | | The actor's invoices only |
+| ✅ | `POST` | `/api/billing/checkout` | | `{ planId, period, currency }` → order + redirect/authorisation data |
 | ✅ | `POST` | `/api/billing/verify` | | `{ razorpayPaymentId, razorpayOrderId, razorpaySignature }` |
 | ✅ | `POST` | `/api/billing/cancel` | | Cancel at period end; never revokes access now |
 | ✅ | `POST` | `/api/billing/change-plan` | | `{ planId }` — schedule a downgrade for period end |
@@ -240,31 +238,33 @@ is unique.
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
-| ⬜ | `GET` | `/api/organizations` | | Orgs the actor belongs to |
-| ⬜ | `GET` | `/api/organizations/:id` | | Detail |
-| ⬜ | `PATCH` | `/api/organizations/:id` | | `{ name }` — admin+ |
-| ⬜ | `DELETE` | `/api/organizations/:id` | | Owner only, typed confirmation |
-| ⬜ | `GET` | `/api/organizations/:id/summary` | | Counts and storage |
-| ⬜ | `GET` | `/api/organizations/:id/storage` | | Org storage accounting |
-| ⬜ | `GET` | `/api/organizations/:id/activity` | | Filterable event log |
+| ✅ | `GET` | `/api/organizations` | | Orgs the actor belongs to |
+| ✅ | `POST` | `/api/organizations` | | Create an organisation `{ name, initials? }` — caller becomes Owner |
+| ✅ | `POST` | `/api/organizations/invitations/accept` | | Accept an invitation `{ token }` |
+| ✅ | `GET` | `/api/organizations/:id` | | Detail |
+| ✅ | `PATCH` | `/api/organizations/:id` | | `{ name, initials? }` — admin+ |
+| ✅ | `DELETE` | `/api/organizations/:id` | | Owner only, typed confirmation |
+| ✅ | `GET` | `/api/organizations/:id/summary` | | Counts and storage |
+| ✅ | `GET` | `/api/organizations/:id/storage` | | Org storage accounting |
+| ✅ | `GET` | `/api/organizations/:id/activity` | | Filterable event log |
 
 ### Members
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
-| ⬜ | `GET` | `/api/organizations/:id/members` | | Filter by role/status/search |
-| ⬜ | `POST` | `/api/organizations/:id/members` | | Invite `{ email, role, folderId?, folderAccess? }` |
-| ⬜ | `POST` | `/api/organizations/:id/members/:memberId/resend` | | Resend invite |
-| ⬜ | `DELETE` | `/api/organizations/:id/members/:memberId/invite` | | Revoke invite |
-| ⬜ | `PATCH` | `/api/organizations/:id/members/:memberId/role` | | `{ role }` |
-| ⬜ | `DELETE` | `/api/organizations/:id/members/:memberId` | | Remove |
-| ⬜ | `POST` | `/api/organizations/:id/transfer` | | `{ memberId }` — owner only |
+| ✅ | `GET` | `/api/organizations/:id/members` | | Filter by role/status/search |
+| ✅ | `POST` | `/api/organizations/:id/members` | | Invite `{ email, role, folderId?, folderAccess? }` |
+| ✅ | `GET` | `/api/organizations/:id/members/:memberId` | | Member detail |
+| ✅ | `POST` | `/api/organizations/:id/members/:memberId/resend` | | Resend invite |
+| ✅ | `DELETE` | `/api/organizations/:id/members/:memberId/invite` | | Revoke invite |
+| ✅ | `PATCH` | `/api/organizations/:id/members/:memberId/role` | | `{ role }` |
+| ✅ | `DELETE` | `/api/organizations/:id/members/:memberId` | | Remove |
+| ✅ | `POST` | `/api/organizations/:id/transfer` | | `{ memberId }` — owner only |
 
-Role rules are enforced **server-side** by `permissions` module, and mirrored in RLS.
+Role rules are enforced **server-side** by `src/domain/business/permissions.ts`, and mirrored in RLS.
 `canAssignRole` and `removalBlocker` in `src/lib/business/roles.ts` are UI
 affordances; the server re-checks the same rules and does not call the UI helpers,
-because a client can bypass them. A test asserts server and UI agree on every
-(actorRole, targetRole) pair so the two cannot drift.
+because a client can bypass them.
 
 The last owner cannot be removed or demoted — `removalBlocker` returns a reason and
 the server rejects with `conflict` plus that reason.
@@ -273,11 +273,12 @@ the server rejects with `conflict` plus that reason.
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
-| ⬜ | `GET` | `/api/organizations/:id/folders` | | List |
-| ⬜ | `POST` | `/api/organizations/:id/folders` | | Create `{ name }` |
-| ⬜ | `PATCH` | `/api/organizations/:id/folders/:folderId` | | Rename |
-| ⬜ | `DELETE` | `/api/organizations/:id/folders/:folderId` | | Delete |
-| ⬜ | `PUT` | `/api/organizations/:id/folders/:folderId/access` | | `{ level }` — default folder access |
+| ✅ | `GET` | `/api/organizations/:id/folders` | | List |
+| ✅ | `POST` | `/api/organizations/:id/folders` | | Create `{ name }` |
+| ✅ | `GET` | `/api/organizations/:id/folders/:folderId` | | Folder detail |
+| ✅ | `PATCH` | `/api/organizations/:id/folders/:folderId` | | Rename `{ name }` |
+| ✅ | `DELETE` | `/api/organizations/:id/folders/:folderId` | | Delete |
+| ✅ | `PUT` | `/api/organizations/:id/folders/:folderId/access` | | `{ level, grants? }` — default folder access and per-member grants |
 
 ---
 
@@ -354,7 +355,7 @@ Responses are always `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
 | ✅ | `POST` | `/api/admin/support/:id/reply` | `{ body, visibility: "public" \| "internal" }` |
 | ✅ | `GET` | `/api/admin/audit` | Audit trail. Query: `action`, `actor`, `target`, `from`, `to`, `page` |
 | ✅ | `GET` | `/api/admin/settings` | Integration presence, approved prices, administrators |
-| ✅ | `POST` | `/api/admin/admins` | Owner only. `{ userId, role: "owner" \| "admin" }` |
+| ✅ | `POST` | `/api/admin/admins` | Owner only. `{ email \| userId, role: "owner" \| "admin" }` |
 | ✅ | `DELETE` | `/api/admin/admins` | Owner only. `{ userId }` — soft revoke |
 
 ### Failure codes

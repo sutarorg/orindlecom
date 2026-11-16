@@ -7,7 +7,6 @@
  * disagree with each other.
  */
 
-/** Facts Orindle's owner has not confirmed yet. Never invented — always shown as open. */
 export type PlaceholderKey =
   | "legalEntity"
   | "registeredAddress"
@@ -40,7 +39,7 @@ export interface LegalSection {
   /** One line, shown in the table of contents under the heading on wide screens. */
   gist?: string;
   blocks: LegalBlock[];
-  /** Marks a section that needs a qualified lawyer before publication. */
+  /** Optional marker when a section is pending review. Absent on approved policies. */
   review?: string;
 }
 
@@ -57,8 +56,10 @@ export interface LegalDocument {
   title: string;
   /** Shown under the title, and in the legal index. */
   summary: string;
-  /** ISO date of the last substantive edit to this draft. */
+  /** ISO date of the last substantive edit. */
   updated: string;
+  /** Whether this policy has been approved for publication. */
+  approved: boolean;
   /** What this document is for, in one sentence for the index card. */
   purpose: string;
   sections: LegalSection[];

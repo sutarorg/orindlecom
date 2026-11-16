@@ -139,13 +139,12 @@ describe(".env.example", () => {
     }
   });
 
-  it("keeps both billing capability flags off by default", async () => {
+  it("enables both approved billing capability flags by default", async () => {
     const example = await readFile(path.join(ROOT, ".env.example"), "utf8");
-    // Turning these on is a deliberate act after confirming the merchant account
-    // supports them. A default of true would promise payment methods that may be
-    // rejected.
-    expect(example).toContain("RAZORPAY_INTERNATIONAL_ENABLED=false");
-    expect(example).toContain("RAZORPAY_RECURRING_ENABLED=false");
+    // International (8 currencies) and recurring payments are approved for Orindle;
+    // either can be flipped to "false" as an emergency kill-switch.
+    expect(example).toContain("RAZORPAY_INTERNATIONAL_ENABLED=true");
+    expect(example).toContain("RAZORPAY_RECURRING_ENABLED=true");
   });
 
   it("keeps malware scanning off by default", async () => {

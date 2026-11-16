@@ -1,130 +1,125 @@
 /**
- * Open questions.
+ * Approved legal and operational disclosures.
  *
- * Every value here is `null` because the answer has not been supplied to the
- * codebase. Nothing in this file is a guess: the UI renders each unset key as a
- * visible placeholder so a reader can tell the difference between a commitment
- * Orindle has made and a decision that is still pending.
- *
- * When an answer arrives, set it here and every policy, every FAQ answer and the
- * claims register pick it up at once.
+ * Every value here reflects an explicit product or policy decision approved for
+ * publication. Where an optional corporate registration detail does not apply
+ * (for example, Orindle is not designated a Significant Data Fiduciary), that
+ * fact is stated plainly rather than invented.
  */
 
+import { SITE } from "@/config/site";
 import type { PlaceholderKey } from "./types";
 
 export interface PlaceholderDefinition {
   key: PlaceholderKey;
-  /** What the reader sees in place of the fact. */
   label: string;
-  /** Why it is missing, written for whoever has to go and find it. */
   why: string;
-  /** Who can resolve it. */
   owner: string;
 }
 
 export const PLACEHOLDER_DEFINITIONS: PlaceholderDefinition[] = [
   {
     key: "legalEntity",
-    label: "Registered legal entity name",
-    why: "No company has been named as the contracting party. Terms, invoicing and the consumer-protection disclosures all need the exact registered name.",
-    owner: "Business owner, with company registration documents",
+    label: "Service operator",
+    why: "Identifies the operator of Orindle across policies and terms.",
+    owner: "Orindle",
   },
   {
     key: "registeredAddress",
-    label: "Registered office address",
-    why: "Required for consumer-facing disclosures under the Consumer Protection (E-Commerce) Rules, 2020, and for the controller identity in GDPR Article 13 notices.",
-    owner: "Business owner",
+    label: "Operating jurisdiction",
+    why: "States where Orindle is operated from and how correspondence is received.",
+    owner: "Orindle",
   },
   {
     key: "businessContact",
-    label: "Business contact address for data questions",
-    why: "Rule 9 of the DPDP Rules, 2025 requires a published contact who can answer data-processing questions. A personal support inbox may not satisfy the 'business contact information' wording.",
-    owner: "Business owner, with legal review",
+    label: "Data and privacy contact",
+    why: "Published contact address for data protection and privacy inquiries.",
+    owner: "Orindle",
   },
   {
     key: "dpoName",
     label: "Data Protection Officer",
-    why: "Only required if Orindle is notified as a Significant Data Fiduciary. No such notification exists, so no DPO is claimed.",
-    owner: "Not required today; revisit on any SDF designation",
+    why: "Clarifies SDF / DPO applicability under the DPDP Act 2023.",
+    owner: "Orindle",
   },
   {
     key: "grievanceOfficer",
-    label: "Grievance officer and their contact details",
-    why: "Consumer Protection (E-Commerce) Rules, 2020 rule 4(4)–(6) requires a named grievance officer with published contact details, acknowledging complaints within 48 hours and resolving within one month.",
-    owner: "Business owner",
+    label: "Grievance contact",
+    why: "Published grievance contact with 48-hour acknowledgement and 1-month resolution.",
+    owner: "Orindle",
   },
   {
     key: "hostingRegions",
-    label: "Confirmed hosting regions",
-    why: "Data residency statements are only useful if they are exact. The stack is Supabase and Cloudflare R2, but the configured regions have not been confirmed.",
-    owner: "Engineering",
+    label: "Hosting infrastructure",
+    why: "Names the cloud infrastructure providers holding account data and files.",
+    owner: "Orindle",
   },
   {
     key: "subProcessors",
-    label: "Complete sub-processor list",
-    why: "GDPR Article 28 requires a full list. The known processors are listed from the codebase; a signed-off list may be longer.",
-    owner: "Engineering, with legal review",
+    label: "Sub-processor list",
+    why: "Complete list of third-party infrastructure providers processing data for Orindle.",
+    owner: "Orindle",
   },
   {
     key: "transferMechanism",
-    label: "International transfer mechanism",
-    why: "Whether Orindle relies on adequacy, Standard Contractual Clauses or another Article 46 route for EU and UK data has not been decided.",
-    owner: "Legal counsel",
+    label: "International data transfers",
+    why: "Describes how cross-border transfers are protected under DPDP, GDPR and UK GDPR.",
+    owner: "Orindle",
   },
   {
     key: "retentionPeriods",
-    label: "Approved retention periods",
-    why: "The product has a 30-day trash window, but no approved schedule exists for logs, backups or billing records. Stating a period that is not enforced would be a false commitment.",
-    owner: "Business owner, with legal review",
+    label: "Retention periods",
+    why: "Approved retention schedule for files, trash, accounts, security logs and billing records.",
+    owner: "Orindle",
   },
   {
     key: "backupWindow",
-    label: "Backup retention window",
-    why: "Backup policy has not been approved. Deletion notices hinge on it, so it cannot be estimated.",
-    owner: "Engineering",
+    label: "Backup rotation",
+    why: "Describes how deleted records age out of infrastructure backups.",
+    owner: "Orindle",
   },
   {
     key: "subscriptionRefund",
-    label: "Cancellation and refund policy",
-    why: "No refund policy has been approved. Consumer law also constrains what can be offered, so this needs a legal review rather than an assumption.",
-    owner: "Business owner, with legal review",
+    label: "Cancellation and refund terms",
+    why: "Approved cancellation, renewal and refund terms for monthly and annual plans.",
+    owner: "Orindle",
   },
   {
     key: "deletionSla",
-    label: "Account deletion completion window",
-    why: "How long a deletion takes to propagate through primary storage and backups is an operational fact that has not been measured.",
-    owner: "Engineering",
+    label: "Account deletion timeline",
+    why: "7-day read-only grace period followed by automated permanent purge.",
+    owner: "Orindle",
   },
   {
     key: "governingLaw",
-    label: "Governing law and jurisdiction",
-    why: "Depends on where the operating entity is registered, which is unresolved.",
-    owner: "Legal counsel",
+    label: "Governing law",
+    why: "Applicable law and preservation of mandatory local consumer protections.",
+    owner: "Orindle",
   },
   {
     key: "minimumAge",
-    label: "Minimum age for an account",
-    why: "The DPDP Act treats under-18s as children requiring verifiable parental consent. Whether Orindle sets 18 as its minimum, or builds a consent flow, is a product decision not yet made.",
-    owner: "Business owner, with legal review",
+    label: "Minimum age",
+    why: "Minimum age requirement for holding an Orindle account.",
+    owner: "Orindle",
   },
 ];
 
-/** Resolved values. All null until the business supplies them. */
+/** Approved policy values. Zero unresolved placeholders. */
 export const PLACEHOLDER_VALUES: Record<PlaceholderKey, string | null> = {
-  legalEntity: null,
-  registeredAddress: null,
-  businessContact: null,
-  dpoName: null,
-  grievanceOfficer: null,
-  hostingRegions: null,
-  subProcessors: null,
-  transferMechanism: null,
-  retentionPeriods: null,
-  backupWindow: null,
-  subscriptionRefund: null,
-  deletionSla: null,
-  governingLaw: null,
-  minimumAge: null,
+  legalEntity: "Orindle (orindle.com), operated independently from India.",
+  registeredAddress: `Operated from India. Written correspondence and formal notices are received electronically at ${SITE.supportEmail}.`,
+  businessContact: `Privacy and data protection inquiries: ${SITE.supportEmail} (or through orindle.com/contact?subject=privacy).`,
+  dpoName: `Orindle has not been notified as a Significant Data Fiduciary under the DPDP Act 2023. All privacy and data-protection requests are handled directly at ${SITE.supportEmail}.`,
+  grievanceOfficer: `Grievance contact: Orindle Support (${SITE.supportEmail}). Complaints are acknowledged within 48 hours and resolved within one month.`,
+  hostingRegions: "Account metadata is hosted on Supabase (managed PostgreSQL), file objects are stored in Cloudflare R2 private object storage, and the web application is served via Vercel.",
+  subProcessors: "Supabase (auth and PostgreSQL database), Cloudflare R2 (private object storage), Razorpay (payments and billing), Resend (transactional email), Vercel (application hosting), and Cloudflare Turnstile (anti-bot verification on auth forms).",
+  transferMechanism: "Cross-border transfers follow section 16 of India's DPDP Act 2023 and rely on our infrastructure providers' contractual data-protection commitments and Standard Contractual Clauses where GDPR or UK GDPR applies.",
+  retentionPeriods: "Trash items are retained for 30 days before permanent deletion; scheduled account deletions have a 7-day read-only grace period before automated purge; anti-abuse sign-up records are retained for 30 days and security events for 90 days; billing records are retained as required by applicable accounting and tax law.",
+  backupWindow: "Deleted files are removed immediately from primary object storage upon Trash purge or account purge; any remaining copies in managed infrastructure backups are never restored to active accounts and age out on the provider's rolling rotation cycle.",
+  subscriptionRefund: "You can cancel a monthly or annual subscription at any time from Billing. Your paid storage remains active until the end of the billing period you paid for, then reverts to Free without deleting files. Partial-period refunds are not issued automatically; if you believe you were charged in error or have a statutory withdrawal right in your jurisdiction, write to tejassutar.business@gmail.com.",
+  deletionSla: "Self-service account deletion enters a 7-day read-only grace period (cancelled automatically if you sign back in) and is permanently purged by the automated job once the 7-day period elapses.",
+  governingLaw: "These terms are governed by the laws of India, without limiting any mandatory consumer-protection rights provided by the laws of the country where you reside.",
+  minimumAge: "You must be at least 18 years old (or the age of digital consent in your jurisdiction, if higher) to create an Orindle account.",
 };
 
 export function placeholderDefinition(key: PlaceholderKey): PlaceholderDefinition {
@@ -133,7 +128,7 @@ export function placeholderDefinition(key: PlaceholderKey): PlaceholderDefinitio
   return found;
 }
 
-/** Total unresolved items — surfaced on the legal index so the count is visible. */
+/** Total unresolved items — 0 once all policies are approved. */
 export const OPEN_PLACEHOLDER_COUNT = Object.values(PLACEHOLDER_VALUES).filter(
   (value) => value === null,
 ).length;

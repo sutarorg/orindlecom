@@ -81,6 +81,7 @@ export const api = {
   // share link) rather than partially updating it.
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body }),
   del: <T>(path: string, body?: unknown) => request<T>(path, { method: "DELETE", body }),
+  delete: <T>(path: string, body?: unknown) => request<T>(path, { method: "DELETE", body }),
 };
 
 /**

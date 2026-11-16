@@ -80,6 +80,14 @@ function LegalBlockView({ block }: { block: LegalBlock }) {
     case "placeholder": {
       const definition = placeholderDefinition(block.key);
       const value = PLACEHOLDER_VALUES[block.key];
+      if (value) {
+        return (
+          <div className="rounded-[12px] border border-[var(--brand-border)] bg-[var(--brand-canvas)] p-3.5">
+            <p className="text-[12.5px] font-bold text-ink">{definition.label}</p>
+            <p className="mt-1 text-[13px] leading-[1.65] text-text-muted">{value}</p>
+          </div>
+        );
+      }
       return (
         <div className="rounded-[12px] border border-dashed border-[#D9B978] bg-[#FEFBF3] p-3.5">
           <p className="flex flex-wrap items-center gap-2">
@@ -89,7 +97,7 @@ function LegalBlockView({ block }: { block: LegalBlock }) {
             <span className="text-[13px] font-bold text-[#5C3D06]">{definition.label}</span>
           </p>
           <p className="mt-1.5 text-[12px] leading-[1.6] text-[#7A5209]">
-            {value ?? block.note ?? definition.why}
+            {block.note ?? definition.why}
           </p>
         </div>
       );

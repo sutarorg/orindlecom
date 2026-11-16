@@ -1,20 +1,17 @@
 import type { LegalDocument } from "./types";
 
 /**
- * Acceptable Use Policy — draft.
- *
- * Written to be enforceable, which means specific. "No illegal content" is not a
- * rule anybody can apply; a list of the categories Orindle will act on, plus the
- * process it follows, is.
+ * Acceptable Use Policy — approved and published.
  */
 export const ACCEPTABLE_USE_POLICY: LegalDocument = {
   id: "acceptable-use",
   path: "/acceptable-use",
   title: "Acceptable Use Policy",
   summary:
-    "What you can and cannot store, what happens when a line is crossed, and how to report something.",
+    "What you can and cannot store, what happens when a line is crossed, and how to report abuse.",
   purpose: "The rules for content.",
   updated: "2026-11-16",
+  approved: true,
   sections: [
     {
       id: "principle",
@@ -22,29 +19,29 @@ export const ACCEPTABLE_USE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "Orindle stores private files. What you keep there is your business, and Orindle does not scan, read or mine it. This policy exists only to name the narrow set of uses that would harm other people, harm the service, or break the law — and to be clear about what happens if one occurs.",
+          text: "Orindle stores private files. What you keep there is your business, and Orindle does not mine your files for advertising or AI training. This policy names the narrow set of uses that harm other people, harm the service, or break the law — and states plainly how reports are handled.",
         },
       ],
     },
     {
       id: "prohibited",
       heading: "What you may not store or share",
-      gist: "Eleven specific categories.",
+      gist: "Eleven specific prohibited categories.",
       blocks: [
         {
           type: "list",
           items: [
-            "Material that is illegal in India or in the country where you are located. Where laws differ, the stricter one applies to you.",
-            "Child sexual abuse material. This is reported to the appropriate authorities wherever Orindle becomes aware of it, without notice to the account holder.",
-            "Content that infringes another person's copyright, trademark or other intellectual property, when you do not have permission to store or share it.",
-            "Other people's personal data that you have no lawful basis to hold — including stolen datasets, doxxing material, and records obtained without consent.",
+            "Material that is illegal in India or in the country where you are located. Where laws differ, the stricter rule applies.",
+            "Child sexual abuse material (CSAM). Reported immediately to the appropriate authorities wherever Orindle becomes aware of it, without notice to the account holder.",
+            "Content that infringes another person's copyright, trademark or intellectual property without permission.",
+            "Other people's personal data held without a lawful basis — including stolen datasets, doxxing material, and records obtained unlawfully.",
             "Malware, ransomware, exploit kits, phishing kits, or command-and-control infrastructure.",
             "Content intended to defraud, including forged documents presented as genuine and financial scams.",
-            "Terrorist or violent extremist material, or material that incites violence against a person or group.",
-            "Non-consensual intimate imagery, including synthetic imagery of a real person created or shared without their consent.",
+            "Terrorist or violent extremist material, or material that incites violence against any person or group.",
+            "Non-consensual intimate imagery, including synthetic imagery of a real person created or shared without consent.",
             "Content that sexually exploits or endangers a minor in any way.",
             "Material that harasses, threatens or stalks a specific person.",
-            "Bulk unsolicited content distributed through shared links — storage used as a spam delivery mechanism.",
+            "Bulk unsolicited content or spam distributed through shared links.",
           ],
         },
       ],
@@ -57,11 +54,11 @@ export const ACCEPTABLE_USE_POLICY: LegalDocument = {
         {
           type: "list",
           items: [
-            "Attempt to access an account, folder or file you have not been given access to.",
-            "Probe, scan or test the service for vulnerabilities without written permission. If you want to test something, write to support first — good-faith security research reported privately is welcome.",
-            "Circumvent storage allowances, rate limits or plan restrictions, including by creating multiple free accounts to pool storage.",
-            "Resell or rebrand the service as your own without a written agreement.",
-            "Use automated means to create accounts or upload in bulk in a way that degrades the service for others.",
+            "Attempt to access an account, organization, folder or file you have not been granted access to.",
+            "Probe, scan or test the service for vulnerabilities without prior written permission. Responsible private vulnerability reports sent to tejassutar.business@gmail.com are welcome.",
+            "Circumvent storage allowances, rate limits or plan restrictions, including creating multiple free accounts to pool storage.",
+            "Resell or rebrand the service without a written agreement.",
+            "Use automated tools to create accounts or upload in bulk in a way that degrades the service for others.",
             "Introduce code intended to disable, overload or damage the service.",
           ],
         },
@@ -69,54 +66,51 @@ export const ACCEPTABLE_USE_POLICY: LegalDocument = {
     },
     {
       id: "shared",
-      heading: "Shared links and other people's access",
+      heading: "Shared links and organization access",
       blocks: [
         {
           type: "p",
-          text: "A shared link is a public URL unless you set an expiry or a password. Anyone with the link can open it. You are responsible for who you send it to, and for turning it off when it is no longer needed.",
+          text: "A shared link grants access to anyone holding the URL until you revoke it or it expires. You are responsible for who receives your links and for turning them off when they are no longer needed.",
         },
         {
           type: "p",
-          text: "If you share a folder with someone in a business workspace, removing them revokes their access going forward. Anything they already downloaded is outside Orindle's control, and this is stated on the sharing screen rather than buried here.",
+          text: "In a Business workspace, removing a member revokes their future access immediately. Files they already downloaded to their own devices are outside Orindle's control.",
         },
       ],
     },
     {
       id: "enforcement",
       heading: "What happens when a rule is broken",
-      gist: "The escalation, in order.",
+      gist: "Proportionate escalation, in order.",
       blocks: [
         {
           type: "list",
           ordered: true,
           items: [
-            "Orindle tells you what the problem is and asks you to fix it, except where the law or the seriousness of the content requires immediate action.",
-            "If it is not fixed, the specific content is removed or the account is suspended from uploading, so nothing else is affected.",
-            "For a serious or repeated breach, the account is suspended entirely. Files are retained, not deleted, while the situation is resolved.",
-            "For content that is illegal, Orindle may report it to law enforcement and preserve the relevant records, and will not give advance notice where doing so would obstruct an investigation.",
+            "Where lawful and safe to do so, Orindle notifies you of the issue and asks you to resolve it.",
+            "If unresolved, the offending shared link or content is disabled or uploads are paused while the rest of your account stays intact.",
+            "For serious or repeated breaches, the account may be suspended while the issue is investigated.",
+            "For illegal content — including CSAM or valid law-enforcement requests — Orindle removes access immediately, preserves relevant records as required by law, and reports to the appropriate authorities without advance notice where notice would obstruct an investigation.",
           ],
         },
         {
           type: "p",
-          text: "Where an account is suspended under this policy, Orindle will still let you export your data if the suspension is later lifted, and will tell you how to appeal.",
+          text: "If you believe an enforcement action was taken in error, write to tejassutar.business@gmail.com to appeal.",
         },
       ],
-      review:
-        "Under India's IT Act and the Intermediary Guidelines and Digital Media Ethics Code Rules 2021, a service that stores user content may have intermediary obligations including a published grievance mechanism and specified response windows. Confirm whether Orindle's storage service falls within the Rules' definition of an intermediary and, if so, build the required notice-and-takedown process.",
     },
     {
       id: "report",
-      heading: "Reporting a violation",
+      heading: "Reporting a violation or grievance",
       blocks: [
         {
           type: "p",
-          text: "If you believe content on Orindle breaks this policy, report it through the contact form with the subject set to 'Something else', and include the shared link. Reports about child safety are prioritised and handled without delay.",
+          text: "To report abuse, illegal content or a policy violation, use the contact form at orindle.com/contact or email tejassutar.business@gmail.com with the shared link and relevant details. Child-safety reports are prioritised immediately.",
         },
         {
           type: "p",
-          text: "If you are reporting a copyright infringement, include the work you own, the link to the material you say infringes it, and a statement that you have a good-faith belief the use is unauthorised.",
+          text: "For copyright notices, identify the copyrighted work, include the exact Orindle link, and include a good-faith statement that the use is unauthorised. Grievances and takedown notices are acknowledged within 48 hours and resolved within one month (and faster where required by law).",
         },
-        { type: "placeholder", key: "grievanceOfficer" },
       ],
     },
     {
@@ -125,7 +119,7 @@ export const ACCEPTABLE_USE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "This policy is part of the Terms of Service. A material change is described here and notified to account holders before it takes effect.",
+          text: "This policy forms part of the Terms of Service. Material changes are posted on this page with an updated effective date and notified to account holders before they take effect.",
         },
       ],
     },

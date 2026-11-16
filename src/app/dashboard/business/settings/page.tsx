@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { BusinessSettingsView } from "@/components/business/settings-view";
+import { CreateOrganizationCard } from "@/components/business/create-organization-card";
 import { getBusinessRepository } from "@/lib/business/service";
 import { pageMetadata } from "@/lib/seo";
 
@@ -25,14 +27,9 @@ export default async function BusinessSettingsPage() {
 
   if (!organization) {
     return (
-      <div className="mx-auto w-full max-w-[900px] px-4 py-5 sm:px-6">
-        <div className="rounded-xl border border-[var(--brand-border)] bg-white px-4 py-8 text-center">
-          <p className="text-[13px] font-semibold text-ink">No organization yet</p>
-          <p className="mx-auto mt-1 max-w-[360px] text-[11.5px] leading-relaxed text-text-muted">
-            There&rsquo;s nothing to configure until an organization exists.
-          </p>
-        </div>
-      </div>
+      <Suspense fallback={null}>
+        <CreateOrganizationCard />
+      </Suspense>
     );
   }
 

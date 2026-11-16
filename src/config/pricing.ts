@@ -1,17 +1,31 @@
 /**
  * Central product pricing configuration.
  *
- * ONLY the prices confirmed by the Orindle product owner are listed here:
- * INR and USD. Every other region is present in the currency list so the
- * selector exists, but its price table is intentionally empty — the UI shows
- * an explicit "being finalised" state instead of inventing a number.
+ * All six tiers (Free 10 GB through Max 5 TB) and all eight supported
+ * currencies (INR, USD, GBP, EUR, AED, SGD, AUD, CAD) are approved for
+ * publication on both monthly and annual (20% discount) billing.
  *
- * No annual pricing has been approved, so `yearly` is `null` everywhere and
- * `ANNUAL_DISCOUNT_PCT` stays 0 until a value is supplied. Change it in one
- * place and every surface updates.
+ * Every amount here matches `public.plan_prices` (seeded through migration
+ * 0019) so display prices, Razorpay checkout totals, and admin MRR figures
+ * agree down to the minor unit.
  */
 
 export type CurrencyCode = "INR" | "USD" | "GBP" | "EUR" | "AED" | "SGD" | "AUD" | "CAD";
+
+export const SUPPORTED_CURRENCIES: readonly CurrencyCode[] = [
+  "INR",
+  "USD",
+  "GBP",
+  "EUR",
+  "AED",
+  "SGD",
+  "AUD",
+  "CAD",
+] as const;
+
+export function isSupportedCurrency(code: string): code is CurrencyCode {
+  return (SUPPORTED_CURRENCIES as readonly string[]).includes(code);
+}
 
 export type BillingPeriod = "monthly" | "yearly";
 
@@ -35,10 +49,10 @@ export interface Plan {
   storageBytes: number;
   icon: PlanIconName;
   accent: PlanAccent;
-  /** Monthly price per currency. `null` = not published for that currency yet. */
-  monthly: Partial<Record<CurrencyCode, number>>;
-  /** Annual price per currency (charged yearly, monthly equivalent). Null = not announced. */
-  yearly: Partial<Record<CurrencyCode, number>> | null;
+  /** Approved monthly price per currency. */
+  monthly: Record<CurrencyCode, number>;
+  /** Approved annual monthly-equivalent price per currency (20% off, billed yearly as yearly[c] * 12). */
+  yearly: Record<CurrencyCode, number>;
   ctaLabel: string;
   /** Short honest line shown under the plan name where there is room. */
   note?: string;
@@ -46,10 +60,11 @@ export interface Plan {
 
 export const PLAN_ORDER: PlanId[] = ["free", "basic", "plus", "premium", "ultra", "max"];
 
-export const HIGHLIGHTED_PLAN: PlanId = "plus";
+/** 1 TB (Premium) is highlighted as Most Popular. */
+export const HIGHLIGHTED_PLAN: PlanId = "premium";
 
-/** Annual discount is NOT approved. Kept configurable and neutral. */
-export const ANNUAL_DISCOUNT_PCT = 0;
+/** Approved annual billing discount percentage. */
+export const ANNUAL_DISCOUNT_PCT = 20;
 
 export const PLANS: Plan[] = [
   {
@@ -59,8 +74,8 @@ export const PLANS: Plan[] = [
     storageBytes: 10 * 1000 ** 3,
     icon: "cloud",
     accent: "blue",
-    monthly: { INR: 0, USD: 0 },
-    yearly: null,
+    monthly: { INR: 0, USD: 0, GBP: 0, EUR: 0, AED: 0, SGD: 0, AUD: 0, CAD: 0 },
+    yearly: { INR: 0, USD: 0, GBP: 0, EUR: 0, AED: 0, SGD: 0, AUD: 0, CAD: 0 },
     ctaLabel: "Get Started",
     note: "Free forever",
   },
@@ -71,8 +86,26 @@ export const PLANS: Plan[] = [
     storageBytes: 100 * 1000 ** 3,
     icon: "leaf",
     accent: "green",
-    monthly: { INR: 79, USD: 1.49 },
-    yearly: null,
+    monthly: {
+      INR: 99,
+      USD: 1.09,
+      GBP: 0.99,
+      EUR: 0.99,
+      AED: 3.99,
+      SGD: 1.49,
+      AUD: 1.59,
+      CAD: 1.59,
+    },
+    yearly: {
+      INR: 79,
+      USD: 0.87,
+      GBP: 0.79,
+      EUR: 0.79,
+      AED: 3.19,
+      SGD: 1.19,
+      AUD: 1.27,
+      CAD: 1.27,
+    },
     ctaLabel: "Choose Plan",
   },
   {
@@ -82,8 +115,26 @@ export const PLANS: Plan[] = [
     storageBytes: 500 * 1000 ** 3,
     icon: "star",
     accent: "blue",
-    monthly: { INR: 199, USD: 3.99 },
-    yearly: null,
+    monthly: {
+      INR: 549,
+      USD: 5.99,
+      GBP: 4.49,
+      EUR: 5.49,
+      AED: 21.99,
+      SGD: 7.49,
+      AUD: 8.99,
+      CAD: 8.49,
+    },
+    yearly: {
+      INR: 439,
+      USD: 4.79,
+      GBP: 3.59,
+      EUR: 4.39,
+      AED: 17.59,
+      SGD: 5.99,
+      AUD: 7.19,
+      CAD: 6.79,
+    },
     ctaLabel: "Choose Plan",
   },
   {
@@ -93,30 +144,84 @@ export const PLANS: Plan[] = [
     storageBytes: 1000 ** 4,
     icon: "gem",
     accent: "violet",
-    monthly: { INR: 349, USD: 6.99 },
-    yearly: null,
+    monthly: {
+      INR: 1099,
+      USD: 11.99,
+      GBP: 8.99,
+      EUR: 10.99,
+      AED: 42.99,
+      SGD: 14.99,
+      AUD: 17.49,
+      CAD: 16.99,
+    },
+    yearly: {
+      INR: 879,
+      USD: 9.59,
+      GBP: 7.19,
+      EUR: 8.79,
+      AED: 34.39,
+      SGD: 11.99,
+      AUD: 13.99,
+      CAD: 13.59,
+    },
     ctaLabel: "Choose Plan",
   },
   {
     id: "ultra",
     name: "Ultra",
-    storage: "5 TB",
-    storageBytes: 5 * 1000 ** 4,
+    storage: "2 TB",
+    storageBytes: 2 * 1000 ** 4,
     icon: "bolt",
     accent: "coral",
-    monthly: { INR: 999, USD: 19.99 },
-    yearly: null,
+    monthly: {
+      INR: 2199,
+      USD: 23.99,
+      GBP: 17.99,
+      EUR: 21.49,
+      AED: 85.99,
+      SGD: 30.99,
+      AUD: 34.99,
+      CAD: 33.99,
+    },
+    yearly: {
+      INR: 1759,
+      USD: 19.19,
+      GBP: 14.39,
+      EUR: 17.19,
+      AED: 68.79,
+      SGD: 24.79,
+      AUD: 27.99,
+      CAD: 27.19,
+    },
     ctaLabel: "Choose Plan",
   },
   {
     id: "max",
     name: "Max",
-    storage: "10 TB",
-    storageBytes: 10 * 1000 ** 4,
+    storage: "5 TB",
+    storageBytes: 5 * 1000 ** 4,
     icon: "crown",
     accent: "amber",
-    monthly: { INR: 1999, USD: 39.99 },
-    yearly: null,
+    monthly: {
+      INR: 5599,
+      USD: 59.99,
+      GBP: 44.99,
+      EUR: 54.99,
+      AED: 219.99,
+      SGD: 76.99,
+      AUD: 89.99,
+      CAD: 84.99,
+    },
+    yearly: {
+      INR: 4479,
+      USD: 47.99,
+      GBP: 35.99,
+      EUR: 43.99,
+      AED: 175.99,
+      SGD: 61.59,
+      AUD: 71.99,
+      CAD: 67.99,
+    },
     ctaLabel: "Choose Plan",
   },
 ];
@@ -131,12 +236,12 @@ export const CURRENCIES: {
 }[] = [
   { code: "INR", label: "Indian Rupee", symbol: "₹", region: "India", published: true },
   { code: "USD", label: "US Dollar", symbol: "$", region: "United States & other regions", published: true },
-  { code: "GBP", label: "Pound Sterling", symbol: "£", region: "United Kingdom", published: false },
-  { code: "EUR", label: "Euro", symbol: "€", region: "Eurozone", published: false },
-  { code: "AED", label: "UAE Dirham", symbol: "د.إ", region: "United Arab Emirates", published: false },
-  { code: "SGD", label: "Singapore Dollar", symbol: "S$", region: "Singapore", published: false },
-  { code: "AUD", label: "Australian Dollar", symbol: "A$", region: "Australia", published: false },
-  { code: "CAD", label: "Canadian Dollar", symbol: "C$", region: "Canada", published: false },
+  { code: "GBP", label: "Pound Sterling", symbol: "£", region: "United Kingdom", published: true },
+  { code: "EUR", label: "Euro", symbol: "€", region: "Eurozone", published: true },
+  { code: "AED", label: "UAE Dirham", symbol: "AED ", region: "United Arab Emirates", published: true },
+  { code: "SGD", label: "Singapore Dollar", symbol: "S$", region: "Singapore", published: true },
+  { code: "AUD", label: "Australian Dollar", symbol: "A$", region: "Australia", published: true },
+  { code: "CAD", label: "Canadian Dollar", symbol: "C$", region: "Canada", published: true },
 ];
 
 /**
@@ -169,8 +274,8 @@ export function isCurrencyPublished(code: CurrencyCode) {
 }
 
 /**
- * Format an amount for display. Whole numbers in INR omit decimals; USD keeps
- * two decimals only when the value has cents (so $1.49 shows, $40 does not).
+ * Format an amount for display. Whole numbers omit decimals; fractional
+ * amounts keep two decimals (e.g. $1.09, ₹1,099, AED 42.99).
  */
 export function formatPrice(amount: number, currency: CurrencyCode): string {
   const meta = currencyMeta(currency);
@@ -182,7 +287,7 @@ export function formatPrice(amount: number, currency: CurrencyCode): string {
   return `${meta.symbol}${value}`;
 }
 
-/** Resolve the price to display for a plan, or `null` when unpublished. */
+/** Resolve the per-month display price for a plan in the requested period. */
 export function resolvePrice(
   plan: Plan,
   currency: CurrencyCode,
@@ -190,11 +295,14 @@ export function resolvePrice(
 ): number | null {
   if (!isCurrencyPublished(currency)) return null;
   if (billing === "monthly") return plan.monthly[currency] ?? null;
-  const yearly = plan.yearly?.[currency];
-  if (yearly != null) return yearly;
-  // No annual price approved: fall back to the monthly figure and let the UI
-  // label it honestly rather than inventing a discount.
-  return plan.monthly[currency] ?? null;
+  return plan.yearly[currency] ?? null;
+}
+
+/** Resolve the exact yearly charge (monthly equivalent × 12) for annual billing. */
+export function resolveAnnualTotal(plan: Plan, currency: CurrencyCode): number | null {
+  const perMonth = resolvePrice(plan, currency, "yearly");
+  if (perMonth === null) return null;
+  return Math.round(perMonth * 100 * 12) / 100;
 }
 
 export function planById(id: PlanId): Plan {

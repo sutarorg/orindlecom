@@ -55,7 +55,7 @@ export const bestCloudStorageForSmallBusiness: BlogArticle = {
     {
       question: "Does Orindle support teams today?",
       answer:
-        "Partly, and honestly. The database schema and row-level security for organisations, members and roles exist and are tested. The organisation routes in the product are not built yet, and the business workspace screens say so rather than simulating success. For a team that needs shared folders today, that is a real limitation.",
+        "Yes. Business workspaces run on database row-level security with Owner, Admin and Member roles, shared folders, per-folder access controls, email invitations, and an activity audit log — all included under the organisation owner's active Orindle storage plan with no per-seat surcharge.",
     },
   ],
   body: [
@@ -113,7 +113,7 @@ export const bestCloudStorageForSmallBusiness: BlogArticle = {
           name: "Orindle",
           verdict: "Clear plans; organisation features still under construction",
           detail:
-            "Six monthly plans from 10 GB to 10 TB, published in INR and USD with no annual lock-in. Organisations, members and roles are modelled in the database with row-level security and tested, but the business workspace routes are not built yet. Worth watching, not yet a recommendation for a team that needs shared folders today.",
+            "Six plans from 10 GB free to 5 TB, published across eight currencies (INR, USD, GBP, EUR, AED, SGD, AUD, CAD) with monthly billing or 20% off annually. Business workspaces inherit the organisation owner's storage plan with no per-seat fee, giving teams shared folders, Owner/Admin/Member roles, per-folder permissions, and an audit trail backed by database row-level security.",
         },
       ],
     },

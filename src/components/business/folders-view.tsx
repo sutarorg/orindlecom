@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   FolderLock,
   FolderPlus,
@@ -18,34 +19,26 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Menu } from "@/components/ui/menu";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { api } from "@/lib/drive/client";
 import { formatBytes, formatRelative } from "@/lib/drive/format";
-import { BUSINESS_NOT_CONNECTED } from "@/lib/business/repository";
 import { can } from "@/lib/business/roles";
 import { FOLDER_ACCESS_LABEL, type BusinessFolder, type BusinessRole, type Member } from "@/lib/business/types";
 import { FolderAccessDialog } from "./folder-access-dialog";
 import { cn } from "@/lib/utils";
 
-/**
- * Shared folders.
- *
- * Not a table. A shared folder answers three questions — what's in it, who can
- * reach it, and what they can do — and none of those is a column. So each folder
- * is a card carrying an access summary in words ("Everyone · Can view") plus the
- * faces of anyone with an override.
- *
- * The access summary is the design decision that matters: "3 people" tells you
- * nothing about whether a folder is open to the whole company or locked to three.
- */
 export function FoldersView({
+  organizationId = "workspace",
   folders,
   members,
   viewerRole,
 }: {
+  organizationId?: string;
   folders: BusinessFolder[];
   members: Member[];
   viewerRole: BusinessRole;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [accessTarget, setAccessTarget] = React.useState<BusinessFolder | null>(null);
   const [renameTarget, setRenameTarget] = React.useState<BusinessFolder | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<BusinessFolder | null>(null);
@@ -57,14 +50,44 @@ export function FoldersView({
   const canCreate = can(viewerRole, "folders.create");
   const canManage = can(viewerRole, "folders.manageAccess");
   const canDelete = can(viewerRole, "folders.delete");
+  const baseUrl = `/api/organizations/${encodeURIComponent(organizationId)}/folders`;
 
-  /**
-   * Organisation folders have no route yet. This reports that immediately rather
-   * than simulating a request: a fake delay teaches people to wait for something
-   * that was never sent.
-   */
-  const reportUnbacked = (title: string) => {
-    toast({ tone: "error", title, description: BUSINESS_NOT_CONNECTED });
+  const handleCreate = async (name: string) => {
+    const result = await api.post<{ folder: BusinessFolder }>(baseUrl, { name });
+    if (!result.ok) {
+      toast({ tone: "error", title: "Folder wasn't created", description: result.message });
+      return false;
+    }
+    toast({ tone: "success", title: "Shared folder created", description: `“${name}” is ready.` });
+    setCreateOpen(false);
+    router.refresh();
+    return true;
+  };
+
+  const handleRename = async (folder: BusinessFolder, name: string) => {
+    const result = await api.patch<{ folder: BusinessFolder }>(
+      `${baseUrl}/${encodeURIComponent(folder.id)}`,
+      { name },
+    );
+    if (!result.ok) {
+      toast({ tone: "error", title: "Folder wasn't renamed", description: result.message });
+      return false;
+    }
+    toast({ tone: "success", title: "Folder renamed", description: `Renamed to “${name}”.` });
+    setRenameTarget(null);
+    router.refresh();
+    return true;
+  };
+
+  const handleDelete = async (folder: BusinessFolder) => {
+    setDeleteTarget(null);
+    const result = await api.delete(`${baseUrl}/${encodeURIComponent(folder.id)}`);
+    if (!result.ok) {
+      toast({ tone: "error", title: "Folder wasn't deleted", description: result.message });
+      return;
+    }
+    toast({ tone: "success", title: "Folder deleted", description: `“${folder.name}” was removed.` });
+    router.refresh();
   };
 
   return (
@@ -176,6 +199,7 @@ export function FoldersView({
       />
 
       <FolderAccessDialog
+        organizationId={organizationId}
         folder={accessTarget}
         members={members}
         onClose={() => setAccessTarget(null)}
@@ -185,9 +209,8 @@ export function FoldersView({
         folder={renameTarget}
         mode="rename"
         onClose={() => setRenameTarget(null)}
-        onSubmit={async () => {
-          setRenameTarget(null);
-          reportUnbacked("Folder wasn't renamed");
+        onSubmit={async (name) => {
+          if (renameTarget) await handleRename(renameTarget, name);
         }}
       />
 
@@ -196,9 +219,8 @@ export function FoldersView({
         mode="create"
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onSubmit={async () => {
-          setCreateOpen(false);
-          reportUnbacked("Folder wasn't created");
+        onSubmit={async (name) => {
+          await handleCreate(name);
         }}
       />
 
@@ -206,8 +228,7 @@ export function FoldersView({
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
-          setDeleteTarget(null);
-          reportUnbacked("Folder wasn't deleted");
+          if (deleteTarget) void handleDelete(deleteTarget);
         }}
         title={`Delete “${deleteTarget?.name ?? ""}”?`}
         confirmLabel="Delete folder"
@@ -262,7 +283,6 @@ function FolderCard({
         </button>
       </div>
 
-      {/* Access summary — the point of the card. */}
       <div className="mt-auto border-t border-[var(--brand-border-soft)] px-3 py-2.5">
         <div className="flex items-center gap-1.5">
           {folder.openToOrganization ? (
@@ -287,7 +307,6 @@ function FolderCard({
           )}
         </div>
 
-        {/* Faces of people with individual access. */}
         {overrideCount > 0 && (
           <div className="mt-1.5 flex items-center gap-1">
             {folder.access.slice(0, 4).map((entry) => (
@@ -332,10 +351,6 @@ function FolderCard({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Create / rename                                                    */
-/* ------------------------------------------------------------------ */
-
 function NameFolderDialog({
   folder,
   mode,
@@ -347,7 +362,7 @@ function NameFolderDialog({
   mode: "create" | "rename";
   open?: boolean;
   onClose: () => void;
-  onSubmit: () => Promise<void> | void;
+  onSubmit: (name: string) => Promise<void> | void;
 }) {
   const isOpen = mode === "create" ? Boolean(open) : folder !== null;
   const [name, setName] = React.useState("");
@@ -376,7 +391,7 @@ function NameFolderDialog({
     const message = validate(name);
     if (message) return setError(message);
     setPending(true);
-    await onSubmit();
+    await onSubmit(name.trim());
     setPending(false);
   };
 
@@ -387,7 +402,7 @@ function NameFolderDialog({
       title={mode === "create" ? "New shared folder" : "Rename folder"}
       description={
         mode === "create"
-          ? "Only you will be able to see it until you give someone access."
+          ? "Uses your team's default folder access. You can adjust per-member access right after."
           : "Renaming doesn't change who has access."
       }
       size="sm"
