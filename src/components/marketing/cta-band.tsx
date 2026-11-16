@@ -77,7 +77,7 @@ export function CtaBand() {
                 pill
                 className="h-[38px] px-5 text-[12.5px] tracking-[-0.01em] lg:h-11 lg:px-6 lg:text-[13.5px]"
               >
-                <Link href="/sign-up">
+                <Link href="/signup">
                   Create Your Free Account
                   <ArrowRight className="h-[14px] w-[14px]" strokeWidth={2.2} />
                 </Link>

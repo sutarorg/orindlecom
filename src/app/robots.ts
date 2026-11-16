@@ -8,7 +8,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: "/",
         // Account entry points carry no indexable content.
-        disallow: ["/sign-in", "/sign-up"],
+        disallow: ["/login", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/auth", "/api/auth"],
       },
     ],
     sitemap: `${SITE.url}/sitemap.xml`,

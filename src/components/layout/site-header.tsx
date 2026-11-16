@@ -128,13 +128,13 @@ export function SiteHeader() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
-              href="/sign-in"
+              href="/login"
               className="hidden h-9 items-center rounded-full px-3 text-[14px] font-medium text-text transition-colors hover:text-ink sm:inline-flex"
             >
               Sign in
             </Link>
             <Button asChild size="sm" pill className="h-[30px] px-[13px] text-[12.5px] tracking-[-0.01em] md:h-[32px] md:px-4 md:text-[13px]">
-              <Link href="/sign-up">Get started</Link>
+              <Link href="/signup">Get started</Link>
             </Button>
             <button
               ref={triggerRef}
@@ -236,10 +236,10 @@ export function SiteHeader() {
           <div className="border-t border-[var(--brand-border-soft)] p-5">
             <div className="flex flex-col gap-2">
               <Button asChild variant="primary" size="lg" full>
-                <Link href="/sign-up">Get 10 GB Free</Link>
+                <Link href="/signup">Get 10 GB Free</Link>
               </Button>
               <Button asChild variant="secondary" size="lg" full>
-                <Link href="/sign-in">Sign in</Link>
+                <Link href="/login">Sign in</Link>
               </Button>
             </div>
             <p className="mt-3 text-center text-[12px] text-text-subtle">
