@@ -5,15 +5,10 @@ import { PageIntro } from "@/components/marketing/section-heading";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { ALL_FAQ } from "@/config/faq";
-import { pageMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
+import { approvedMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Security",
-  description:
-    "How Orindle protects your files: TLS in transit, encryption at rest, scoped access tokens, per-request authorisation and a short-lived signed download model.",
-  path: "/security",
-  keywords: ["cloud storage security", "encryption at rest", "signed URLs"],
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.security);
 
 const PILLARS = [
   {
@@ -82,7 +77,7 @@ export default function SecurityPage() {
         <div className="container-or">
           <PageIntro
             eyebrow="Security"
-            title="Security we can actually describe."
+            title="Your files deserve thoughtful protection."
             description="This page explains the architecture as it is built. It does not list certifications Orindle does not hold — that would be a claim, not a security practice."
           />
         </div>

@@ -7,15 +7,10 @@ import { CtaBand } from "@/components/marketing/cta-band";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { StorageMeter } from "@/components/product/storage-meter";
 import { ALL_FAQ } from "@/config/faq";
-import { pageMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
+import { approvedMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Orindle for business",
-  description:
-    "Organisation accounts for teams: one shared storage pool, members with roles, folder-level permissions, admin controls and centralised billing.",
-  path: "/business",
-  keywords: ["business cloud storage", "team file sharing", "organisation accounts"],
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.business);
 
 const CAPABILITIES = [
   {
@@ -61,7 +56,7 @@ export default function BusinessPage() {
         <div className="container-or">
           <PageIntro
             eyebrow="Business"
-            title="Storage your team can actually share."
+            title="A simpler space for your team's files."
             description="An organisation account gives your team one pool of space, clear roles and folder permissions that hold. Everything below is the shape the product is being built to."
           />
         </div>

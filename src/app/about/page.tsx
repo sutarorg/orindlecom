@@ -5,14 +5,10 @@ import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/marketing/section-heading";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { SITE } from "@/config/site";
-import { pageMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
+import { approvedMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = pageMetadata({
-  title: "About Orindle",
-  description:
-    "Orindle is cloud storage built around one idea: your files should simply be there, on every device, organised the way you think. Here is what we are building and how.",
-  path: "/about",
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.about);
 
 /**
  * About page.
@@ -51,7 +47,7 @@ export default function AboutPage() {
         <div className="container-or">
           <PageIntro
             eyebrow="About"
-            title="One simple place for everything you keep."
+            title="A simpler way to keep everything together."
             description="Orindle is personal and business cloud storage for people who want their files to simply be there — on every device, organised the way they think, priced honestly."
           />
         </div>

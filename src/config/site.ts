@@ -17,6 +17,7 @@ export const PRIMARY_NAV = [
   { label: "Features", href: "/features" },
   { label: "Pricing", href: "/pricing" },
   { label: "Business", href: "/business" },
+  { label: "Blog", href: "/blog" },
   { label: "About", href: "/about" },
 ] as const;
 
@@ -34,6 +35,8 @@ export const FOOTER_NAV = [
     links: [
       { label: "About", href: "/about" },
       { label: "Business", href: "/business" },
+      { label: "Blog", href: "/blog" },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {
@@ -42,6 +45,7 @@ export const FOOTER_NAV = [
       { label: "Help centre", href: "/help" },
       { label: "FAQ", href: "/faq" },
       { label: "Security", href: "/security" },
+      { label: "Blog", href: "/blog" },
       { label: "Contact", href: "/contact" },
     ],
   },

@@ -8,15 +8,10 @@ import { CtaBand } from "@/components/marketing/cta-band";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { ALL_FAQ } from "@/config/faq";
 import { DEFAULT_CURRENCY, REGION_CURRENCY, type CurrencyCode } from "@/config/pricing";
-import { pageMetadata } from "@/lib/seo";
+import { PAGE_SEO } from "@/config/seo-pages";
+import { approvedMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Storage plans and pricing",
-  description:
-    "Six Orindle storage tiers from a free 10 GB to 10 TB. Transparent monthly pricing in INR and USD, no lock-in, and no credit card to start.",
-  path: "/pricing",
-  keywords: ["cloud storage pricing", "10 GB free storage", "1 TB cloud storage", "online storage India"],
-});
+export const metadata: Metadata = approvedMetadata(PAGE_SEO.pricing);
 
 const PRICING_FAQ = ALL_FAQ.filter((item) =>
   ["Billing", "Storage & plans"].includes(item.category),
@@ -41,7 +36,7 @@ export default async function PricingPage() {
         <div className="container-or">
           <PageIntro
             eyebrow="Plans"
-            title="Six sizes. One honest price list."
+            title="Room for every kind of digital life."
             description="Every tier is plain monthly storage on the same account. Start on 10 GB free and move up only when you need the room."
           />
         </div>
