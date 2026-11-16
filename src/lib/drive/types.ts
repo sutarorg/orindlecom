@@ -1,0 +1,260 @@
+/**
+ * Dashboard data contract.
+ *
+ * These types describe what the drive backend must be able to answer, in the
+ * vocabulary the UI speaks. Nothing in `src/components/dashboard` talks to a
+ * storage provider directly; it talks to `DriveRepository`.
+ *
+ * Two rules encoded here rather than documented elsewhere:
+ *   1. An item only exists once the backend returned it. There is no
+ *      client-constructed `DriveItem` anywhere in the tree.
+ *   2. Nothing about storage usage is derived by the client. `StorageUsage`
+ *      arrives whole, because "100 MB used" computed from a partial item list
+ *      would be a lie the moment pagination kicks in.
+ */
+
+export type ItemKind = "file" | "folder";
+
+/** MIME-ish category, so previews and icons key off one stable value. */
+export type FileCategory =
+  | "image"
+  | "video"
+  | "audio"
+  | "pdf"
+  | "document"
+  | "spreadsheet"
+  | "presentation"
+  | "archive"
+  | "code"
+  | "text"
+  | "other";
+
+export interface DriveItem {
+  id: string;
+  kind: ItemKind;
+  name: string;
+  /** Null for folders. Bytes. */
+  size: number | null;
+  /** Null for folders. */
+  mimeType: string | null;
+  category: FileCategory;
+  /** Parent folder id, or null at the root. */
+  parentId: string | null;
+  /** Absolute path segments from root to this item, for breadcrumbs. */
+  path: Array<{ id: string; name: string }>;
+  /** ISO 8601. */
+  createdAt: string;
+  modifiedAt: string;
+  /** ISO 8601, or null if never opened. */
+  openedAt: string | null;
+  starred: boolean;
+  trashed: boolean;
+  /** ISO 8601 — when trash retention expires. Null unless trashed. */
+  purgeAt: string | null;
+  /** Number of items directly inside. 0 for files. */
+  childCount: number;
+  /** Whether this item currently has any share grants. */
+  shared: boolean;
+  /** True when the viewer owns it (vs. shared in from someone else). */
+  owned: boolean;
+  /** Owner display name when shared in. Null when owned. */
+  ownerName: string | null;
+}
+
+export type SortKey = "name" | "modifiedAt" | "size" | "category";
+export type SortDirection = "asc" | "desc";
+
+export interface ListQuery {
+  /** Which virtual collection to list. */
+  scope: "files" | "folders" | "recent" | "starred" | "shared" | "trash";
+  /** Restrict to a folder when scope is `files`/`folders`. Null = root. */
+  parentId?: string | null;
+  search?: string;
+  sort?: SortKey;
+  direction?: SortDirection;
+  /** Filter by category. Empty means no filter. */
+  categories?: FileCategory[];
+}
+
+export interface StorageUsage {
+  planId: string;
+  planName: string;
+  /** Bytes. */
+  used: number;
+  /** Bytes. */
+  total: number;
+  /** Bytes per category. Only categories with a non-zero total are present. */
+  byCategory: Partial<Record<FileCategory, number>>;
+  /** Counts, for the overview. */
+  fileCount: number;
+  folderCount: number;
+  /** True when the figures came from the backend rather than a default. */
+  authoritative: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sharing                                                            */
+/* ------------------------------------------------------------------ */
+
+/** Only levels the backend actually enforces. Never display others. */
+export type PermissionLevel = "viewer" | "commenter" | "editor";
+
+export const PERMISSION_LABEL: Record<PermissionLevel, string> = {
+  viewer: "Can view",
+  commenter: "Can comment",
+  editor: "Can edit",
+};
+
+export const PERMISSION_DESCRIPTION: Record<PermissionLevel, string> = {
+  viewer: "Open and download, nothing else.",
+  commenter: "Read and leave comments.",
+  editor: "Add, rename and delete inside.",
+};
+
+export interface ShareGrant {
+  id: string;
+  itemId: string;
+  /** Email of the recipient as entered. */
+  email: string;
+  /** Display name when the backend knows one, otherwise null. */
+  displayName: string | null;
+  permission: PermissionLevel;
+  /** ISO 8601. */
+  createdAt: string;
+  /** ISO 8601 expiry, or null for no expiry. */
+  expiresAt: string | null;
+  /** True for a pending invitation the recipient hasn't accepted. */
+  pending: boolean;
+}
+
+export interface ShareLink {
+  /** The full URL. Null when no link has been created yet. */
+  url: string | null;
+  permission: PermissionLevel;
+  /** ISO 8601, or null for no expiry. */
+  expiresAt: string | null;
+  /** Whether anyone with the link can use it. */
+  enabled: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Upload                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Upload lifecycle. The UI may only advance to `complete` when the repository
+ * confirms the stored object — see `upload-state-flow.md`.
+ */
+export type UploadStatus =
+  | "queued"
+  | "preparing"
+  | "uploading"
+  | "finalising"
+  | "complete"
+  | "failed"
+  | "cancelled";
+
+export interface UploadTask {
+  id: string;
+  file: File;
+  status: UploadStatus;
+  /** 0–100. Only meaningful while uploading/finalising. */
+  progress: number;
+  /** Bytes transferred so far. */
+  transferred: number;
+  /** Set when status is `failed`. Safe to render. */
+  error?: string;
+  /** Populated only on success, with the record the backend returned. */
+  result?: DriveItem;
+  /** ISO 8601 start time. */
+  startedAt: string;
+  /** True for multipart uploads above the threshold. */
+  multipart: boolean;
+}
+
+/** Limits the UI enforces before it bothers the backend. */
+export const UPLOAD_LIMITS = {
+  /** Files this size or larger use the multipart path. */
+  multipartThreshold: 16 * 1024 * 1024,
+  maxFileSize: 5 * 1024 ** 3,
+  /** Rejected outright — these are commonly blocked by browsers anyway. */
+  blockedExtensions: [".exe", ".dll", ".app", ".bat", ".cmd", ".scr", ".msi"],
+} as const;
+
+/* ------------------------------------------------------------------ */
+/*  Activity                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Only genuine events. The overview renders an activity list only when the
+ * backend returns one — there is no seeded history anywhere in this app.
+ */
+export interface ActivityEvent {
+  id: string;
+  kind: "upload" | "rename" | "move" | "share" | "restore" | "delete" | "star";
+  itemId: string;
+  itemName: string;
+  /** ISO 8601. */
+  at: string;
+  /** Human-readable actor. "You" for the viewer. */
+  actor: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Billing                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface Subscription {
+  planId: string;
+  planName: string;
+  status: "active" | "trialing" | "past_due" | "cancelled" | "none";
+  /** Currency code the account is billed in. */
+  currency: string;
+  /** Amount in minor units (paise/cents). */
+  amount: number;
+  interval: "month" | "year";
+  /** ISO 8601, or null when not confirmed by the provider. */
+  currentPeriodEnd: string | null;
+  /** False when the provider hasn't confirmed a date yet. */
+  renewsAutomatically: boolean;
+  /** True when cancellation is scheduled for period end. */
+  cancelAtPeriodEnd: boolean;
+}
+
+export interface Invoice {
+  id: string;
+  /** ISO 8601. */
+  date: string;
+  amount: number;
+  currency: string;
+  status: "paid" | "open" | "failed" | "refunded";
+  /** Provider-hosted receipt, or null when unavailable. */
+  receiptUrl: string | null;
+}
+
+/**
+ * Retention policy for trash.
+ *
+ * Configurable because it is a product rule awaiting sign-off, not a settled
+ * fact. Read it from `TRASH_RETENTION` — never hard-code 30 anywhere else.
+ */
+const TRASH_RETENTION_FALLBACK_DAYS = 30;
+
+/**
+ * Resolved once at module load. `TRASH_RETENTION_DAYS` is a server env var; it
+ * falls back to 30 when unset, which is what the client bundle sees — so the
+ * copy is identical on both sides and there is no hydration mismatch.
+ */
+const retentionDays = (() => {
+  const raw = typeof process !== "undefined" ? process.env.TRASH_RETENTION_DAYS : undefined;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : TRASH_RETENTION_FALLBACK_DAYS;
+})();
+
+export const TRASH_RETENTION = {
+  days: retentionDays,
+  /** Shown in the trash UI. Derived, so changing the env var changes the copy. */
+  label: `${retentionDays} days`,
+  /** Policy status, surfaced in the docs and the storage page footnote. */
+  approved: false,
+} as const;
