@@ -312,6 +312,20 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         text: `We've got your message. Reference ${data.reference ?? ""}. We reply within 48 hours.`,
       };
 
+    case "account-deletion-requested":
+      return {
+        subject: "Your Orindle account is scheduled for deletion",
+        html: layout({
+          heading: "Your account is scheduled for deletion",
+          // The two facts that matter: nothing has happened yet, and there is a way
+          // back. Stated before anything else.
+          body: `<p style="margin:0 0 10px;">Nothing has been deleted yet. Your account is now read-only and will be permanently deleted on <strong>${esc(data.purgeOn ?? "the date shown in your settings")}</strong>.</p>
+                 <p style="margin:0 0 10px;">Signing in before that date cancels the deletion and puts everything back to normal.</p>
+                 <p style="margin:0;">If you didn't ask for this, sign in now and change your password, then reply to this email.</p>`,
+        }),
+        text: `Your Orindle account is scheduled for deletion on ${data.purgeOn ?? "the date in your settings"}. Nothing has been deleted yet, and signing in before then cancels it. If you didn't ask for this, sign in now and change your password.`,
+      };
+
     case "account-deleted":
       return {
         subject: "Your Orindle account has been deleted",

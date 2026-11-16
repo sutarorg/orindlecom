@@ -10,7 +10,9 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
+import { api } from "@/lib/drive/client";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 
 /**
@@ -59,6 +61,7 @@ function ProfileSection({
   authenticated: boolean;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [name, setName] = React.useState(user.name);
   const [pending, setPending] = React.useState(false);
   const nameId = React.useId();
@@ -75,13 +78,27 @@ function ProfileSection({
     event.preventDefault();
     if (!dirty) return;
     setPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    setPending(false);
-    toast({
-      tone: "error",
-      title: "Name wasn't saved",
-      description: "Profile changes aren't available yet, so your account is unchanged.",
+
+    const result = await api.patch<{ fullName: string }>("/api/users/me", {
+      fullName: name.trim(),
     });
+
+    setPending(false);
+
+    if (!result.ok) {
+      toast({
+        tone: "error",
+        title: "Name wasn't saved",
+        description: result.message,
+      });
+      return;
+    }
+
+    // Reset the baseline so the field is no longer marked dirty against a name the
+    // server has already stored.
+    initial.current = result.data.fullName;
+    toast({ tone: "success", title: "Name saved", description: "That's how it'll appear now." });
+    router.refresh();
   };
 
   return (
@@ -322,6 +339,36 @@ function NotificationsSection() {
 function DangerZone({ user }: { user: { name: string; email: string } }) {
   const { toast } = useToast();
   const [open, setOpen] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
+
+  /**
+   * Request deletion.
+   *
+   * Nothing is removed by this call — it starts a 7-day clock. The toast says so,
+   * because "we'd like to delete your account" that actually deletes immediately and
+   * one that schedules it are indistinguishable until it is too late.
+   */
+  const requestDeletion = async () => {
+    setOpen(false);
+    setPending(true);
+
+    const result = await api.post<{ purgeOn: string; note: string }>("/api/users/me/delete", {
+      confirmation: user.email,
+    });
+
+    setPending(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Account wasn't scheduled", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Deletion scheduled",
+      description: result.data.note,
+    });
+  };
 
   return (
     <>
@@ -334,12 +381,13 @@ function DangerZone({ user }: { user: { name: string; email: string } }) {
           <div className="min-w-0">
             <p className="text-[12.5px] font-medium text-ink">Delete account</p>
             <p className="mt-0.5 max-w-[420px] text-[10.5px] leading-relaxed text-text-subtle">
-              Removes your profile and every file, folder and share. There is no undo and no export
-              afterwards.
+              Schedules your profile and every file, folder and share for deletion. Your account
+              becomes read-only now and is removed after 7 days. Signing in before then cancels it.
             </p>
           </div>
           <button
             type="button"
+            disabled={pending}
             onClick={() => setOpen(true)}
             className="h-8 shrink-0 rounded-lg border border-[#E5B4B4] bg-white px-2.5 text-[11.5px] font-semibold text-[#C93B2B] transition-colors hover:bg-[#FDF3F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D6455D]"
           >
@@ -351,15 +399,7 @@ function DangerZone({ user }: { user: { name: string; email: string } }) {
       <ConfirmDialog
         open={open}
         onClose={() => setOpen(false)}
-        onConfirm={() => {
-          setOpen(false);
-          toast({
-            tone: "error",
-            title: "Account wasn't deleted",
-            description:
-              "Account deletion isn't available yet. Nothing was removed.",
-          });
-        }}
+        onConfirm={() => void requestDeletion()}
         title="Delete your account?"
         confirmLabel="Delete account"
         destructive

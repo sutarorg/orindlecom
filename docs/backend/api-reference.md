@@ -175,11 +175,11 @@ existed" are different for the person holding it.
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
-| ⬜ | `GET` | `/api/users/me` | | Profile |
-| ⬜ | `PATCH` | `/api/users/me` | | `{ fullName }` |
+| ✅ | `GET` | `/api/users/me` | | Profile |
+| ✅ | `PATCH` | `/api/users/me` | | `{ fullName }` |
 | ⬜ | `POST` | `/api/users/me/email` | | Change email (re-verification required) |
 | ⬜ | `POST` | `/api/users/me/password` | | `{ current, next }` — re-authenticates |
-| ⬜ | `POST` | `/api/users/me/delete` | | `{ confirmation }` — typed confirmation required |
+| ✅ | `POST` | `/api/users/me/delete` | | `{ confirmation }` — typed confirmation required |
 | ⬜ | `GET` | `/api/users/me/export` | | Data export: a signed bundle link |
 | ✅ | `GET` | `/api/auth/oauth/:provider/start` | | Begin a social sign-in; redirects to the provider |
 
@@ -313,6 +313,7 @@ schedule, not an intention.
 | ✅ | `/api/cron/email-retry` | `*/15 * * * *` | Retry failed sends with bounded backoff |
 | ✅ | `/api/cron/reconcile-storage` | `0 3 * * *` | Report accounting drift; repairs nothing silently |
 | ✅ | `/api/cron/orphan-sweep` | `0 4 * * *` | Delete R2 objects with no row, after a 24-hour grace |
+| ✅ | `/api/cron/account-purge` | `0 5 * * *` | Permanently delete accounts past their 7-day grace period |
 
 Each returns `{ ok: true, data: { … } }` and is safe to invoke twice concurrently.
 When the database isn't connected on a deployment, a scheduled run returns `200` with

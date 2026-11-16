@@ -172,3 +172,85 @@ describe("expiry", () => {
     expect(files.every((row) => row.status === "available")).toBe(true);
   });
 });
+
+describe("account deletion", () => {
+  it("a request marks the profile and removes nothing", async () => {
+    const user = await db.createUser("delete-me@example.com");
+    await db.asService(
+      `insert into public.files (owner_id, name, status, size_bytes, storage_key, category)
+       values ($1, 'keep.bin', 'available', 1000, $2, 'other')`,
+      [user, `u/${user}/keep.bin`],
+    );
+
+    await db.asService(
+      `update public.profiles set deletion_requested_at = now() where id = $1`,
+      [user],
+    );
+
+    const files = await db.asService<{ count: string }>(
+      `select count(*)::text as count from public.files where owner_id = $1`,
+      [user],
+    );
+    // Nothing removed at request time. This is the whole point of the grace period.
+    expect(Number(files[0].count)).toBe(1);
+  });
+
+  it("is not due until the grace period has elapsed", async () => {
+    const user = await db.createUser("recent-request@example.com");
+    await db.asService(
+      `update public.profiles set deletion_requested_at = now() - interval '1 day' where id = $1`,
+      [user],
+    );
+
+    const due = await db.asService<{ owner_id: string }>(
+      `select * from public.pending_account_deletions(7)`,
+    );
+    expect(due.map((row) => row.owner_id)).not.toContain(user);
+  });
+
+  it("is due after the grace period", async () => {
+    const user = await db.createUser("old-request@example.com");
+    await db.asService(
+      `update public.profiles set deletion_requested_at = now() - interval '8 days' where id = $1`,
+      [user],
+    );
+
+    const due = await db.asService<{ owner_id: string }>(
+      `select * from public.pending_account_deletions(7)`,
+    );
+    expect(due.map((row) => row.owner_id)).toContain(user);
+  });
+
+  it("is cancellable by clearing the timestamp, and disappears from the queue", async () => {
+    const user = await db.createUser("cancel-request@example.com");
+    await db.asService(
+      `update public.profiles set deletion_requested_at = now() - interval '30 days' where id = $1`,
+      [user],
+    );
+    await db.asService(`update public.profiles set deletion_requested_at = null where id = $1`, [
+      user,
+    ]);
+
+    const due = await db.asService<{ owner_id: string }>(
+      `select * from public.pending_account_deletions(7)`,
+    );
+    expect(due.map((row) => row.owner_id)).not.toContain(user);
+  });
+
+  it("is not once the purge has started, so a retry is not double-counted", async () => {
+    const user = await db.createUser("purging@example.com");
+    await db.asService(
+      `update public.profiles
+         set deletion_requested_at = now() - interval '10 days',
+             deletion_started_at = now()
+       where id = $1`,
+      [user],
+    );
+
+    const due = await db.asService<{ owner_id: string }>(
+      `select * from public.pending_account_deletions(7)`,
+    );
+    // A claimed account is skipped: the job that claimed it owns the work.
+    expect(due.map((row) => row.owner_id)).not.toContain(user);
+  });
+});
