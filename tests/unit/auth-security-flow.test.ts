@@ -254,7 +254,18 @@ describe("signup gate", () => {
 /* ── No administrator surface ─────────────────────────────────────────────── */
 
 describe("no admin monitoring surface", () => {
-  it("ships no admin route or dashboard", async () => {
+  /*
+   * Narrowed, not deleted.
+   *
+   * This assertion used to forbid every path containing `/admin/`, because there
+   * was no admin console. There is one now (see docs/admin/), so a blanket ban
+   * would either fail or force the console somewhere worse. What the assertion was
+   * actually protecting — the absence of an ANTI-ABUSE monitoring surface — is
+   * preserved exactly, and `tests/unit/admin-security.test.ts` carries the
+   * stronger replacement checks (no abuse table reachable from any admin route, no
+   * device or IP hash anywhere in the console, no review queue).
+   */
+  it("ships no anti-abuse dashboard or review queue", async () => {
     const appDir = path.join(ROOT, "src", "app");
 
     async function walk(dir: string): Promise<string[]> {
@@ -267,7 +278,9 @@ describe("no admin monitoring surface", () => {
     }
 
     const files = await walk(appDir);
-    const offenders = files.filter((file) => /\/(admin|abuse-dashboard|review-queue)\//.test(file));
+    const offenders = files.filter((file) =>
+      /\/(abuse-dashboard|review-queue|admin\/abuse|admin\/risk|admin\/devices)\//.test(file),
+    );
     expect(offenders).toEqual([]);
   });
 

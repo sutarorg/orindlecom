@@ -1,6 +1,6 @@
 # Email System
 
-**Status:** Resend is the provider and is implemented. Eleven templates render today
+**Status:** Resend is the provider and is implemented. Thirteen templates render today
 (§4.1). The rest of the table is the specification they will be added against — a
 template missing from the list below is a gap, not a surprise.
 
@@ -85,6 +85,17 @@ accessibility problem.
 | `account-deletion-requested` | Deletion scheduled | Nothing deleted yet, how to cancel |
 | `account-deleted` | Deletion completed | Confirmation, retention exceptions |
 | `support-received` | Contact form accepted | Reference id and the 48-hour commitment |
+| `support-reply` | An operator replies from `/admin/support` | The customer's original message, the reply, and the reference. Sent only for a **public** reply — an internal note is never emailed, and a database constraint refuses to mark one as delivered |
+
+`support-reply` is the only template whose trigger is an administrator action, and it
+has two properties worth stating:
+
+- **It is escaped.** The operator's text is inserted as text, never as markup, and the
+  plain-text alternative is generated from the same input. A reply containing `<` is a
+  reply containing a less-than sign.
+- **"Sent" means Resend accepted it.** The row records `delivery_status`, and a failure
+  keeps the operator's draft and shows the provider's message verbatim. No code path
+  reports a reply as delivered because the handler returned.
 
 ### 4.2 Specified, not built
 

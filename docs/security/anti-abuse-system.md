@@ -266,20 +266,33 @@ Nothing here needs a human, which is the point — there is no dashboard to watc
 
 ---
 
-## 10. Why there is no admin dashboard
+## 10. Why there is no anti-abuse monitoring surface
 
-Stated because its absence is a requirement, not an omission.
+**Orindle does have a platform administration console now** (see `docs/admin/`), and that
+changes the wording of this section. It does not change the rule.
+
+What exists at `/admin`: users, billing, storage, teams, support, analytics, logs and
+settings. What does **not** exist, and is asserted by `tests/unit/admin-security.test.ts`:
+
+- no `/admin/abuse`, `/admin/risk`, `/admin/review-queue`, `/admin/devices`
+- no page or API that reads `risk_events`, `device_signups`, `account_restrictions`,
+  `abuse_policy`, `email_domain_risk` or `turnstile_tokens`
+- no reference to a device hash or an IP hash anywhere in the admin surface
+- no approval or review table in any migration
+
+The reasons the surface stays absent, even now that there is a console to put it in:
 
 - **A queue makes enforcement someone's job.** Anything that requires review to *stop*
   exploitation will stop being reviewed, and the protection lapses silently.
 - **A dashboard invites the wrong decision.** The person reading it has a customer on
   one side and a policy on the other. The policy is the one that should decide.
-- **These decisions are reproducible.** The evidence is in `risk_events`, the thresholds
-  are in `abuse_policy`, and the scoring is a database function. An engineer with
-  database access can reconstruct any decision exactly — which is better than a chart.
+- **These decisions are reproducible without one.** The evidence is in `risk_events`,
+  the thresholds are in `abuse_policy`, and the scoring is a database function. An
+  engineer with database access can reconstruct any decision exactly — see
+  `docs/security/anti-abuse-operations.md` §4 for the queries.
 
 What exists instead: structured rows, readable with SQL, retained 90 days, never exposed
-to a user through any API.
+through any API, and never shown to the person they describe.
 
 ---
 

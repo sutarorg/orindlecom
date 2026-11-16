@@ -27,6 +27,12 @@ export default function robots(): MetadataRoute.Robots {
           "/dashboard",
           "/dashboard/",
           "/account",
+          // The admin console. Disallowed here AND noindex in its layout, because
+          // robots.txt prevents discovery and noindex prevents indexing of a URL
+          // that is already known. Neither is sufficient alone.
+          "/admin",
+          "/admin/",
+          "/access-denied",
           "/api/",
           "/login",
           "/signup",

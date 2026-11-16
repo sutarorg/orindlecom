@@ -99,16 +99,51 @@ export const COOKIE_POLICY: LegalDocument = {
           type: "note",
           tone: "info",
           title: "What is not here",
-          text: "No advertising cookies. No cross-site tracking pixels. No third-party analytics script. No social media embeds that set cookies before you interact with them. No browser fingerprinting.",
+          text: "No advertising cookies. No cross-site tracking pixels. No analytics script running today. No social media embeds that set cookies before you interact with them. No browser fingerprinting.",
+        },
+        {
+          type: "sub",
+          heading: "Website analytics, when it is switched on",
+          blocks: [
+            {
+              type: "p",
+              text: "The Orindle administration console has an analytics screen. That is a reporting tool used by the team, and it is not connected on this deployment: it shows which configuration is missing and reports no numbers, because there are none to report.",
+            },
+            {
+              type: "p",
+              text: "If website analytics is ever switched on, it must be switched on in this order: this policy changes first, then a consent control appears, and only then may a measurement script load. The reverse order is the common mistake — the script ships, the banner follows, and in the gap everyone is tracked without having agreed to it.",
+            },
+            {
+              type: "table",
+              head: ["Storage", "Set by", "Purpose", "Lifetime", "Consent"],
+              rows: [
+                [
+                  "_ga (and _ga_*)",
+                  "Google Analytics 4, once configured",
+                  "Distinguishes one browser from another so visits can be counted. This is analytics, not advertising: it is not used to build an advertising profile on other sites.",
+                  "Up to 2 years",
+                  "Yes — required. Not set before the visitor agrees.",
+                ],
+              ],
+            },
+            {
+              type: "p",
+              text: "The row above describes what that cookie would be. It is not present on this site today. Nothing loads it, and a configured measurement ID is not enough on its own: the site requires an explicit consent control, and there is no consent banner, so collection stays off.",
+            },
+            {
+              type: "p",
+              text: "The reporting credentials used by the console are a Google service account, which is a server-side credential. It is not a cookie, it is never sent to your browser, and it cannot identify you.",
+            },
+          ],
         },
       ],
       review:
-        "Confirm against the deployed application that no analytics or error-reporting script sets a cookie. If one is added later this table is the thing that must change first.",
+        "Confirm against the deployed application that no analytics or error-reporting script sets a cookie. If analytics is switched on, the table above must become present-tense before the script ships — and the admin console's own analytics screen must stop reporting the not-configured state.",
     },
     {
       id: "why-no-banner",
       heading: "Why there is no cookie banner",
-      gist: "Because nothing here needs consent.",
+      gist: "Because nothing here needs consent — and analytics does not run.",
       blocks: [
         {
           type: "p",
@@ -116,7 +151,7 @@ export const COOKIE_POLICY: LegalDocument = {
         },
         {
           type: "p",
-          text: "Since 5 February 2026 the UK's PECR has further exceptions, added by the Data (Use and Access) Act 2025, for storage used solely to produce statistics about how a site is used, and for storage that adapts how a site looks or works. Both require clear information and a simple way to object. Orindle does not currently rely on either exception, because Orindle sets no analytics.",
+          text: "Since 5 February 2026 the UK's PECR has further exceptions, added by the Data (Use and Access) Act 2025, for storage used solely to produce statistics about how a site is used, and for storage that adapts how a site looks or works. Both require clear information and a simple way to object. Orindle does not currently rely on either exception, because Orindle sets no analytics. If analytics is added, relying on the statistics exception would require a prominent notice and an easy way to object; asking for consent is simpler and is what this site would do.",
         },
         {
           type: "p",

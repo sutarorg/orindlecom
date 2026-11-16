@@ -17,6 +17,8 @@ Names and purposes only — never values. Values live in the platform's secret s
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable key, RLS-scoped | Same |
 | `NEXT_PUBLIC_AUTH_PROVIDERS` | Comma list of providers **actually enabled** in the dashboard | No social buttons shown |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Checkout key id | Billing says payments are not connected |
+| `NEXT_PUBLIC_ENABLE_ANALYTICS` | Master switch for browser analytics collection | `false` — no analytics script loads at all |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | GA4 measurement id (`G-…`), for collection | No collection; admin analytics reports "not connected" |
 
 **The `NEXT_PUBLIC_` prefix is a claim that the value is safe to publish.** Nothing
 secret may ever carry it. A deployed bundle is public; treat every `NEXT_PUBLIC_*`
@@ -49,6 +51,35 @@ always fails is worse than no button, which is why this is manual rather than de
 | `RAZORPAY_RECURRING_ENABLED` | Whether auto-renewing subscriptions are enabled on the account | `false`; a recurring order is refused likewise |
 | `TRASH_RETENTION_DAYS` | Trash retention | 30 |
 | `RECOVERY_WINDOW_DAYS` | Post-expiry recovery window | 90 |
+| `ANALYTICS_PROVIDER` | Which reporting adapter to use | `ga4`; an unknown value falls back to GA4 |
+| `GA_PROPERTY_ID` | GA4 numeric property id, for **reporting** | Admin analytics reports "not connected" and names this variable |
+| `GA_SERVICE_ACCOUNT_EMAIL` | Service-account identity with Analytics Data API access | Same |
+| `GA_SERVICE_ACCOUNT_PRIVATE_KEY` | Service-account private key (PEM, newlines as `\n`) | Same |
+| `GA_LIVE_QUERIES` | Whether this build may call the GA4 Data API | `false`; with credentials present the admin page reports that live queries are switched off rather than inventing numbers |
+| `GSC_SITE_URL` | Search Console property (e.g. `sc-domain:orindle.com`) | Search Console reports "not connected" |
+| `GSC_SERVICE_ACCOUNT_EMAIL` | Service-account identity with Search Console access | Same |
+| `GSC_SERVICE_ACCOUNT_PRIVATE_KEY` | Service-account private key | Same |
+
+### 2.0 Analytics needs four things, and three of them are secrets
+
+Collection and reporting are separate systems and neither works alone:
+
+| What | Variable | Public? | If missing |
+| --- | --- | --- | --- |
+| Consent + master switch | `NEXT_PUBLIC_ENABLE_ANALYTICS` | public | No script loads |
+| Browser collection | `NEXT_PUBLIC_GA_MEASUREMENT_ID` | public | No pageviews are sent |
+| Reporting identity | `GA_SERVICE_ACCOUNT_EMAIL` | **secret** | Server cannot query |
+| Reporting credential | `GA_SERVICE_ACCOUNT_PRIVATE_KEY` | **secret** | Server cannot query |
+| Which property | `GA_PROPERTY_ID` | config | Server does not know what to query |
+
+The private key never reaches the browser: it is read inside a module marked
+`server-only`, and a unit test asserts that. **Do not reuse the Google sign-in OAuth
+client for analytics** — it is a different credential with different scopes, and a login
+client has no Analytics Data API grant.
+
+With credentials present but `GA_LIVE_QUERIES` unset, the admin analytics page reports
+that live reporting is switched off. It does not show zeroes, which would read as "no
+traffic", and it does not show estimates.
 
 ### 2.1 The two capability flags are refusals, not defaults
 

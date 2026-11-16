@@ -63,7 +63,9 @@ export function ContactForm({ defaultSubject }: { defaultSubject?: string }) {
   // React 19 resets the form after a server action resolves. Restoring the draft
   // keeps a long message from vanishing on a delivery failure.
   React.useEffect(() => {
-    if (state.delivered || !formRef.current || !draft) return;
+    // `persisted` and not `delivered`: once the ticket is in the database the form
+    // is gone, so there is nothing to restore.
+    if (state.persisted || !formRef.current || !draft) return;
     const form = formRef.current;
     for (const [key, value] of Object.entries(draft)) {
       const field = form.elements.namedItem(key);
@@ -78,8 +80,15 @@ export function ContactForm({ defaultSubject }: { defaultSubject?: string }) {
   const error = (field: keyof NonNullable<ContactState["fieldErrors"]>) =>
     state.fieldErrors?.[field];
 
-  /* Delivered: replace the form rather than showing it again with a banner. */
-  if (state.delivered) {
+  /*
+   * Persisted: replace the form rather than showing it again.
+   *
+   * The gate is `persisted`, not `delivered`. A message that reached the database
+   * but whose notification email failed is genuinely received — the ticket exists
+   * and will be answered. Showing the form again would invite a resubmission and
+   * create a duplicate ticket, which is worse for the customer and for us.
+   */
+  if (state.persisted) {
     return (
       <div
         role="status"
@@ -93,9 +102,21 @@ export function ContactForm({ defaultSubject }: { defaultSubject?: string }) {
         <p className="mt-1 max-w-[46ch] text-[13.5px] leading-[1.6] text-[#1B6B45]">
           {state.message}
         </p>
+        {state.reference && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white/70 px-2.5 py-1.5 font-mono text-[12px] font-semibold tracking-[0.02em] text-[#145034]">
+            {state.reference}
+          </p>
+        )}
         <p className="mt-3 text-[12px] leading-[1.55] text-[#1B6B45]/80">
-          A copy of your reply goes to the email address you gave. If nothing arrives within three
-          business days, write to{" "}
+          {/*
+           * Only promise a reply email when one was actually accepted. In the
+           * saved-but-not-emailed case, saying "a copy goes to your email" would
+           * be a claim we cannot keep.
+           */}
+          {state.delivered
+            ? "A copy of your reply goes to the email address you gave."
+            : "Your message is in our queue. Keep the reference above if you follow up."}{" "}
+          If nothing arrives within three business days, write to{" "}
           <a
             href={`mailto:${SITE.supportEmail}`}
             className="font-semibold underline underline-offset-2"

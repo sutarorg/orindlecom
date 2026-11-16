@@ -71,6 +71,11 @@ describe("row level security", () => {
     "risk_events",
     "account_restrictions",
     "turnstile_tokens", // single-use token claims; a client that could write here could pre-claim tokens
+    // Platform administration (0017). The audit log records what operators did and
+    // must not be readable by the people it describes; support notes and replies
+    // are internal. Both are read only through an authorized service-role query.
+    "platform_admin_audit_logs",
+    "support_messages",
   ]);
 
   it("every table with RLS has at least one policy, unless deny-all is the design", async () => {
@@ -192,5 +197,154 @@ describe("cross-tenant isolation with real rows", () => {
 
     const visible = await db.asUser(frank, `select * from public.subscriptions`);
     expect(visible).toHaveLength(0);
+  });
+});
+
+/**
+ * The platform-administration boundary, checked at the grant level rather than the
+ * policy level.
+ *
+ * A policy is only consulted if a grant lets the statement run at all. Checking
+ * both is what makes "no client can write to this table" a fact rather than an
+ * inference: `platform_admin_audit_logs` deliberately grants no UPDATE or DELETE to
+ * anyone, so even the service role cannot rewrite history through PostgREST.
+ */
+describe("platform administration grants", () => {
+  const tables = [
+    "platform_admins",
+    "platform_admin_audit_logs",
+    "support_messages",
+    "support_requests",
+  ];
+
+  it("exist in the public schema", async () => {
+    const rows = await db.asService<{ tablename: string }>(
+      `select tablename from pg_tables where schemaname = 'public'`,
+    );
+    const present = new Set(rows.map((row) => row.tablename));
+    for (const table of tables) {
+      expect(present.has(table), `${table} is missing`).toBe(true);
+    }
+  });
+
+  /**
+   * Parse `pg_class.relacl` for one table into `{ role → set of privileges }`.
+   *
+   * `information_schema.role_table_grants` is not usable here: it only reports
+   * grants where the current role is the grantor or grantee, so a query as the
+   * service role silently hides the `authenticated` and `anon` grants — the exact
+   * ones this file exists to check. The ACL is the ground truth.
+   */
+  async function acl(table: string): Promise<Map<string, Set<string>>> {
+    const [row] = await db.asService<{ relacl: string | null }>(
+      `select relacl::text as relacl from pg_class
+        where relname = '${table}' and relnamespace = 'public'::regnamespace`,
+    );
+    const out = new Map<string, Set<string>>();
+    if (!row?.relacl) return out;
+    // {postgres=arwdDxtm/postgres,authenticated=r/postgres,...}
+    for (const entry of row.relacl.replace(/^\{|\}$/g, "").split(",")) {
+      const [who, privs] = entry.split("=");
+      if (!privs) continue;
+      const role = who.trim();
+      const letters = privs.split("/")[0];
+      const set = out.get(role) ?? new Set<string>();
+      // a=insert r=select w=update d=delete D=truncate x=references t=trigger
+      const map: Record<string, string> = {
+        a: "INSERT",
+        r: "SELECT",
+        w: "UPDATE",
+        d: "DELETE",
+        D: "TRUNCATE",
+        x: "REFERENCES",
+        t: "TRIGGER",
+      };
+      for (const letter of letters) {
+        const name = map[letter];
+        if (name) set.add(name);
+      }
+      out.set(role, set);
+    }
+    return out;
+  }
+
+  it("never let an authenticated user write the administrator table", async () => {
+    const grants = await acl("platform_admins");
+    expect([...(grants.get("authenticated") ?? [])].sort()).toEqual(["SELECT"]);
+    expect([...(grants.get("anon") ?? [])].sort()).toEqual(["SELECT"]);
+  });
+
+  it("give nobody UPDATE, DELETE or TRUNCATE on the audit log", async () => {
+    const grants = await acl("platform_admin_audit_logs");
+    for (const [role, privileges] of grants) {
+      // `postgres` owns the table and can always alter it; excluding the owner is
+      // the only sound way to say "no application role can rewrite history". Every
+      // role the application actually connects as is checked.
+      if (role === "postgres" || role === "PUBLIC") continue;
+      const forbidden = [...privileges].filter((p) =>
+        ["UPDATE", "DELETE", "TRUNCATE"].includes(p),
+      );
+      expect(forbidden, `${role} must not have ${forbidden.join(", ")}`).toEqual([]);
+    }
+    // And the log is still usable: the service role can append and read.
+    expect([...(grants.get("service_role") ?? [])].sort()).toEqual(["INSERT", "SELECT"]);
+  });
+
+  it("give a signed-in user read-only access and no rows to private support notes", async () => {
+    /*
+     * The grant is SELECT, deliberately: with no grant at all a PostgREST read
+     * returns `42501 permission denied`, which tells the caller the table exists.
+     * A grant plus an RLS policy that matches nothing returns zero rows instead —
+     * the same answer a table that does not exist would give.
+     *
+     * So the guarantee is two-part, and both parts are asserted: no write privilege,
+     * and no rows. "Deny-all-by-design" below proves the second part for every table
+     * in that set, and `support_messages` is in it.
+     */
+    const grants = await acl("support_messages");
+    const authenticated = grants.get("authenticated") ?? new Set<string>();
+    expect([...authenticated].sort(), "read-only").toEqual(["SELECT"]);
+    expect(grants.has("anon"), "anon must have no grant at all").toBe(false);
+    expect(grants.has("PUBLIC"), "PUBLIC must have no grant at all").toBe(false);
+  });
+
+  it("let the contact form submit a support request without letting anyone delete one", async () => {
+    const grants = await acl("support_requests");
+    const authenticated = grants.get("authenticated") ?? new Set<string>();
+    expect(authenticated.has("SELECT")).toBe(true);
+    /*
+     * `anon` holds a SELECT grant but there is no SELECT policy, so the grant
+     * resolves to zero rows rather than an error. The grant exists so a probe
+     * cannot distinguish "table is empty" from "table is not there" — a
+     * permission-denied would confirm the table exists. The guarantee is the row
+     * count, which `really does deny rows on the deny-all tables` asserts directly.
+     */
+    expect(grants.has("anon"), "anon needs the write path for the public form").toBe(true);
+    /*
+     * Only the *client* roles are checked here. `service_role` holds DELETE and
+     * UPDATE because account deletion and the support workflow need them, and it is
+     * not reachable from a browser. Scoping the assertion to `authenticated` and
+     * `anon` is what makes it a statement about customers rather than about the
+     * backend, which would otherwise pass by being vacuous.
+     */
+    for (const role of ["authenticated", "anon"]) {
+      const privileges = grants.get(role);
+      if (!privileges) continue;
+      expect(privileges.has("DELETE"), `${role} must not delete a ticket`).toBe(false);
+      expect(privileges.has("UPDATE"), `${role} must not edit a ticket`).toBe(false);
+    }
+  });
+
+  it("expose the role helper only to the roles that need it", async () => {
+    const rows = await db.asService<{ grantee: string }>(
+      `select grantee from information_schema.routine_privileges
+        where routine_schema = 'public' and routine_name = 'current_platform_role'`,
+    );
+    const grantees = new Set(rows.map((row) => row.grantee));
+    expect(grantees.has("anon"), "anon must not be able to call the role helper").toBe(false);
+    expect(
+      grantees.has("authenticated") || grantees.has("service_role"),
+      "at least one legitimate role must be able to call it",
+    ).toBe(true);
   });
 });
