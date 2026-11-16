@@ -172,6 +172,66 @@ function FileManagerInner({
     [items, toast],
   );
 
+  const trashItems = React.useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const result = await api.post<{ trashed: number }>("/api/trash", { ids });
+      if (!result.ok) {
+        toast({ tone: "error", title: "Nothing was moved", description: result.message });
+        return;
+      }
+      toast({
+        tone: "success",
+        title: result.data.trashed === 1 ? "Moved to Trash" : `${result.data.trashed} items moved to Trash`,
+        description: `You can restore them for ${TRASH_RETENTION.label}.`,
+      });
+      router.refresh();
+    },
+    [router, toast],
+  );
+
+  const purgeItems = React.useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const result = await api.post<{ purged: number }>("/api/trash/purge", { ids });
+      if (!result.ok) {
+        toast({ tone: "error", title: "Nothing was deleted", description: result.message });
+        return;
+      }
+      toast({
+        tone: "success",
+        title: result.data.purged === 1 ? "Deleted permanently" : `${result.data.purged} items deleted`,
+        description: "They are gone and their space is free.",
+      });
+      router.refresh();
+    },
+    [router, toast],
+  );
+
+  const toggleStar = React.useCallback(
+    async (ids: string[]) => {
+      const itemsById = new Map(items.map((item) => [item.id, item]));
+      // Starring is a small reversible action, so all selected items are set to the
+      // same state: starred if any of them is not, cleared only if all are.
+      const anyUnstarred = ids.some((id) => !itemsById.get(id)?.starred);
+      const starred = anyUnstarred;
+
+      const results = await Promise.all(
+        ids.map((id) => api.patch(`/api/files/${id}/star`, { starred })),
+      );
+      const failed = results.filter((result) => !result.ok).length;
+      if (failed > 0) {
+        toast({
+          tone: "error",
+          title: failed === 1 ? "1 item wasn't updated" : `${failed} items weren't updated`,
+          description: "The others were saved.",
+        });
+      }
+      router.refresh();
+    },
+    [items, router, toast],
+  );
+
   const restoreItems = React.useCallback(
     async (ids: string[]) => {
       if (ids.length === 0) return;
@@ -217,9 +277,12 @@ function FileManagerInner({
         void downloadFiles(ids);
         break;
       }
-      case "star":
-        notConnected("Star unavailable");
+      case "star": {
+        const ids = [...selected];
+        if (ids.length === 0) break;
+        void toggleStar(ids);
         break;
+      }
       case "share":
         setShareItem(items.find((item) => selected.has(item.id)) ?? null);
         break;
@@ -382,8 +445,9 @@ function FileManagerInner({
         onClose={() => setConfirmTrash(false)}
         onConfirm={() => {
           setConfirmTrash(false);
+          const ids = [...selected];
           clearSelection();
-          notConnected("Nothing was moved");
+          void trashItems(ids);
         }}
         title={`Move ${selected.size === 1 ? "1 item" : `${selected.size} items`} to Trash?`}
         confirmLabel="Move to Trash"
@@ -397,8 +461,9 @@ function FileManagerInner({
         onClose={() => setConfirmPurge(false)}
         onConfirm={() => {
           setConfirmPurge(false);
+          const ids = [...selected];
           clearSelection();
-          notConnected("Nothing was deleted");
+          void purgeItems(ids);
         }}
         title={
           selected.size > 1

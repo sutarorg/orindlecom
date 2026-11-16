@@ -199,12 +199,16 @@ uploads pass a check against 10 GB free and the account ends up at 11 GB.
 
 ## 6. Downloads and previews
 
-- `GET /api/files/:id/url` → presigned GET, 5 minutes, `Content-Disposition:
-  attachment` by default.
-- Inline previews get a separate narrow presigned URL and are only issued for
-  categories that are safe to render inline: images, PDFs, plain text, audio, video.
-  HTML, SVG and anything executable are **never** served inline, because an
-  attacker-supplied SVG on the storage origin is a script execution vector.
+- `POST /api/download/:id` → presigned GET, 5 minutes, `Content-Disposition:
+  attachment` unless `inline` is asked for and the type is on the safe list.
+  POST rather than GET because a URL that returns a download link is exactly the
+  kind of thing a browser or proxy prefetches.
+- Inline previews are only granted for categories that are safe to render inline:
+  PNG, JPEG, GIF, WebP, AVIF, PDF, plain text, MP3, OGG, WAV, MP4 and WebM. HTML,
+  SVG and anything executable are **never** served inline — an attacker-supplied SVG
+  is a script execution vector — and the repository downgrades the disposition to
+  `attachment` rather than trusting the caller. The response reports the
+  disposition actually granted.
 - `Content-Type` on the presigned response is set from the stored MIME, and
   `X-Content-Type-Options: nosniff` is applied.
 - Share links resolve to a server route that authorises, then redirects to a 60-second

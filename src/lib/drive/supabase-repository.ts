@@ -688,7 +688,12 @@ export function createSupabaseDriveRepository(): DriveRepository {
      *     else's does not.
      */
     async downloadUrl({ id, disposition = "attachment" }): Promise<
-      DriveResult<{ url: string; expiresIn: number; filename: string }>
+      DriveResult<{
+        url: string;
+        expiresIn: number;
+        filename: string;
+        disposition: "inline" | "attachment";
+      }>
     > {
       const c = await ctx();
       if (!c.ok) return c.result;
@@ -711,18 +716,52 @@ export function createSupabaseDriveRepository(): DriveRepository {
 
       if (!isStorageConfigured()) return notConnected();
 
+      const mime = (data.mime_type as string | undefined) ?? "application/octet-stream";
+
+      // Inline rendering is narrowed by type. An inline HTML or SVG document is a
+      // script-execution vector: the browser would run it, and a presigned URL is a
+      // bearer token anyone with the link can use until it expires. Anything not on
+      // this list is forced to an attachment, where the browser downloads rather
+      // than renders.
+      const INLINE_SAFE = [
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/avif",
+        "application/pdf",
+        "text/plain",
+        "audio/mpeg",
+        "audio/ogg",
+        "audio/wav",
+        "video/mp4",
+        "video/webm",
+      ];
+      const canRenderInline = INLINE_SAFE.includes(mime);
+      const effectiveDisposition: "inline" | "attachment" =
+        disposition === "inline" && canRenderInline ? "inline" : "attachment";
+
       const expiresIn = 300;
       try {
         // Never a permanent public URL: this expires in five minutes.
         const url = await presignGet(data.storage_key as string, {
           expiresIn,
           filename: data.name as string,
-          disposition,
-          contentType: data.mime_type as string | undefined,
+          disposition: effectiveDisposition,
+          // Pin the content type on the signed response rather than letting R2 echo
+          // whatever was stored, so a mislabelled object cannot be served as HTML.
+          contentType: canRenderInline ? mime : "application/octet-stream",
         });
         return {
           ok: true,
-          data: { url, expiresIn, filename: data.name as string },
+          // Report the disposition actually granted, not the one requested, so the
+          // UI does not claim a preview it did not get.
+          data: {
+            url,
+            expiresIn,
+            filename: data.name as string,
+            disposition: effectiveDisposition,
+          },
         };
       } catch (err) {
         console.error("[drive] presign failed", {

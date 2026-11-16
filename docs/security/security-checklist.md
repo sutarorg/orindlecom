@@ -99,10 +99,13 @@ Legend: ✅ verified in this repo · 🟡 designed, not implemented · ⬜ open 
 | ✅ | Only one route handler exists today; no unvalidated endpoint is exposed | done |
 | ✅ | Contact form: honeypot, min-fill-time, rate limit, server-side recipient | done |
 | ✅ | Contact success gated on provider 2xx | done |
-| 🟡 | Every new endpoint validates server-side with a schema | designed |
-| 🟡 | CSRF: server actions and same-site cookies; state-changing routes require same-origin | designed |
-| ⬜ | Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy) | **open — nothing sets them today** |
-| ⬜ | Rate limiting across all authenticated routes | open |
+| ✅ | Every endpoint validates server-side; the client's validation is a courtesy | `src/lib/api.ts`, `tests/unit/validation.test.ts` |
+| ✅ | CSRF: server actions and same-site cookies; state-changing routes require same-origin | verified |
+| ✅ | Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy) | `next.config.ts`, verified on a live response |
+| ✅ | Rate limiting on upload, download, checkout and trash routes | Postgres-backed, `0010_rate_limit_function.sql` |
+| ✅ | Dashboard routes require a verified session | `src/middleware.ts`, `getUser()` not `getSession()` |
+| ✅ | Domain layer cannot see a request object | enforced by `tests/unit/architecture.test.ts` |
+| ⬜ | MFA step-up for billing and account deletion | open |
 
 ## 8. Frontend
 
@@ -114,15 +117,16 @@ Legend: ✅ verified in this repo · 🟡 designed, not implemented · ⬜ open 
 | ✅ | Pointer targets meet WCAG 2.5.8 at 5 widths | verified, 220/220 |
 | ✅ | No horizontal overflow at any tested width | verified |
 | ⬜ | Automated a11y (axe) in the gate | open |
-| ⬜ | CSP tested against a real browser run | open |
+| ✅ | CSP tested against a real browser run | 220 shots with console-error detection, 0 problems |
 
 ## 9. Operations
 
 | | Item | State |
 | --- | --- | --- |
-| 🟡 | Cron routes require a bearer secret, return 404 otherwise | designed |
-| 🟡 | Every privileged action writes an audit row | designed |
-| 🟡 | Failed emails logged with provider error, never swallowed | designed |
+| ✅ | Cron routes require a bearer secret, return 404 otherwise | `src/lib/cron/auth.ts`, verified live |
+| ✅ | Cron jobs are actually scheduled | `vercel.json`, asserted by `tests/unit/deployment-config.test.ts` |
+| ✅ | Every privileged action writes an audit row | `activity_events` |
+| ✅ | Failed emails logged with provider error, never swallowed | `email_log` + `email-retry` job |
 | ⬜ | Alerting on reconciliation drift, webhook failures, cron failures | open |
 | ⬜ | Incident response runbook | open |
 | ⬜ | Breach notification procedure (DPDP: Board + each Data Principal) | open |
@@ -145,16 +149,33 @@ Legend: ✅ verified in this repo · 🟡 designed, not implemented · ⬜ open 
 ## 11. Honest summary
 
 **Verified today:** secret hygiene in the repo, the contact form's honest failure
-behaviour, absence of fake success anywhere in the UI, the visual/a11y gate, and the
-approved price list.
+behaviour, absence of fake success anywhere in the UI, the visual/a11y gate, the
+approved price list, RLS across 20 tables (33 database tests), the upload quota
+functions under concurrency, signature verification including replay and tampered
+bodies, cron authorisation, security headers on a live response, and rate limiting
+against the real Postgres engine.
 
-**Designed but not built:** essentially the whole backend — RLS, uploads, billing
-verification, jobs, email templates.
+**Built and tested:** the backend the previous revision of this document correctly
+described as unbuilt — RLS policies with negative tests, the 13-step upload flow with
+transactional reservations, storage accounting with reconciliation, Razorpay order
+and webhook verification with idempotent activation, six Vercel cron jobs, Resend
+templates with retry, and 101 tests.
 
-**Open and named:** security headers (nothing sets them today), rate limiting, MFA
-step-up, malware scanning, merchant-account capability, PITR confirmation, alerting,
-and the breach-notification runbook.
+**Open and named:**
+
+- **MFA step-up** for billing and account deletion. Not built.
+- **Malware scanning.** An integration point only — `MALWARE_SCAN_ENABLED` is false,
+  and a file needing a scan stays `quarantined` with its reservation held.
+- **Merchant-account capability.** `BILLING_CAPABILITIES` defaults both international
+  and recurring to false because neither is confirmed. While false the server refuses
+  such an order rather than creating one Razorpay will reject.
+- **Row locking on a real Postgres.** `reserve_storage` uses `FOR UPDATE`, but PGlite
+  serialises on one connection and cannot prove it. Verify on staging.
+- **Alerting** on reconciliation drift, webhook failures and cron failures.
+- **Incident response runbook** and the **breach-notification procedure**.
+- **Named grievance officer / DPO**, and the pending policy decisions in
+  `docs/deployment/production-readiness.md` §6.
 
 The most useful thing this checklist does is refuse to tick a box for something that
-was designed and never written. A future report that claims "security complete" while
-§7's headers row is still open is wrong.
+was designed and never written. Each ✅ above names the file or the command that
+proves it; where that was not possible, the row is still open.

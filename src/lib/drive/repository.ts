@@ -93,7 +93,15 @@ export interface DriveRepository {
   downloadUrl(input: {
     id: string;
     disposition?: "inline" | "attachment";
-  }): Promise<DriveResult<{ url: string; expiresIn: number; filename: string }>>;
+  }): Promise<
+    DriveResult<{
+      url: string;
+      expiresIn: number;
+      filename: string;
+      /** What was granted. `inline` is downgraded to `attachment` for unsafe types. */
+      disposition: "inline" | "attachment";
+    }>
+  >;
 
   /* Upload — see docs/dashboard/upload-state-flow.md */
   prepareUpload(input: { file: File; parentId: string | null }): Promise<DriveResult<{ taskId: string; multipart: boolean }>>;

@@ -1,9 +1,15 @@
 # API Reference
 
-**Status:** Contract. Implements the surface the frontend already calls through
-`DriveRepository` and `BusinessRepository`. Every response shape below maps onto a
-result envelope the components already branch on, so nothing in the UI needs a new
-error state.
+**Status:** Partly implemented. Each row below is marked:
+
+- ✅ **Built** — the route exists in `src/app/api/` and is exercised on this deployment.
+- ⬜ **Specified, not built** — the route is designed and its envelope is fixed, but
+  there is no handler yet. Calling it returns 404.
+
+This distinction is enforced by `tests/unit/docs-fidelity.test.ts`, which fails if a
+route marked ✅ is missing or a built route is undocumented, so the two cannot drift
+apart. Nothing in the UI calls a ⬜ route today; the components whose actions depend
+on them report that the action isn't available rather than pretending it worked.
 
 ---
 
@@ -40,16 +46,15 @@ error state.
 
 ## 2. Files
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/files` | List. Query: `scope`, `parentId`, `search`, `sort`, `direction`, `category[]`, `cursor` |
-| `GET` | `/api/files/:id` | One file's metadata |
-| `PATCH` | `/api/files/:id` | Rename (`name`) |
-| `PATCH` | `/api/files/:id/star` | `{ starred: boolean }` |
-| `PATCH` | `/api/files/:id/move` | `{ parentId: string \| null }` |
-| `DELETE` | `/api/files/:id` | Move to trash (soft) |
-| `GET` | `/api/files/:id/url` | Presigned download URL, 5-minute expiry |
-| `GET` | `/api/files/:id/preview` | Presigned inline URL, only for safe categories |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ✅ | `GET` | `/api/files` | | List. Query: `scope`, `parentId`, `search`, `sort`, `direction`, `category[]`, `cursor` |
+| ✅ | `GET` | `/api/files/:id` | | One file's metadata |
+| ✅ | `PATCH` | `/api/files/:id` | | Rename (`name`) |
+| ✅ | `PATCH` | `/api/files/:id/star` | | `{ starred: boolean }` |
+| ✅ | `PATCH` | `/api/files/:id/move` | | `{ parentId: string \| null }` |
+| ✅ | `DELETE` | `/api/files/:id` | | Move to trash (soft) |
+| ✅ | `POST` | `/api/download/:id` | | `{ disposition?: "attachment" \| "inline" }` → signed URL, 5-minute expiry |
 
 `GET /api/files` returns:
 
@@ -64,13 +69,13 @@ error state.
 
 ## 3. Folders
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/folders/:id` | Folder + ancestry |
-| `POST` | `/api/folders` | `{ name, parentId }` |
-| `PATCH` | `/api/folders/:id` | `{ name }` |
-| `PATCH` | `/api/folders/:id/move` | `{ parentId }` — rejects cycles |
-| `DELETE` | `/api/folders/:id` | Soft delete with all descendants |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ✅ | `GET` | `/api/folders/:id` | | Folder + ancestry |
+| ✅ | `POST` | `/api/folders` | | `{ name, parentId }` |
+| ✅ | `PATCH` | `/api/folders/:id` | | `{ name }` |
+| ✅ | `PATCH` | `/api/folders/:id/move` | | `{ parentId }` — rejects cycles |
+| ✅ | `DELETE` | `/api/folders/:id` | | Soft delete with all descendants |
 
 A move into own descendant is `validation_failed`, checked server-side; the UI also
 greys it out, but the server does not rely on that.
@@ -120,10 +125,10 @@ navigation.
 
 ## 5. Storage
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/storage` | `StorageUsage`: total, committed, reserved, trash, available, byCategory |
-| `GET` | `/api/storage/breakdown` | Per-category and per-folder detail for the storage page |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ✅ | `GET` | `/api/storage` | | `StorageUsage`: total, committed, reserved, trash, available, byCategory |
+| ⬜ | `GET` | `/api/storage/breakdown` | | Per-category and per-folder detail for the storage page |
 
 `authoritative` is `true` only when the figures came from the database. It is `false`
 in the current deployment, and the UI says so rather than pretending.
@@ -132,12 +137,12 @@ in the current deployment, and the UI says so rather than pretending.
 
 ## 6. Trash
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/trash` | Items in the bin, with `daysRemaining` |
-| `POST` | `/api/trash/restore` | `{ ids: string[] }` |
-| `POST` | `/api/trash/purge` | `{ ids: string[] }` — only acts on rows already in the bin |
-| `DELETE` | `/api/trash` | Empty the bin |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ✅ | `GET` | `/api/trash` | | Items in the bin, with `daysRemaining` |
+| ✅ | `POST` | `/api/trash/restore` | | `{ ids: string[] }` |
+| ✅ | `POST` | `/api/trash/purge` | | `{ ids: string[] }` — only acts on rows already in the bin |
+| ✅ | `DELETE` | `/api/trash` | | Empty the bin |
 
 `daysRemaining` is computed server-side from the retention setting so the UI never
 does date arithmetic that could disagree with the cleanup job.
@@ -146,15 +151,15 @@ does date arithmetic that could disagree with the cleanup job.
 
 ## 7. Sharing
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/files/:id/grants` | People with access |
-| `POST` | `/api/files/:id/grants` | `{ email, permission }` |
-| `PATCH` | `/api/grants/:grantId` | `{ permission }` |
-| `DELETE` | `/api/grants/:grantId` | Revoke |
-| `GET` | `/api/files/:id/link` | Current link or null |
-| `PUT` | `/api/files/:id/link` | `{ permission, expiresInDays }` |
-| `DELETE` | `/api/files/:id/link` | Revoke |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ⬜ | `GET` | `/api/files/:id/grants` | | People with access |
+| ⬜ | `POST` | `/api/files/:id/grants` | | `{ email, permission }` |
+| ⬜ | `PATCH` | `/api/grants/:grantId` | | `{ permission }` |
+| ⬜ | `DELETE` | `/api/grants/:grantId` | | Revoke |
+| ⬜ | `GET` | `/api/files/:id/link` | | Current link or null |
+| ⬜ | `PUT` | `/api/files/:id/link` | | `{ permission, expiresInDays }` |
+| ⬜ | `DELETE` | `/api/files/:id/link` | | Revoke |
 
 Granting to an email that is not a user creates an invite, not a silent no-op. The
 response says which happened.
@@ -168,14 +173,20 @@ existed" are different for the person holding it.
 
 ## 8. Account
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/users/me` | Profile |
-| `PATCH` | `/api/users/me` | `{ fullName }` |
-| `POST` | `/api/users/me/email` | Change email (re-verification required) |
-| `POST` | `/api/users/me/password` | `{ current, next }` — re-authenticates |
-| `POST` | `/api/users/me/delete` | `{ confirmation }` — typed confirmation required |
-| `GET` | `/api/users/me/export` | Data export: a signed bundle link |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ⬜ | `GET` | `/api/users/me` | | Profile |
+| ⬜ | `PATCH` | `/api/users/me` | | `{ fullName }` |
+| ⬜ | `POST` | `/api/users/me/email` | | Change email (re-verification required) |
+| ⬜ | `POST` | `/api/users/me/password` | | `{ current, next }` — re-authenticates |
+| ⬜ | `POST` | `/api/users/me/delete` | | `{ confirmation }` — typed confirmation required |
+| ⬜ | `GET` | `/api/users/me/export` | | Data export: a signed bundle link |
+| ✅ | `GET` | `/api/auth/oauth/:provider/start` | | Begin a social sign-in; redirects to the provider |
+
+`/api/auth/oauth/:provider/start` only accepts providers listed in
+`NEXT_PUBLIC_AUTH_PROVIDERS`, because a button for a provider that isn't enabled in
+the Supabase dashboard always fails. `next` is validated server-side, so the return
+path cannot become an open redirect.
 
 Email change and deletion both require the *current* password, checked server-side,
 so a borrowed session cannot take the account.
@@ -191,13 +202,13 @@ come from the business routes and are scoped to members.
 
 ## 10. Subscriptions and billing
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/billing/subscription` | Current plan, status, period end, recovery window |
-| `GET` | `/api/billing/invoices` | The actor's invoices only |
-| `POST` | `/api/billing/checkout` | `{ planId, period }` → order + redirect/authorisation data |
-| `POST` | `/api/billing/verify` | `{ razorpayPaymentId, razorpayOrderId, razorpaySignature }` |
-| `POST` | `/api/billing/cancel` | Cancel at period end |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ⬜ | `GET` | `/api/billing/subscription` | | Current plan, status, period end, recovery window |
+| ⬜ | `GET` | `/api/billing/invoices` | | The actor's invoices only |
+| ✅ | `POST` | `/api/billing/checkout` | | `{ planId, period }` → order + redirect/authorisation data |
+| ✅ | `POST` | `/api/billing/verify` | | `{ razorpayPaymentId, razorpayOrderId, razorpaySignature }` |
+| ⬜ | `POST` | `/api/billing/cancel` | | Cancel at period end |
 
 ### Why `verify` exists
 
@@ -225,27 +236,27 @@ is unique.
 
 ## 11. Organisations
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/organizations` | Orgs the actor belongs to |
-| `GET` | `/api/organizations/:id` | Detail |
-| `PATCH` | `/api/organizations/:id` | `{ name }` — admin+ |
-| `DELETE` | `/api/organizations/:id` | Owner only, typed confirmation |
-| `GET` | `/api/organizations/:id/summary` | Counts and storage |
-| `GET` | `/api/organizations/:id/storage` | Org storage accounting |
-| `GET` | `/api/organizations/:id/activity` | Filterable event log |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ⬜ | `GET` | `/api/organizations` | | Orgs the actor belongs to |
+| ⬜ | `GET` | `/api/organizations/:id` | | Detail |
+| ⬜ | `PATCH` | `/api/organizations/:id` | | `{ name }` — admin+ |
+| ⬜ | `DELETE` | `/api/organizations/:id` | | Owner only, typed confirmation |
+| ⬜ | `GET` | `/api/organizations/:id/summary` | | Counts and storage |
+| ⬜ | `GET` | `/api/organizations/:id/storage` | | Org storage accounting |
+| ⬜ | `GET` | `/api/organizations/:id/activity` | | Filterable event log |
 
 ### Members
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/organizations/:id/members` | Filter by role/status/search |
-| `POST` | `/api/organizations/:id/members` | Invite `{ email, role, folderId?, folderAccess? }` |
-| `POST` | `/api/organizations/:id/members/:memberId/resend` | Resend invite |
-| `DELETE` | `/api/organizations/:id/members/:memberId/invite` | Revoke invite |
-| `PATCH` | `/api/organizations/:id/members/:memberId/role` | `{ role }` |
-| `DELETE` | `/api/organizations/:id/members/:memberId` | Remove |
-| `POST` | `/api/organizations/:id/transfer` | `{ memberId }` — owner only |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ⬜ | `GET` | `/api/organizations/:id/members` | | Filter by role/status/search |
+| ⬜ | `POST` | `/api/organizations/:id/members` | | Invite `{ email, role, folderId?, folderAccess? }` |
+| ⬜ | `POST` | `/api/organizations/:id/members/:memberId/resend` | | Resend invite |
+| ⬜ | `DELETE` | `/api/organizations/:id/members/:memberId/invite` | | Revoke invite |
+| ⬜ | `PATCH` | `/api/organizations/:id/members/:memberId/role` | | `{ role }` |
+| ⬜ | `DELETE` | `/api/organizations/:id/members/:memberId` | | Remove |
+| ⬜ | `POST` | `/api/organizations/:id/transfer` | | `{ memberId }` — owner only |
 
 Role rules are enforced **server-side** by `permissions` module, and mirrored in RLS.
 `canAssignRole` and `removalBlocker` in `src/lib/business/roles.ts` are UI
@@ -258,13 +269,13 @@ the server rejects with `conflict` plus that reason.
 
 ### Organisation folders
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/organizations/:id/folders` | List |
-| `POST` | `/api/organizations/:id/folders` | Create `{ name }` |
-| `PATCH` | `/api/organizations/:id/folders/:folderId` | Rename |
-| `DELETE` | `/api/organizations/:id/folders/:folderId` | Delete |
-| `PUT` | `/api/organizations/:id/folders/:folderId/access` | `{ level }` — default folder access |
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ⬜ | `GET` | `/api/organizations/:id/folders` | | List |
+| ⬜ | `POST` | `/api/organizations/:id/folders` | | Create `{ name }` |
+| ⬜ | `PATCH` | `/api/organizations/:id/folders/:folderId` | | Rename |
+| ⬜ | `DELETE` | `/api/organizations/:id/folders/:folderId` | | Delete |
+| ⬜ | `PUT` | `/api/organizations/:id/folders/:folderId/access` | | `{ level }` — default folder access |
 
 ---
 
@@ -290,17 +301,22 @@ All cron routes require `Authorization: Bearer ${CRON_SECRET}`, compared in cons
 time. Without it they return `404`, not `401`, so the existence of the job is not
 advertised.
 
-| Path | Cadence |
-| --- | --- |
-| `/api/cron/trash-cleanup` | hourly |
-| `/api/cron/expire-reservations` | 15 min |
-| `/api/cron/subscription-sweep` | daily |
-| `/api/cron/reconcile-storage` | daily |
-| `/api/cron/orphan-sweep` | daily |
-| `/api/cron/email-retry` | 15 min |
+All six are built and scheduled in `vercel.json`. Cadences below are the actual
+schedule, not an intention.
 
-Each returns `{ ok: true, data: { processed, succeeded, failed } }` and is safe to
-invoke twice concurrently.
+| | Path | Cadence (`vercel.json`) | Purpose |
+| --- | --- | --- | --- |
+| ✅ | `/api/cron/expire-reservations` | `*/10 * * * *` | Release reservations never confirmed |
+| ✅ | `/api/cron/trash-cleanup` | `0 2 * * *` | Delete objects past the 30-day retention |
+| ✅ | `/api/cron/subscription-sweep` | `30 2 * * *` | Downgrade lapsed plans, open the recovery window |
+| ✅ | `/api/cron/email-retry` | `*/15 * * * *` | Retry failed sends with bounded backoff |
+| ✅ | `/api/cron/reconcile-storage` | `0 3 * * *` | Report accounting drift; repairs nothing silently |
+| ✅ | `/api/cron/orphan-sweep` | `0 4 * * *` | Delete R2 objects with no row, after a 24-hour grace |
+
+Each returns `{ ok: true, data: { … } }` and is safe to invoke twice concurrently.
+When the database isn't connected on a deployment, a scheduled run returns `200` with
+`code: "not_configured"` and a sentence — not a bare `500`, which is what a job looks
+like when nobody is watching.
 
 ---
 
