@@ -357,6 +357,20 @@ export async function activateSubscription(input: ActivationInput): Promise<void
     provider_subscription_id: input.subscriptionId ?? null,
     current_period_start: new Date().toISOString(),
     current_period_end: input.periodEnd,
+    /*
+     * The server-verified billing period, not the client's claim.
+     *
+     * `input.period` is derived from the plan price row that produced the order, so
+     * it is what the customer is actually being charged for. Persisting it is what
+     * makes MRR computable: a yearly plan contributes amount_minor / 12 to monthly
+     * recurring revenue, and without this column every yearly subscriber would be
+     * either overstated by 12x or silently excluded.
+     *
+     * Rows created before this column existed stay NULL. They are counted and shown
+     * as "excluded from MRR" rather than guessed at — inferring a period from the
+     * gap between period_start and period_end would be inventing billing data.
+     */
+    billing_period: input.period,
     cancel_at_period_end: false,
     // Reactivation clears the recovery clock: nothing was ever lost, so there is
     // no window left to be in.

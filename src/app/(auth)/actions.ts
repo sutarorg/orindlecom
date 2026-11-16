@@ -344,3 +344,16 @@ export async function signOutAction(): Promise<void> {
   await getAuthService().signOut();
   redirect("/login");
 }
+
+/**
+ * Sign out from the admin console.
+ *
+ * Same session teardown, different landing: an operator who signs out of `/admin`
+ * should arrive at the login page already pointed back at `/admin`, not at the
+ * customer dashboard. Kept as its own action rather than a parameter so the
+ * destination is a server constant, not a value a caller can influence.
+ */
+export async function signOutAdminAction(): Promise<void> {
+  await getAuthService().signOut();
+  redirect("/login?next=/admin");
+}

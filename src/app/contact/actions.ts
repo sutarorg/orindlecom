@@ -6,22 +6,28 @@
  * The contract this implements is written up in docs/support/contact-form-contract.md.
  * The properties that matter, in order:
  *
- *   1. **No success unless delivery was accepted.** The action returns
+ *   1. **Persist before sending.** The request is written to
+ *      `public.support_requests` BEFORE any email is attempted, so a Resend
+ *      outage cannot lose a customer's message. The ticket exists; only the
+ *      notification failed, and the two facts are reported separately.
+ *      (This was a real gap: the form used to email and write nothing.)
+ *   2. **No success unless delivery was accepted.** The action returns
  *      `delivered: true` only after the mail provider returns a 2xx. Everything
- *      else — unconfigured, rate-limited, provider error — is reported as what it
- *      is, with a working fallback.
- *   2. **The recipient is server-side only.** `SUPPORT_INBOX` is a constant here
+ *      else — unconfigured, provider error — is reported as what it is, with the
+ *      reference number so the message can still be found.
+ *   3. **The recipient is server-side only.** `SUPPORT_INBOX` is a constant here
  *      and is never read from the request, so a crafted form cannot redirect mail.
- *   3. **Secrets stay server-side.** `RESEND_API_KEY` is read from the server
+ *   4. **Secrets stay server-side.** `RESEND_API_KEY` is read from the server
  *      environment inside a `"use server"` action. It never reaches the client
  *      bundle — the form posts to a server action, not to Resend directly.
- *   4. **Spam is layered.** A honeypot field, a minimum time-to-fill check, and a
+ *   5. **Spam is layered.** A honeypot field, a minimum time-to-fill check, and a
  *      rate limit. The structure is designed so a CAPTCHA or Turnstile token can
  *      be added later without touching the component.
  */
 
 import { headers } from "next/headers";
 import { SITE } from "@/config/site";
+import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
 
 export type ContactCategory = "sales" | "support" | "billing" | "privacy" | "other";
 
@@ -30,6 +36,14 @@ export interface ContactState {
   message: string;
   /** True only when the provider accepted the message. Gates the success UI. */
   delivered: boolean;
+  /**
+   * True when the request is in the database. Distinct from `delivered` on
+   * purpose: a message can be safely received and not yet emailed, and telling
+   * the customer which one happened is the honest thing to do.
+   */
+  persisted?: boolean;
+  /** The ticket reference, so the customer can quote it in a direct email. */
+  reference?: string;
   fieldErrors?: Partial<Record<"name" | "email" | "subject" | "message", string>>;
 }
 
@@ -165,23 +179,136 @@ export async function submitContact(
     };
   }
 
+  /* --- Persistence ------------------------------------------------ */
+
+  /*
+   * Write the ticket first.
+   *
+   * If this fails we stop: a customer told "we've got it" when the row was never
+   * written is the exact lie this feature exists to remove. The error names the
+   * direct address so the message is not lost for the want of a database row.
+   */
+  const category = subject as ContactCategory;
+
+  if (!isServiceConfigured()) {
+    return {
+      status: "unconfigured",
+      delivered: false,
+      persisted: false,
+      message:
+        "Our message system isn't connected on this deployment yet, so nothing was stored. " +
+        `Please write to ${SUPPORT_INBOX} directly and it will reach the same inbox.`,
+    };
+  }
+
+  /**
+   * A reply address for a signed-in submitter, if there is one.
+   *
+   * Read from the session cookie via the user-scoped client rather than trusted
+   * from a form field: `submitter_id` is a foreign key to auth.users, and a
+   * client-supplied id would let anyone attach their message to someone else's
+   * account.
+   */
+  let submitterId: string | null = null;
+  try {
+    const { createSupabaseServerClient } = await import("@/lib/auth/supabase/server");
+    const supabase = await createSupabaseServerClient();
+    const { data } = await supabase.auth.getUser();
+    submitterId = data.user?.id ?? null;
+  } catch {
+    // Anonymous submission is the normal case; a failed session read is not a
+    // reason to refuse the message.
+    submitterId = null;
+  }
+
+  let requestId: string;
+  let reference: string;
+
+  try {
+    const service = getServiceClient();
+    const { data: inserted, error: insertError } = await service
+      .from("support_requests")
+      .insert({
+        submitter_email: email,
+        submitter_name: name,
+        submitter_id: submitterId,
+        category,
+        subject: `${SUBJECT_LABEL[category]} — ${name}`,
+        message,
+        source: "contact-form",
+        // Delivery is attempted below; 'pending' is the truthful state until
+        // the provider answers.
+        delivery_status: "pending",
+      })
+      .select("id, reference")
+      .single();
+
+    if (insertError || !inserted) {
+      console.error("support request insert failed", insertError?.message);
+      return {
+        status: "error",
+        delivered: false,
+        persisted: false,
+        message: `We couldn't record your message. Please write to ${SUPPORT_INBOX} directly — it reaches the same inbox.`,
+      };
+    }
+
+    requestId = String(inserted.id);
+    reference = String(inserted.reference);
+  } catch (error) {
+    console.error("support request insert threw", error);
+    return {
+      status: "error",
+      delivered: false,
+      persisted: false,
+      message: `We couldn't record your message. Please write to ${SUPPORT_INBOX} directly — it reaches the same inbox.`,
+    };
+  }
+
   /* --- Delivery --------------------------------------------------- */
 
   const apiKey = process.env.RESEND_API_KEY;
   const fromAddress = process.env.RESEND_FROM_ADDRESS ?? "Orindle <onboarding@resend.dev>";
 
+  /*
+   * Mark the notification's true state, and never let that write fail the
+   * customer's request. The row already exists; the delivery columns are a
+   * secondary fact about it.
+   */
+  async function recordDelivery(
+    status: "delivered" | "failed",
+    providerMessageId?: string,
+    deliveryError?: string,
+  ) {
+    try {
+      await getServiceClient()
+        .from("support_requests")
+        .update({
+          delivery_status: status,
+          provider_message_id: providerMessageId ?? null,
+          delivery_error: deliveryError?.slice(0, 500) ?? null,
+        })
+        .eq("id", requestId);
+    } catch (error) {
+      console.error("support delivery state update failed", error);
+    }
+  }
+
   if (!apiKey) {
+    await recordDelivery("failed", undefined, "RESEND_API_KEY is not configured");
     return {
-      status: "unconfigured",
+      status: "success",
+      // The ticket exists, so this is not a failure from the customer's side.
       delivered: false,
+      persisted: true,
+      reference,
       message:
-        "Email delivery isn't connected on this deployment yet, so nothing was sent. " +
-        `Please write to ${SUPPORT_INBOX} directly and your message will reach the same inbox.`,
+        `Your message is saved as ${reference}. Email delivery isn't connected on this deployment, ` +
+        "so we weren't notified by email — it will be answered from the queue.",
     };
   }
 
-  const category = subject as ContactCategory;
-  const subjectLine = `[Orindle · ${SUBJECT_LABEL[category]}] ${name}`;
+  const subjectLine = `[Orindle · ${SUBJECT_LABEL[category]}] ${name} (${reference})`;
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
@@ -191,7 +318,7 @@ export async function submitContact(
         "Content-Type": "application/json",
         // Idempotency: a double-submit resolves to one delivered message rather
         // than two, for as long as the provider honours the header.
-        "Idempotency-Key": `${category}-${email}-${message.length}-${Math.floor(Date.now() / 60000)}`,
+        "Idempotency-Key": `${requestId}`,
       },
       body: JSON.stringify({
         from: fromAddress,
@@ -199,6 +326,7 @@ export async function submitContact(
         reply_to: email,
         subject: subjectLine,
         text: [
+          `Reference: ${reference}`,
           `Name: ${name}`,
           `Email: ${email}`,
           `Subject: ${SUBJECT_LABEL[category]} (${category})`,
@@ -212,24 +340,43 @@ export async function submitContact(
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
       console.error("Resend delivery failed", response.status, detail);
+      await recordDelivery("failed", undefined, `Resend ${response.status}: ${detail}`);
       return {
-        status: "error",
+        status: "success",
         delivered: false,
-        message: `Your message wasn't sent — the mail service refused it. Please email ${SUPPORT_INBOX} directly.`,
+        persisted: true,
+        reference,
+        message:
+          `Your message is saved as ${reference}. Our mail service refused the notification, ` +
+          "so it wasn't emailed — but it is in the queue and will be answered.",
       };
     }
+
+    const payload = (await response.json().catch(() => ({}))) as { id?: string };
+    await recordDelivery("delivered", payload.id);
 
     return {
       status: "success",
       delivered: true,
-      message: "Thanks — your message is with us. We reply to every one.",
+      persisted: true,
+      reference,
+      message: `Thanks — your message is with us. Your reference is ${reference}. We reply to every one.`,
     };
   } catch (error) {
     console.error("Resend request threw", error);
+    await recordDelivery(
+      "failed",
+      undefined,
+      error instanceof Error ? error.message : String(error),
+    );
     return {
-      status: "error",
+      status: "success",
       delivered: false,
-      message: `Your message wasn't sent — the request failed. Please email ${SUPPORT_INBOX} directly.`,
+      persisted: true,
+      reference,
+      message:
+        `Your message is saved as ${reference}. The notification email failed to send, ` +
+        "but it is in the queue and will be answered.",
     };
   }
 }

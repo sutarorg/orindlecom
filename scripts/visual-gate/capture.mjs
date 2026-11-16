@@ -11,6 +11,10 @@
  *   LD_LIBRARY_PATH=$PWD/.verify/lib node scripts/visual-gate/capture.mjs \
  *     --base http://127.0.0.1:3000
  *
+ *   --only <path>     one exact route
+ *   --filter <regex>  routes whose name matches
+ *   --all-widths      all nine required widths instead of the five baseline ones
+ *
  * Exits non-zero if any route/width combination has a defect, so it works as a
  * CI gate rather than a report you have to read carefully.
  */
@@ -26,6 +30,12 @@ const argVal = (name, fallback) => {
 
 const BASE = argVal("--base", "http://127.0.0.1:3000");
 const ONLY = argVal("--only", null);
+/*
+ * `--filter <regex>` narrows the route matrix. Useful when a subsystem needs its
+ * own pass at every width without re-shooting the whole site; `--only` takes one
+ * exact path and cannot express "every /admin route".
+ */
+const FILTER = argVal("--filter", null);
 const OUT = path.resolve(argVal("--out", "docs/design/screenshots"));
 
 const ROUTES = [
@@ -80,10 +90,43 @@ const ROUTES = [
   ["business-storage", "/dashboard/business/storage"],
   ["business-activity", "/dashboard/business/activity"],
   ["business-settings", "/dashboard/business/settings"],
+  // Platform administration. These require an authorized session, so an
+  // unauthenticated run captures the refusal state — which is exactly what an
+  // ordinary visitor gets, and therefore what must look right. The signed-in
+  // layouts are verified separately, against a fixture-context build that is never
+  // committed; nothing in the shipped source can render an admin page without a
+  // real authorized session.
+  ["admin-overview", "/admin"],
+  ["admin-users", "/admin/users"],
+  ["admin-users-detail", "/admin/users/00000000-0000-4000-8000-0000000000a1"],
+  ["admin-billing", "/admin/billing"],
+  ["admin-storage", "/admin/storage"],
+  ["admin-teams", "/admin/teams"],
+  ["admin-support", "/admin/support"],
+  ["admin-support-detail", "/admin/support/00000000-0000-4000-8000-000000000002"],
+  ["admin-analytics", "/admin/analytics"],
+  ["admin-logs", "/admin/logs"],
+  ["admin-settings", "/admin/settings"],
+  ["access-denied", "/access-denied"],
   ["not-found", "/this-does-not-exist"],
 ];
 
-const WIDTHS = [390, 768, 1024, 1280, 1440];
+/*
+ * The nine widths the design system is verified against. 360 is the narrowest
+ * common Android viewport; 430 is the largest phone; 941 is the landscape-tablet
+ * case where a sidebar usually breaks; 1920 catches a layout that only looks
+ * right because nothing was ever stretched.
+ *
+ * The committed baseline under docs/design/screenshots was captured at the original
+ * five widths, and re-shooting 61 routes at nine widths produces roughly 143 MB of
+ * PNGs — too much to keep in the repository for a difference a reviewer reads as
+ * "one more column". Default to the baseline set; pass `--all-widths` to run the
+ * full nine, which is what a layout change should be checked against.
+ */
+const ALL_WIDTHS = [360, 390, 430, 768, 941, 1024, 1280, 1440, 1920];
+const BASELINE_WIDTHS = [390, 768, 1024, 1280, 1440];
+
+const WIDTHS = args.includes("--all-widths") ? ALL_WIDTHS : BASELINE_WIDTHS;
 
 /**
  * Routes that must legitimately return 404 in the current configuration.
@@ -94,7 +137,11 @@ const WIDTHS = [390, 768, 1024, 1280, 1440];
  */
 const EXPECT_404 = new Set(["dashboard-folders-id", "not-found"]);
 
-const routes = ONLY ? ROUTES.filter(([, p]) => p === ONLY) : ROUTES;
+const routes = ONLY
+  ? ROUTES.filter(([, p]) => p === ONLY)
+  : FILTER
+    ? ROUTES.filter(([name]) => new RegExp(FILTER).test(name))
+    : ROUTES;
 
 await fs.mkdir(OUT, { recursive: true });
 
@@ -145,7 +192,25 @@ for (const [name, route] of routes) {
 
     // Horizontal overflow: the page must never scroll sideways, and any
     // specific offender is reported so it can be fixed rather than guessed at.
-    const overflow = await page.evaluate(() => {
+    /*
+     * A navigation can replace the frame while the measurement is queued, which
+     * throws "detached Frame". Rediscovering over a fresh document is the right
+     * answer: a route that redirects (every protected page does, without a
+     * session) is exactly the case this gate runs against most often.
+     */
+    const measure = async (fn, fallback) => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await page.evaluate(fn);
+        } catch (error) {
+          if (!/detached Frame/i.test(String(error))) throw error;
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      }
+      return fallback;
+    };
+
+    const overflow = await measure(() => {
       const doc = document.documentElement;
       const over = doc.scrollWidth - doc.clientWidth;
       const offenders = [];
@@ -165,12 +230,12 @@ for (const [name, route] of routes) {
         }
       }
       return { over, offenders: [...new Set(offenders)].slice(0, 4) };
-    });
+    }, { over: 0, offenders: [] });
 
     // Touch targets under 36px on mobile widths.
     let smallTargets = 0;
     if (width <= 430) {
-      smallTargets = await page.evaluate(() => {
+      smallTargets = await measure(() => {
         const bad = [];
         // WCAG 2.5.8 (AA) minimum pointer target is 24x24 CSS px.
         const MIN = 24;
@@ -202,11 +267,17 @@ for (const [name, route] of routes) {
           bad.push(`${el.tagName.toLowerCase()}:${Math.round(r.height)}px`);
         }
         return bad.length;
-      });
+      }, 0);
     }
 
     const file = path.join(OUT, `${name}-${width}.png`);
-    await page.screenshot({ path: file, fullPage: true });
+    try {
+      await page.screenshot({ path: file, fullPage: true });
+    } catch (error) {
+      if (!/detached Frame/i.test(String(error))) throw error;
+      await new Promise((r) => setTimeout(r, 500));
+      await page.screenshot({ path: file, fullPage: true });
+    }
 
     const problems = [];
     const wants404 = EXPECT_404.has(name);

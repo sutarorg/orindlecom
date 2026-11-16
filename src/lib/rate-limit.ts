@@ -54,6 +54,17 @@ export const LIMITS = {
   captchaAttempt: { limit: 10, windowSeconds: 300 },
   mfaChallenge: { limit: 10, windowSeconds: 300 },
   setPassword: { limit: 10, windowSeconds: 900 },
+
+  // ── Platform administration ───────────────────────────────────────────────
+  // Keyed on the operator rather than an IP, because these limit a person's
+  // own usage and an operator should not be punished for a busy office network.
+  // Reads are generous: a dashboard fires several in parallel.
+  adminRead: { limit: 120, windowSeconds: 60 },
+  // Search and export scan far more rows than a page read.
+  adminSearch: { limit: 40, windowSeconds: 60 },
+  adminExport: { limit: 5, windowSeconds: 300 },
+  // Mutations are rare and consequential.
+  adminMutation: { limit: 20, windowSeconds: 300 },
 } as const;
 
 /**

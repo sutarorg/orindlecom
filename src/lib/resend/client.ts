@@ -266,6 +266,45 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         text: `You're using ${data.used ?? ""} of ${data.total ?? ""}. ${data.url ?? ""}`,
       };
 
+    case "support-reply": {
+      /*
+       * An operator reply to a customer.
+       *
+       * The body is escaped twice over, deliberately: `esc()` neutralises HTML
+       * metacharacters and the newlines become <br> *after* escaping, so a reply
+       * containing `<script>` renders as text rather than executing, and one
+       * containing a newline still renders as paragraphs.
+       *
+       * The reference is included so a customer replying to this mail lands in a
+       * thread the operator can find by number.
+       */
+      const paragraphs = (data.body ?? "")
+        .split(/\r?\n/)
+        .map((line) => esc(line))
+        .join("<br>");
+
+      return {
+        subject: `Re: ${esc(data.subject ?? "Your Orindle message")} [${esc(data.reference ?? "")}]`,
+        html: layout({
+          heading: "A reply from Orindle",
+          body: `<p style="margin:0 0 12px;">Hi ${name},</p>
+                 <p style="margin:0 0 12px;">${paragraphs}</p>
+                 <p style="margin:0;">Reply to this email and it reaches the same inbox. Your reference is <strong>${esc(data.reference ?? "")}</strong>.</p>`,
+        }),
+        // The plain-text part carries the same content, unescaped, because it is
+        // text and not markup. A multipart alternative is what stops a reply that
+        // quotes a URL from being mangled in a text-only client.
+        text: [
+          `Hi ${data.name ?? "there"},`,
+          "",
+          data.body ?? "",
+          "",
+          `Reference: ${data.reference ?? ""}`,
+          "Reply to this email and it reaches the same inbox.",
+        ].join("\n"),
+      };
+    }
+
     case "subscription-started":
       return {
         subject: "Your Orindle plan is active",

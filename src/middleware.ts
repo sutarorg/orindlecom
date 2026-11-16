@@ -24,8 +24,20 @@ import { createServerClient } from "@supabase/ssr";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
 
-/** Routes that require a session. */
-const PROTECTED_PREFIXES = ["/dashboard", "/account"];
+/**
+ * Routes that require a session.
+ *
+ * `/admin` is here for the redirect-to-login behaviour — an anonymous visitor
+ * should land on the sign-in page, not a JSON 401 or an unstyled error.
+ *
+ * **Middleware is not the authorization boundary for /admin.** It cannot read
+ * `platform_admins`, so it can only answer "is there a session", which is not the
+ * question. The real check is `requirePlatformAdmin()` in
+ * `src/app/admin/layout.tsx` and again in every route under `/api/admin/`. This
+ * line exists so the *anonymous* case produces a sensible redirect, and nothing
+ * more.
+ */
+const PROTECTED_PREFIXES = ["/dashboard", "/account", "/admin"];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -138,7 +150,14 @@ export async function middleware(request: NextRequest) {
      * every Google user out of their files. The page-level redirect still applies
      * when the read succeeds.
      */
-    if (!isApi(pathname) && pathname !== "/auth/set-password") {
+    if (
+      !isApi(pathname) &&
+      pathname !== "/auth/set-password" &&
+      // An operator with a pending onboarding step is still an operator. Bouncing
+      // them into the Set Password flow mid-incident would be worse than the
+      // (owner-approved) administrator row they already hold.
+      !pathname.startsWith("/admin")
+    ) {
       if (await needsPasswordSetup(supabase, user.id)) {
         const setup = request.nextUrl.clone();
         setup.pathname = "/auth/set-password";

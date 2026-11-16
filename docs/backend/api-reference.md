@@ -323,6 +323,78 @@ cannot strip the second factor.
 
 ---
 
+## 12b. Platform administration
+
+Every route below lives under `/api/admin/` and is **independently authorized** — it
+does not rely on middleware, a layout or a hidden button. The shared wrapper is
+`adminRoute()` in `src/lib/admin/route-helpers.ts`, and it is the only way these routes
+touch the privileged client:
+
+1. `requirePlatformAdmin(permission)` — verified session, then the caller's own
+   `platform_admins` row over the RLS-scoped client.
+2. A per-operator rate limit.
+3. The handler, which receives the authorized context (including the service client).
+
+Responses are always `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
+
+| | Method | Path | Purpose |
+| --- | --- | --- | --- |
+| ✅ | `GET` | `/api/admin/overview` | Totals, MRR by currency, 30-day growth, recent activity. Query: `days` (1–365) |
+| ✅ | `GET` | `/api/admin/users` | Directory. Query: `q`, `plan`, `verified`, `status`, `from`, `to`, `sort`, `page`, `pageSize` |
+| ✅ | `GET` | `/api/admin/users/:id` | One account: plan, subscription, invoices, teams, activity |
+| ✅ | `GET` | `/api/admin/users/export` | The filtered result set as CSV, ≤5,000 rows |
+| ✅ | `GET` | `/api/admin/billing` | MRR, subscription counts, invoice totals by currency |
+| ✅ | `GET` | `/api/admin/storage` | Committed, reserved and trashed bytes; by plan; largest accounts |
+| ✅ | `GET` | `/api/admin/teams` | Organization directory. Query: `q`, `page`, `pageSize` |
+| ✅ | `GET` | `/api/admin/teams/:id` | One organization and its members |
+| ✅ | `GET` | `/api/admin/support` | Ticket list. Query: `q`, `status`, `category`, `page`, `pageSize` |
+| ✅ | `GET` | `/api/admin/support/:id` | One ticket with history |
+| ✅ | `POST` | `/api/admin/support/:id/status` | `{ status: "open" \| "in_progress" \| "resolved" }` |
+| ✅ | `POST` | `/api/admin/support/:id/assign` | `{ assign: boolean }` — assignee is always the caller |
+| ✅ | `POST` | `/api/admin/support/:id/reply` | `{ body, visibility: "public" \| "internal" }` |
+| ✅ | `GET` | `/api/admin/audit` | Audit trail. Query: `action`, `actor`, `target`, `from`, `to`, `page` |
+| ✅ | `GET` | `/api/admin/settings` | Integration presence, approved prices, administrators |
+| ✅ | `POST` | `/api/admin/admins` | Owner only. `{ userId, role: "owner" \| "admin" }` |
+| ✅ | `DELETE` | `/api/admin/admins` | Owner only. `{ userId }` — soft revoke |
+
+### Failure codes
+
+| Status | Code | When |
+| --- | --- | --- |
+| 401 | `unauthenticated` | No session |
+| 403 | `email_unverified` | Session, but the address was never confirmed |
+| 403 | `forbidden` | Signed in and verified, but no active `platform_admins` row |
+| 403 | `forbidden` | Active admin without the permission a route names (e.g. an `admin` calling an owner-only route) |
+| 404 | `not_found` | The target does not exist |
+| 409 | `conflict` | Would leave the platform with no active owner |
+| 429 | `rate_limited` | Per-operator bucket exhausted |
+| 503 | `not_configured` | No Supabase credentials on this deployment |
+
+**A 403 and a 404 are deliberately similar in tone.** An authenticated customer probing
+`/api/admin/users` learns that they are not an administrator, which they already knew
+from the redirect; they do not learn how many accounts exist.
+
+### What these routes will never return
+
+- a password hash, MFA secret, access token or raw auth metadata
+- a file name, object key or signed URL
+- a device hash, IP hash, risk score or abuse restriction
+- a webhook payload or a provider error body
+- a blended figure across two currencies
+
+Each of those is asserted by `tests/unit/admin-security.test.ts` rather than left to
+review.
+
+### CSV export and formula injection
+
+`/api/admin/users/export` prefixes any cell beginning with `=`, `+`, `-`, `@`, tab or
+carriage return with a single quote. A display name is attacker-controlled text, and
+`=HYPERLINK(...)` in a name field is a known attack against whoever opens the file. The
+response also carries `X-Export-Rows` and `X-Export-Truncated`, so a capped export cannot
+be mistaken for a complete one.
+
+---
+
 ## 13. Cron
 
 All cron routes require `Authorization: Bearer ${CRON_SECRET}`, compared in constant
