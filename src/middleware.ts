@@ -50,6 +50,24 @@ function isSelfAuthenticating(pathname: string): boolean {
   return SELF_AUTHENTICATING.some((prefix) => pathname.startsWith(prefix));
 }
 
+/** Cached per-request lookup: the same account is checked at most once. */
+async function needsPasswordSetup(
+  supabase: ReturnType<typeof createServerClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("account_security")
+      .select("password_setup_required")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return Boolean(data?.password_setup_required);
+  } catch {
+    // Fail open; see the note at the call site.
+    return false;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   // A response we can attach refreshed cookies to. If we end up redirecting, the
   // cookies are carried onto the redirect so the session survives it.
@@ -103,6 +121,31 @@ export async function middleware(request: NextRequest) {
       // redirect.
       login.searchParams.set("next", `${pathname}${search}`);
       return NextResponse.redirect(login);
+    }
+
+    /**
+     * Onboarding gate.
+     *
+     * A Google-created account that has not set a password may not reach the
+     * dashboard. This is checked here, in middleware, because it has to hold for
+     * every route at once — including a bookmarked `/dashboard/files` — and doing
+     * it per-page means the one page that forgets is the hole.
+     *
+     * The flag is read from `account_security` over the *user-scoped* client, so
+     * RLS applies and a token cannot be used to read another account's row.
+     *
+     * Failing open on a read error is deliberate: a database blip must not lock
+     * every Google user out of their files. The page-level redirect still applies
+     * when the read succeeds.
+     */
+    if (!isApi(pathname) && pathname !== "/auth/set-password") {
+      if (await needsPasswordSetup(supabase, user.id)) {
+        const setup = request.nextUrl.clone();
+        setup.pathname = "/auth/set-password";
+        setup.search = "";
+        setup.searchParams.set("next", `${pathname}${search}`);
+        return NextResponse.redirect(setup);
+      }
     }
   }
 

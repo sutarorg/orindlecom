@@ -19,6 +19,7 @@ import { pageMetadata } from "@/lib/seo";
  */
 const CALLBACK_ERRORS: Record<string, string> = {
   oauth_denied: "Sign-in was cancelled. Nothing changed on your account.",
+  mfa_required: "Enter the code from your authenticator app to finish signing in.",
   callback_failed: "That sign-in link didn’t work. Please sign in again below.",
   link_expired: "That link has expired. Sign in below, or request a new one.",
   session_missing: "We couldn’t confirm that session. Please sign in again.",
@@ -44,9 +45,21 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const next = params.next ? safeRedirectPath(params.next) : undefined;
-  const callbackError = params.error ? CALLBACK_ERRORS[params.error] : undefined;
   const configured = isAuthConfigured();
   const providers = enabledOAuthProviders();
+
+  /**
+   * `not_configured` is deliberately not rendered as a callback error here.
+   *
+   * The page already shows a banner for that exact situation when `configured`
+   * is false, and the callback route redirects here with that code when
+   * `/auth/set-password` or `/auth/mfa` is reached on a deployment with no
+   * Supabase credentials. Rendering both produced the same sentence twice on one
+   * screen, once in amber and once in red — caught by the visual gate rather than
+   * by reading the code.
+   */
+  const callbackError =
+    params.error && params.error !== "not_configured" ? CALLBACK_ERRORS[params.error] : undefined;
 
   return (
     <AuthLayout

@@ -90,7 +90,7 @@ The site is designed mobile-first and verified at five widths on every route:
 | 1280 px | Desktop | 47 |
 | 1440 px | Large desktop | 47 |
 
-**235 captures, 0 defects.** The visual gate fails on horizontal overflow, console
+**245 captures, 0 defects.** The visual gate fails on horizontal overflow, console
 errors, page errors and unexpected status codes, so a layout that scrolls sideways at
 390 px cannot ship. Mobile-first indexing makes this the width that matters most.
 

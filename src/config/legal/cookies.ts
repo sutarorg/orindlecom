@@ -43,7 +43,7 @@ export const COOKIE_POLICY: LegalDocument = {
     {
       id: "list",
       heading: "The complete list",
-      gist: "Four entries, all essential or pre-set by you.",
+      gist: "Five entries, all essential or pre-set by you.",
       blocks: [
         {
           type: "table",
@@ -78,13 +78,28 @@ export const COOKIE_POLICY: LegalDocument = {
               "Until you clear it",
               "No — a user-requested preference",
             ],
+            [
+              "orindle_did",
+              "Cookie, httpOnly, secure",
+              "A random identifier created the first time you sign up. It lets us notice repeated account creation from one browser, which is how the free 10 GB plan is kept available to genuine new accounts. It is not a fingerprint: it holds no information about your device, browser or behaviour, and it is never shared.",
+              "1 year, or until you clear it",
+              "No — strictly necessary to prevent abuse of the free plan",
+            ],
           ],
+        },
+        {
+          type: "p",
+          text: "The sign-up identifier deserves its own sentence, because identifiers like it are sometimes used for things Orindle does not do. It is a random value we generate. It is not derived from your device, your screen, your fonts, your IP address or anything else about you, and it cannot be used to recognise you on another website, because it is never sent anywhere except to us.",
+        },
+        {
+          type: "p",
+          text: "The related server-side records — an attempt at a sign-up, the outcome, and a temporary cooldown if several accounts came from one browser — are kept for 30 days for sign-up attempts and 90 days for security events, then deleted automatically. They are not readable by any other user, and there is no screen that shows them.",
         },
         {
           type: "note",
           tone: "info",
           title: "What is not here",
-          text: "No advertising cookies. No cross-site tracking pixels. No third-party analytics script. No social media embeds that set cookies before you interact with them.",
+          text: "No advertising cookies. No cross-site tracking pixels. No third-party analytics script. No social media embeds that set cookies before you interact with them. No browser fingerprinting.",
         },
       ],
       review:

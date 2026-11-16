@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-16T10:02:31.463Z",
-  "base": "http://localhost:4102",
+  "generatedAt": "2026-11-16T10:51:11.049Z",
+  "base": "http://localhost:4201",
   "report": [
     {
       "name": "home",
@@ -853,6 +853,96 @@
       "route": "/blog/how-to-move-files-from-google-drive",
       "width": 1440,
       "status": 304,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-set-password",
+      "route": "/auth/set-password",
+      "width": 390,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-set-password",
+      "route": "/auth/set-password",
+      "width": 768,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-set-password",
+      "route": "/auth/set-password",
+      "width": 1024,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-set-password",
+      "route": "/auth/set-password",
+      "width": 1280,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-set-password",
+      "route": "/auth/set-password",
+      "width": 1440,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-mfa",
+      "route": "/auth/mfa",
+      "width": 390,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-mfa",
+      "route": "/auth/mfa",
+      "width": 768,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-mfa",
+      "route": "/auth/mfa",
+      "width": 1024,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-mfa",
+      "route": "/auth/mfa",
+      "width": 1280,
+      "status": 200,
+      "over": 0,
+      "smallTargets": 0,
+      "problems": []
+    },
+    {
+      "name": "auth-mfa",
+      "route": "/auth/mfa",
+      "width": 1440,
+      "status": 200,
       "over": 0,
       "smallTargets": 0,
       "problems": []

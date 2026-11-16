@@ -28,6 +28,14 @@
     {
       "path": "/api/cron/account-purge",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/abuse-maintenance",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/domain-intel",
+      "schedule": "0 6 * * *"
     }
   ]
 }

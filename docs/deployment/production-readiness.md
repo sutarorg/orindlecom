@@ -12,7 +12,7 @@ Every row is marked ✅ verified · 🟡 designed, not built · ⬜ open · ➖ 
 
 > **Not ready for production, but for a different reason than before.** The backend
 > is now built and tested locally: schema, RLS across 20 tables, uploads, accounting,
-> billing verification, seven jobs, email, and 35 API route handlers. What remains is
+> billing verification, nine jobs, email, and 38 API route handlers. What remains is
 > not more code — it is (a) running it against real Supabase, R2 and Razorpay
 > projects, which has never happened, and (b) the decisions in §6 that no amount of
 > implementation can clear.
@@ -27,7 +27,7 @@ Anything claiming otherwise contradicts this table.
 
 | Item | Evidence |
 | --- | --- |
-| All 44 routes render at 5 widths | 220/220 captures, 0 defects |
+| All 49 routes render at 5 widths | 245/245 captures, 0 defects |
 | No horizontal overflow anywhere | measured, not eyeballed |
 | Pointer targets meet WCAG 2.5.8 | measured, exceptions applied deliberately |
 | No simulated latency anywhere in the UI | `tests/unit/architecture.test.ts` forbids the seeded-promise pattern in `src/components` |
@@ -44,7 +44,7 @@ Anything claiming otherwise contradicts this table.
 | Domain layer cannot see a request | `tests/unit/architecture.test.ts` |
 | Docs cannot claim an unbuilt route | `tests/unit/docs-fidelity.test.ts` |
 | Cron schedules resolve to real routes | `tests/unit/deployment-config.test.ts` |
-| 186 tests, 14 files | `npm test` |
+| 265 tests, 17 files | `npm test` |
 
 Every one of those runs against a real PostgreSQL engine (PGlite) or a real build,
 not a mock. What none of them proves is the same code against hosted Supabase, R2 or

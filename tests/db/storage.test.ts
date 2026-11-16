@@ -20,6 +20,10 @@ let user: string;
 beforeAll(async () => {
   t = await createTestDb();
   user = await t.createUser("quota@example.com");
+  // Storage requires a verified address (0014). Every test below is about quota
+  // arithmetic, not about the verification gate, so the account is verified up
+  // front — the gate itself is covered in anti-abuse.test.ts.
+  await t.verifyUser(user);
 });
 
 afterAll(async () => {
@@ -222,6 +226,7 @@ describe("parallel uploads cannot bypass quota", () => {
   it("reservations never exceed the allowance", async () => {
     // A clean account with a 10 GB allowance.
     const fresh = await t.createUser("race@example.com");
+    await t.verifyUser(fresh);
 
     const plan = 10n * GB;
     const each = 3n * GB;

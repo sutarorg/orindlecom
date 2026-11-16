@@ -42,6 +42,18 @@ export const LIMITS = {
   checkout: { limit: 10, windowSeconds: 300 },
   emailSend: { limit: 20, windowSeconds: 3600 },
   supportMessage: { limit: 5, windowSeconds: 3600 },
+
+  // ── Authentication and abuse surfaces ─────────────────────────────────────
+  // Deliberately tighter than the product endpoints above. A person signs up
+  // once; a script does not. Supabase also rate-limits its own endpoints, so
+  // these are the first of two independent limits rather than the only one.
+  signupAttempt: { limit: 5, windowSeconds: 3600 },
+  loginAttempt: { limit: 10, windowSeconds: 300 },
+  passwordReset: { limit: 3, windowSeconds: 3600 },
+  verificationResend: { limit: 3, windowSeconds: 3600 },
+  captchaAttempt: { limit: 10, windowSeconds: 300 },
+  mfaChallenge: { limit: 10, windowSeconds: 300 },
+  setPassword: { limit: 10, windowSeconds: 900 },
 } as const;
 
 /**
@@ -101,4 +113,15 @@ export async function consume(
 /** Bucket key for a signed-in user. */
 export function userBucket(scope: string, userId: string): string {
   return `${scope}:user:${userId}`;
+}
+
+/**
+ * Bucket key for an unauthenticated caller.
+ *
+ * Used for login, password reset and verification resend, where there is no
+ * session to key on. A null hash falls back to a shared bucket rather than to a
+ * per-request one — a per-request bucket would impose no limit at all.
+ */
+export function ipBucket(scope: string, ipHash: string | null): string {
+  return `${scope}:ip:${ipHash ?? "unknown"}`;
 }

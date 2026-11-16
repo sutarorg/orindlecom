@@ -533,13 +533,124 @@ that an anonymous select returns zero rows.
 | `activity_events` | org members / own | service | Append-only |
 | `support_requests` | submitter only | service | Not publicly readable |
 | `email_log` | service only | service only | |
+| `account_security` | own row | service only | Read-only for the user: `password_setup_required` is server-owned |
+| `abuse_policy`, `email_domain_risk` | none | service only | Deny-all by design; configuration and intelligence |
+| `device_signups`, `risk_events`, `account_restrictions` | none | service only | A client that could read its own risk score could learn to stay under it |
+| `turnstile_tokens` | none | service only | Single-use claims; a client that could write here could pre-claim tokens |
 
 Every row above is proven by a negative test that attempts the forbidden read as a
 different identity and asserts zero rows, not merely a non-error.
 
 ---
 
-## 11. Migration order
+## 11. Anti-abuse tables (migrations 0014–0016)
+
+Added by the anti-abuse system. The design note that matters: **none of these is
+readable by the user they describe.** A risk score a person can see is a risk score they
+can learn to stay under.
+
+```sql
+-- Configuration, one row. Thresholds and weights are data so a change carries a
+-- migration history instead of being a constant edited in place.
+create table public.abuse_policy (
+  id                          boolean primary key default true check (id),
+  medium_threshold            int not null default 25,
+  high_threshold              int not null default 55,
+  confirmed_threshold         int not null default 80,
+  weight_disposable           int not null default 70,
+  -- … weights and windows
+  decay_points_per_day        int not null default 10
+);
+
+-- Domain intelligence. `classification` is a closed set, and the *absence* of a
+-- row is a distinct state — an unclassified domain is "no signal", never
+-- "suspicious", because blocking an unfamiliar custom domain costs a real customer.
+create table public.email_domain_risk (
+  domain         text primary key,
+  classification text not null check (classification in ('safe', 'disposable', 'risky')),
+  source         text not null default 'seed',
+  confirmed_at   timestamptz not null default now()
+);
+
+-- Protected onboarding state. Lives here, not in auth.users.user_metadata,
+-- because user metadata is user-writable and a flag the client can clear is not a gate.
+create table public.account_security (
+  user_id                 uuid primary key references auth.users(id) on delete cascade,
+  signup_provider         text not null default 'email' check (signup_provider in ('email','google')),
+  password_setup_required boolean not null default false,
+  password_setup_at       timestamptz,
+  provider_email_verified boolean not null default false
+);
+
+-- One row per signup attempt, keyed on salted hashes. The identifier is a first-party
+-- cookie, not a fingerprint: it says "this browser profile", never "this person".
+create table public.device_signups (
+  id          uuid primary key default gen_random_uuid(),
+  device_hash text not null,
+  user_id     uuid references auth.users(id) on delete set null,
+  ip_hash     text,
+  outcome     text not null check (outcome in ('accepted','throttled','rejected')),
+  risk_score  int not null default 0,
+  risk_level  text not null default 'low',
+  created_at  timestamptz not null default now()
+);
+
+-- The audit trail that replaces an administrator dashboard.
+create table public.risk_events (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references auth.users(id) on delete set null,
+  device_hash text,
+  ip_hash     text,
+  kind        text not null,
+  score       int,
+  level       text check (level in ('low','medium','high','confirmed')),
+  metadata    jsonb not null default '{}'::jsonb,
+  created_at  timestamptz not null default now()
+);
+
+-- Every restriction expires. There is no permanent state, deliberately: automated
+-- enforcement that cannot expire is a ban nobody reviews.
+create table public.account_restrictions (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references auth.users(id) on delete cascade,
+  device_hash text,
+  kind        text not null check (kind in ('signup_block','upload_block','read_only')),
+  reason      text not null,
+  risk_score  int not null default 0,
+  evidence    jsonb not null default '{}'::jsonb,
+  expires_at  timestamptz not null,
+  released_at timestamptz,
+  check (user_id is not null or device_hash is not null)
+);
+
+-- Single-use CAPTCHA claims, defended in depth against a lost Siteverify response.
+create table public.turnstile_tokens (
+  token_hash text primary key,
+  verified   boolean not null default false,
+  created_at timestamptz not null default now()
+);
+```
+
+### Functions
+
+| Function | Purpose |
+| --- | --- |
+| `classify_email_domain(email)` | `safe` / `disposable` / `risky` / null for unclassified |
+| `signup_signals(device, ip)` | The raw counts a score is built from |
+| `score_signup(domain_class, signals)` | Score, band, and a reasons array naming every factor |
+| `apply_signup_outcome(…)` | Records the decision and applies the band's restriction |
+| `release_expired_restrictions()` | Automated recovery; idempotent; logs each release |
+| `record_quota_violation(user, device, ip)` | Escalates on the third refusal in an hour |
+| `active_restriction(user, kind)` | Whether a cooldown is live |
+
+`effective_plan_bytes()` and `reserve_storage()` were **replaced** in 0014 to require a
+verified address and to honour an `upload_block`. The row lock and quota arithmetic are
+copied verbatim from 0006 — rewriting the concurrency behaviour of the one function that
+prevents overselling, inside a security migration, would be reckless.
+
+---
+
+## 12. Migration order
 
 Migrations are forward-only and reviewed. Order matters because of foreign keys:
 
@@ -554,6 +665,10 @@ Migrations are forward-only and reviewed. Order matters because of foreign keys:
 9. `activity_events`, `support_requests`, `email_log`.
 10. RLS enable + policies, table by table.
 11. Seed reference data.
+12. 0014 anti-abuse tables, scoring and enforcement functions, and the replaced
+    `effective_plan_bytes`/`reserve_storage`.
+13. 0015 RLS for the anti-abuse tables and the curated domain baseline.
+14. 0016 single-use Turnstile claims.
 
 Each migration that introduces a table also introduces its policies in the same file.
 A table without policies is a table that is wide open the moment it exists, and
