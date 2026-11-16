@@ -131,7 +131,7 @@ export function Topbar({
                 {crumb.href && !last ? (
                   <Link
                     href={crumb.href}
-                    className="truncate rounded px-1 py-0.5 text-[12.5px] font-medium text-text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex min-h-[28px] max-w-[160px] items-center truncate rounded px-1 py-0.5 text-[12.5px] font-medium text-text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {crumb.label}
                   </Link>

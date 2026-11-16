@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { FolderPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Dialog } from "@/components/ui/dialog";
+import { api } from "@/lib/drive/client";
 import { useToast } from "@/components/ui/toast";
-import { NOT_CONNECTED_MESSAGE } from "@/lib/drive/repository";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,11 +22,21 @@ import { cn } from "@/lib/utils";
 
 const FORBIDDEN = /[\\/:*?"<>|]/;
 
-export function NewFolderDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewFolderDialog({
+  open,
+  onClose,
+  parentId = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Folder to create inside. Null creates at the root. */
+  parentId?: string | null;
+}) {
   const [name, setName] = React.useState("");
   const [error, setError] = React.useState<string | undefined>();
   const [pending, setPending] = React.useState(false);
   const { toast } = useToast();
+  const router = useRouter();
   const inputId = React.useId();
 
   React.useEffect(() => {
@@ -53,17 +64,34 @@ export function NewFolderDialog({ open, onClose }: { open: boolean; onClose: () 
       return;
     }
     setPending(true);
-    // The repository call lives on the server; with no storage connected it
-    // returns `not_configured`. Reporting that is more useful than a spinner
-    // that never resolves.
-    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    // The server owns the decision. Local validation above is a courtesy so the
+    // person sees the problem without a round trip; it is not what decides.
+    const result = await api.post<{ id: string; name: string }>("/api/folders", {
+      name: name.trim(),
+      parentId,
+    });
+
     setPending(false);
+
+    if (!result.ok) {
+      // Stay open with the reason. Closing the dialog would throw away what they
+      // typed and leave them with only a toast.
+      if (result.code === "invalid_name" || result.code === "validation_failed") {
+        setError(result.message);
+        return;
+      }
+      setError(result.message);
+      return;
+    }
+
     onClose();
     toast({
-      tone: "error",
-      title: "Folder wasn't created",
-      description: NOT_CONNECTED_MESSAGE,
+      tone: "success",
+      title: "Folder created",
+      description: `"${result.data.name}" is ready.`,
     });
+    router.refresh();
   };
 
   return (

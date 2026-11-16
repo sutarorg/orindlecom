@@ -1,14 +1,13 @@
+import { formatBytes } from "@/lib/drive/format";
 import { cn } from "@/lib/utils";
 
-const GB = 1024 ** 3;
-
-function human(bytes: number): string {
-  if (bytes <= 0) return "0 B";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < GB) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  if (bytes < 1024 ** 4) return `${(bytes / GB).toFixed(1)} GB`;
-  return `${(bytes / 1024 ** 4).toFixed(1)} TB`;
-}
+/**
+ * Sizes here go through the same formatter as the dashboard, so a meter on the
+ * marketing page and a meter in the product can never disagree about what
+ * "9.4 GB" means. There used to be a second implementation in this file; it
+ * drifted to binary units while the rest of the product was decimal.
+ */
+const human = (bytes: number) => formatBytes(bytes, { decimals: 1 });
 
 /**
  * Storage meter.

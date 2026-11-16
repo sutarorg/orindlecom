@@ -25,6 +25,13 @@ export interface Plan {
   id: PlanId;
   name: string;
   storage: string;
+  /**
+   * The allowance in bytes, decimal: 10 GB = 10,000,000,000.
+   *
+   * Quota checks compare against this figure. It is the same basis as
+   * `formatBytes` and as R2's own metering, so what is sold, enforced and
+   * displayed never disagree by the 1024-vs-1000 margin.
+   */
   storageBytes: number;
   icon: PlanIconName;
   accent: PlanAccent;
@@ -49,7 +56,7 @@ export const PLANS: Plan[] = [
     id: "free",
     name: "Free",
     storage: "10 GB",
-    storageBytes: 10 * 1024 ** 3,
+    storageBytes: 10 * 1000 ** 3,
     icon: "cloud",
     accent: "blue",
     monthly: { INR: 0, USD: 0 },
@@ -61,7 +68,7 @@ export const PLANS: Plan[] = [
     id: "basic",
     name: "Basic",
     storage: "100 GB",
-    storageBytes: 100 * 1024 ** 3,
+    storageBytes: 100 * 1000 ** 3,
     icon: "leaf",
     accent: "green",
     monthly: { INR: 79, USD: 1.49 },
@@ -72,7 +79,7 @@ export const PLANS: Plan[] = [
     id: "plus",
     name: "Plus",
     storage: "500 GB",
-    storageBytes: 500 * 1024 ** 3,
+    storageBytes: 500 * 1000 ** 3,
     icon: "star",
     accent: "blue",
     monthly: { INR: 199, USD: 3.99 },
@@ -83,7 +90,7 @@ export const PLANS: Plan[] = [
     id: "premium",
     name: "Premium",
     storage: "1 TB",
-    storageBytes: 1024 ** 4,
+    storageBytes: 1000 ** 4,
     icon: "gem",
     accent: "violet",
     monthly: { INR: 349, USD: 6.99 },
@@ -94,7 +101,7 @@ export const PLANS: Plan[] = [
     id: "ultra",
     name: "Ultra",
     storage: "5 TB",
-    storageBytes: 5 * 1024 ** 4,
+    storageBytes: 5 * 1000 ** 4,
     icon: "bolt",
     accent: "coral",
     monthly: { INR: 999, USD: 19.99 },
@@ -105,7 +112,7 @@ export const PLANS: Plan[] = [
     id: "max",
     name: "Max",
     storage: "10 TB",
-    storageBytes: 10 * 1024 ** 4,
+    storageBytes: 10 * 1000 ** 4,
     icon: "crown",
     accent: "amber",
     monthly: { INR: 1999, USD: 39.99 },

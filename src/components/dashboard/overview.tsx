@@ -272,7 +272,7 @@ function StorageSummary({ usage }: { usage: StorageUsage }) {
         </h2>
         <Link
           href="/dashboard/storage"
-          className="inline-flex min-h-6 items-center gap-1 rounded text-[11.5px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="inline-flex min-h-[28px] items-center gap-1 rounded text-[11.5px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           Manage
           <ArrowRight className="h-3 w-3" aria-hidden="true" />

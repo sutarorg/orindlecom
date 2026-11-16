@@ -24,7 +24,6 @@ import {
   FOLDER_ACCESS_DESCRIPTION,
   FOLDER_ACCESS_LABEL,
   INVITATION_EXPIRY_DAYS,
-  type BusinessRole,
   type FolderAccess,
   type Organization,
 } from "@/lib/business/types";
@@ -45,7 +44,7 @@ import { cn } from "@/lib/utils";
  */
 export function BusinessSettingsView({
   organization,
-  memberCount,
+  memberCount: _memberCount,
   activeMemberCount,
 }: {
   organization: Organization;
@@ -90,7 +89,7 @@ function ProfileSection({
   const { toast } = useToast();
   const [name, setName] = React.useState(organization.name);
   const [initials, setInitials] = React.useState(organization.initials);
-  const [pending, setPending] = React.useState(false);
+  const pending = false;
   const nameId = React.useId();
   const initialsId = React.useId();
 
@@ -101,12 +100,11 @@ function ProfileSection({
 
   const dirty = name.trim() !== organization.name || initials.trim() !== organization.initials;
 
-  const save = async (event: React.FormEvent) => {
+  const save = (event: React.FormEvent) => {
     event.preventDefault();
     if (!dirty) return;
-    setPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    setPending(false);
+    // Organisation settings have no route yet. Reported immediately, with the form
+    // still holding the edits, rather than behind a simulated request.
     toast({ tone: "error", title: "Settings weren't saved", description: BUSINESS_NOT_CONNECTED });
   };
 
@@ -185,12 +183,10 @@ function ProfileSection({
 function DefaultsSection({ canEdit }: { canEdit: boolean }) {
   const { toast } = useToast();
   const [access, setAccess] = React.useState<FolderAccess>("viewer");
-  const [pending, setPending] = React.useState(false);
+  const pending = false;
 
-  const save = async () => {
-    setPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    setPending(false);
+  const save = () => {
+    // No organisation route yet. Reported immediately rather than behind a timer.
     toast({ tone: "error", title: "Default wasn't saved", description: BUSINESS_NOT_CONNECTED });
   };
 

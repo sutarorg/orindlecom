@@ -8,18 +8,24 @@
 
 import type { FileCategory } from "./types";
 
-const KB = 1024;
-const MB = KB * 1024;
-const GB = MB * 1024;
-const TB = GB * 1024;
-
 /**
- * Human byte size.
+ * Storage units are decimal: 1 KB = 1,000 bytes, 1 GB = 1,000,000,000 bytes.
  *
- * Deliberately binary (1024) because that is what storage providers actually
- * bill in, and it keeps the storage page consistent with the plan copy
- * ("10 GB" = 10 GiB here).
+ * This is a product decision, not an implementation detail. A plan sold as
+ * "10 GB" means ten billion bytes. Jumping to binary units here would make a
+ * 10 GB allowance fill up at 9.31 "GB" of displayed usage, which is exactly the
+ * kind of quiet shrinkflation that makes people distrust a storage product.
+ *
+ * Cloudflare R2 also meters in decimal GB, so the number the customer sees, the
+ * number the database stores, and the number on the invoice agree. Binary units
+ * (GiB = 1024^3) are never displayed anywhere in the product.
  */
+const KB = 1000;
+const MB = KB * 1000;
+const GB = MB * 1000;
+const TB = GB * 1000;
+
+/** Human byte size, decimal units. See the note above for why. */
 export function formatBytes(bytes: number | null, { decimals }: { decimals?: number } = {}): string {
   if (bytes == null) return "—";
   if (bytes < 0) return "—";

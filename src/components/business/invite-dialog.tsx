@@ -75,11 +75,9 @@ export function InviteDialog({
     }
 
     setError(undefined);
-    setPending(true);
-    // Seam for the organization service. When it lands, this awaits
-    // `invite()` and the dialog stays open on failure so nothing typed is lost.
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    setPending(false);
+    // No organisation service exists yet, so there is nothing to await. The dialog
+    // stays open with the address still in it, and the toast says plainly that
+    // nothing was sent — no simulated request in between.
     toast({
       tone: "error",
       title: "Invitation wasn't sent",

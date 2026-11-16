@@ -15,7 +15,6 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { ENABLED_PROVIDERS, createSupabaseServerClient, isAuthConfigured } from "./server";
 import { failure, mapProviderError } from "./errors";
 import type {
-  AuthResult,
   AuthService,
   AuthSession,
   AuthUser,

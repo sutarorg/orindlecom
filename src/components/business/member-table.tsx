@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
  */
 export function MemberTable({
   members,
-  actorRole,
+  actorRole: _actorRole,
   onChangeRole,
   onResend,
   onRevoke,

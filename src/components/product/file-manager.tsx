@@ -121,7 +121,7 @@ export function FileManager({
             </nav>
           </div>
 
-          <StorageMeter used={0} total={10 * 1024 ** 3} />
+          <StorageMeter used={0} total={10 * 1000 ** 3} />
         </aside>
 
         {/* ---------------- main ---------------- */}
@@ -148,7 +148,7 @@ export function FileManager({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search files…"
-                  className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-text-subtle"
+                  className="min-w-0 flex-1 bg-transparent py-1 text-[12px] text-ink outline-none placeholder:text-text-subtle"
                 />
                 {query && (
                   <button

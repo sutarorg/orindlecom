@@ -6,7 +6,6 @@ import {
   DEFAULT_CURRENCY,
   PLANS,
   currencyMeta,
-  isCurrencyPublished,
   type BillingPeriod,
   type CurrencyCode,
 } from "@/config/pricing";

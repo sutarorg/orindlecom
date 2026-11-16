@@ -18,7 +18,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Menu, type MenuItem } from "@/components/ui/menu";
 import { useToast } from "@/components/ui/toast";
 import { TRASH_RETENTION, type DriveItem } from "@/lib/drive/types";
-import { NOT_CONNECTED_MESSAGE } from "@/lib/drive/repository";
 import { DriveProvider, useDrive } from "./drive-store";
 import { FileGrid } from "./file-grid";
 import { FileList } from "./file-list";
@@ -28,6 +27,8 @@ import { PreviewPanel } from "./preview-panel";
 import { ShareDialog } from "./share-dialog";
 import { UploadZone } from "./upload-zone";
 import { useRegisterSearch } from "./search-bridge";
+import { RenameDialog } from "./rename-dialog";
+import { api, triggerDownload } from "@/lib/drive/client";
 
 /**
  * The file manager.
@@ -122,10 +123,187 @@ function FileManagerInner({
   const [shareItem, setShareItem] = React.useState<DriveItem | null>(null);
   const [confirmTrash, setConfirmTrash] = React.useState(false);
   const [confirmPurge, setConfirmPurge] = React.useState(false);
+  const [renameItem, setRenameItem] = React.useState<DriveItem | null>(null);
 
-  const notConnected = React.useCallback(
-    (title: string) => toast({ tone: "error", title, description: NOT_CONNECTED_MESSAGE }),
+  /**
+   * Save the selected files.
+   *
+   * Each file needs its own signed URL, so this walks the selection. If one fails
+   * the rest still run — a single unreadable file should not cancel the download
+   * of everything beside it — and the failures are reported together at the end so
+   * the toast count matches the number of files that did not arrive.
+   */
+  const downloadFiles = React.useCallback(
+    async (ids: string[]) => {
+      const itemsById = new Map(items.map((item) => [item.id, item]));
+      const failures: string[] = [];
+
+      for (const id of ids) {
+        const item = itemsById.get(id);
+        if (!item || item.kind === "folder") continue;
+
+        const result = await api.post<{ url: string; filename: string }>(
+          `/api/download/${id}`,
+          { disposition: "attachment" },
+        );
+
+        if (!result.ok) {
+          failures.push(item.name);
+          continue;
+        }
+        triggerDownload(result.data.url, result.data.filename);
+      }
+
+      if (failures.length > 0) {
+        toast({
+          tone: "error",
+          title:
+            failures.length === 1
+              ? `Couldn't download ${failures[0]}`
+              : `${failures.length} files couldn't be downloaded`,
+          description: failures.slice(0, 3).join(", ") + (failures.length > 3 ? "…" : ""),
+        });
+      }
+    },
+    [items, toast],
+  );
+
+  /**
+   * Copy a share link for one item.
+   *
+   * The link is created server-side first. Copying a URL this component constructed
+   * would put a dead address in someone's chat window, so nothing is copied unless
+   * the server confirmed a live link.
+   */
+  const copyLink = React.useCallback(
+    async (item: DriveItem) => {
+      const created = await api.put<{ url: string; enabled: boolean }>(
+        `/api/files/${item.id}/link`,
+        { permission: "viewer" },
+      );
+
+      if (!created.ok || !created.data.enabled) {
+        toast({
+          tone: "error",
+          title: "Link wasn't created",
+          description: created.ok ? "That link isn't active." : created.message,
+        });
+        return;
+      }
+
+      const absolute = new URL(created.data.url, window.location.origin).toString();
+      try {
+        await navigator.clipboard.writeText(absolute);
+        toast({
+          tone: "success",
+          title: "Link copied",
+          description: "Anyone with this link can view the file until it expires.",
+        });
+      } catch {
+        // Clipboard access can be denied. Put the URL somewhere they can select
+        // rather than telling them it worked.
+        window.prompt("Copy this link:", absolute);
+      }
+    },
     [toast],
+  );
+
+  const renameItems = React.useCallback(
+    async (id: string, name: string) => {
+      const isFolder = items.find((item) => item.id === id)?.kind === "folder";
+      const result = await api.patch<{ name: string }>(
+        isFolder ? `/api/folders/${id}` : `/api/files/${id}`,
+        { name },
+      );
+      if (!result.ok) {
+        // Return the reason so the dialog can keep the text on screen.
+        return result.message;
+      }
+      router.refresh();
+      return null;
+    },
+    [items, router],
+  );
+
+  const trashItems = React.useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const result = await api.post<{ trashed: number }>("/api/trash", { ids });
+      if (!result.ok) {
+        toast({ tone: "error", title: "Nothing was moved", description: result.message });
+        return;
+      }
+      toast({
+        tone: "success",
+        title: result.data.trashed === 1 ? "Moved to Trash" : `${result.data.trashed} items moved to Trash`,
+        description: `You can restore them for ${TRASH_RETENTION.label}.`,
+      });
+      router.refresh();
+    },
+    [router, toast],
+  );
+
+  const purgeItems = React.useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const result = await api.post<{ purged: number }>("/api/trash/purge", { ids });
+      if (!result.ok) {
+        toast({ tone: "error", title: "Nothing was deleted", description: result.message });
+        return;
+      }
+      toast({
+        tone: "success",
+        title: result.data.purged === 1 ? "Deleted permanently" : `${result.data.purged} items deleted`,
+        description: "They are gone and their space is free.",
+      });
+      router.refresh();
+    },
+    [router, toast],
+  );
+
+  const toggleStar = React.useCallback(
+    async (ids: string[]) => {
+      const itemsById = new Map(items.map((item) => [item.id, item]));
+      // Starring is a small reversible action, so all selected items are set to the
+      // same state: starred if any of them is not, cleared only if all are.
+      const anyUnstarred = ids.some((id) => !itemsById.get(id)?.starred);
+      const starred = anyUnstarred;
+
+      const results = await Promise.all(
+        ids.map((id) => api.patch(`/api/files/${id}/star`, { starred })),
+      );
+      const failed = results.filter((result) => !result.ok).length;
+      if (failed > 0) {
+        toast({
+          tone: "error",
+          title: failed === 1 ? "1 item wasn't updated" : `${failed} items weren't updated`,
+          description: "The others were saved.",
+        });
+      }
+      router.refresh();
+    },
+    [items, router, toast],
+  );
+
+  const restoreItems = React.useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const result = await api.post<{ restored: number }>("/api/trash/restore", { ids });
+      if (!result.ok) {
+        toast({ tone: "error", title: "Nothing was restored", description: result.message });
+        return;
+      }
+      toast({
+        tone: "success",
+        title:
+          result.data.restored === 1
+            ? "1 item restored"
+            : `${result.data.restored} items restored`,
+        description: "They are back where you left them.",
+      });
+      router.refresh();
+    },
+    [router, toast],
   );
 
   const openItem = React.useCallback(
@@ -143,21 +321,33 @@ function FileManagerInner({
 
   const handleSelectionAction = (action: string) => {
     switch (action) {
-      case "download":
-        notConnected("Download unavailable");
+      case "download": {
+        // Download every selected file the user can read. One request per file,
+        // sequential, so a burst of twenty files does not open twenty signed
+        // requests at once.
+        const ids = [...selected];
+        if (ids.length === 0) break;
+        void downloadFiles(ids);
         break;
-      case "star":
-        notConnected("Star unavailable");
+      }
+      case "star": {
+        const ids = [...selected];
+        if (ids.length === 0) break;
+        void toggleStar(ids);
         break;
+      }
       case "share":
         setShareItem(items.find((item) => selected.has(item.id)) ?? null);
         break;
       case "trash":
         setConfirmTrash(true);
         break;
-      case "restore":
-        notConnected("Nothing was restored");
+      case "restore": {
+        const ids = [...selected];
+        if (ids.length === 0) break;
+        void restoreItems(ids);
         break;
+      }
       case "purge":
         setConfirmPurge(true);
         break;
@@ -171,7 +361,7 @@ function FileManagerInner({
   const contextItems = (item: DriveItem): MenuItem[] => {
     if (mode === "trash") {
       return [
-        { key: "restore", label: "Restore", icon: Download, onSelect: () => notConnected("Nothing was restored") },
+        { key: "restore", label: "Restore", icon: Download, onSelect: () => void restoreItems([item.id]) },
         {
           key: "purge",
           label: "Delete permanently",
@@ -188,14 +378,14 @@ function FileManagerInner({
         key: "star",
         label: item.starred ? "Remove from Starred" : "Add to Starred",
         icon: Star,
-        onSelect: () => notConnected("Star unavailable"),
+        onSelect: () => void toggleStar([item.id]),
       },
       {
         key: "rename",
         label: "Rename",
         icon: PencilLine,
         shortcut: "F2",
-        onSelect: () => notConnected("Nothing was renamed"),
+        onSelect: () => setRenameItem(item),
       },
       {
         key: "share",
@@ -208,7 +398,7 @@ function FileManagerInner({
         key: "copy",
         label: "Copy link",
         icon: Link2,
-        onSelect: () => notConnected("No link was created"),
+        onSelect: () => void copyLink(item),
       },
       {
         key: "trash",
@@ -303,13 +493,20 @@ function FileManagerInner({
 
       <ShareDialog item={shareItem} onClose={() => setShareItem(null)} />
 
+      <RenameDialog
+        item={renameItem}
+        onClose={() => setRenameItem(null)}
+        onRename={renameItems}
+      />
+
       <ConfirmDialog
         open={confirmTrash}
         onClose={() => setConfirmTrash(false)}
         onConfirm={() => {
           setConfirmTrash(false);
+          const ids = [...selected];
           clearSelection();
-          notConnected("Nothing was moved");
+          void trashItems(ids);
         }}
         title={`Move ${selected.size === 1 ? "1 item" : `${selected.size} items`} to Trash?`}
         confirmLabel="Move to Trash"
@@ -323,8 +520,9 @@ function FileManagerInner({
         onClose={() => setConfirmPurge(false)}
         onConfirm={() => {
           setConfirmPurge(false);
+          const ids = [...selected];
           clearSelection();
-          notConnected("Nothing was deleted");
+          void purgeItems(ids);
         }}
         title={
           selected.size > 1

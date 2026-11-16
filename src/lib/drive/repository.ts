@@ -21,7 +21,6 @@ import type {
   ShareLink,
   StorageUsage,
   Subscription,
-  UploadTask,
 } from "./types";
 
 export type DriveErrorCode =
@@ -83,6 +82,27 @@ export interface DriveRepository {
     expiresAt?: string | null;
   }): Promise<DriveResult<ShareLink>>;
 
+  /**
+   * A short-lived signed URL for reading one file.
+   *
+   * Files live in a private bucket, so there is no permanent URL to hand out: every
+   * read mints a new one that expires. `inline` is for the preview panel, which
+   * needs the browser to render rather than save; `attachment` is for the download
+   * button, and carries the original filename so the saved file is not a UUID.
+   */
+  downloadUrl(input: {
+    id: string;
+    disposition?: "inline" | "attachment";
+  }): Promise<
+    DriveResult<{
+      url: string;
+      expiresIn: number;
+      filename: string;
+      /** What was granted. `inline` is downgraded to `attachment` for unsafe types. */
+      disposition: "inline" | "attachment";
+    }>
+  >;
+
   /* Upload — see docs/dashboard/upload-state-flow.md */
   prepareUpload(input: { file: File; parentId: string | null }): Promise<DriveResult<{ taskId: string; multipart: boolean }>>;
   completeUpload(input: { taskId: string }): Promise<DriveResult<DriveItem>>;
@@ -100,9 +120,6 @@ export interface DriveRepository {
   changeEmail(input: { email: string }): Promise<DriveResult<null>>;
   changePassword(input: { current: string; next: string }): Promise<DriveResult<null>>;
   deleteAccount(input: { confirmation: string }): Promise<DriveResult<null>>;
-
-  /** Upload tasks currently in flight, for the shell's progress tray. */
-  uploadTasks(): Promise<DriveResult<UploadTask[]>>;
 }
 
 /**

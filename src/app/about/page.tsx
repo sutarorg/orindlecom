@@ -141,7 +141,7 @@ export default function AboutPage() {
             <div className="mt-6 border-t border-[var(--brand-border-soft)] pt-5">
               <Link
                 href="/contact"
-                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary-ink hover:text-primary"
+                className="inline-flex min-h-[28px] items-center gap-1.5 text-[13px] font-semibold text-primary-ink hover:text-primary"
               >
                 Open the contact form
                 <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.3} />

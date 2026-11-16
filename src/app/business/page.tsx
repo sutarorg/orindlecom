@@ -122,7 +122,7 @@ export default function BusinessPage() {
                 Organisation allowance
               </p>
               <div className="mt-3">
-                <StorageMeter used={0} total={500 * 1024 ** 3} />
+                <StorageMeter used={0} total={500 * 1000 ** 3} />
               </div>
               <p className="mt-3 text-[11px] leading-relaxed text-text-subtle">
                 A shared pool is metered for the whole organisation. This preview shows the meter

@@ -63,10 +63,8 @@ export function FileToolbar({
 
   const sortRef = React.useRef<HTMLButtonElement>(null);
   const filterRef = React.useRef<HTMLButtonElement>(null);
-  const viewRef = React.useRef<HTMLButtonElement>(null);
   const [sortOpen, setSortOpen] = React.useState(false);
   const [filterOpen, setFilterOpen] = React.useState(false);
-  const [viewOpen, setViewOpen] = React.useState(false);
 
   const activeFilters = categories.length;
   const sortLabel = SORT_OPTIONS.find((option) => option.key === sort)?.label ?? "Name";

@@ -90,6 +90,25 @@ export interface StorageUsage {
   folderCount: number;
   /** True when the figures came from the backend rather than a default. */
   authoritative: boolean;
+
+  /**
+   * In-flight bytes claimed by uploads that have started but not finished.
+   *
+   * Separated from `used` because "you have used 3 GB" and "3 GB is committed,
+   * 1 GB is mid-upload" answer different questions — and only the second one
+   * explains why a new upload was refused.
+   */
+  reserved: number;
+  /**
+   * Bytes sitting in the bin, still inside the retention window.
+   *
+   * Already included in `used`: the objects are still in the bucket and still
+   * cost money. Showing it separately lets the UI say "emptying the bin frees
+   * 400 MB" without ever implying that the space is already free.
+   */
+  trash: number;
+  /** `total - used`, clamped at zero. What can still be uploaded. */
+  available: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -174,9 +193,16 @@ export interface UploadTask {
 
 /** Limits the UI enforces before it bothers the backend. */
 export const UPLOAD_LIMITS = {
-  /** Files this size or larger use the multipart path. */
+  /**
+   * Files this size or larger use the multipart path.
+   *
+   * 16 MiB exactly: this is a protocol threshold that must match R2's minimum
+   * part size, so it stays binary. Only *displayed* storage figures are decimal;
+   * transfer mechanics keep their native units.
+   */
   multipartThreshold: 16 * 1024 * 1024,
-  maxFileSize: 5 * 1024 ** 3,
+  /** 5 GB, decimal, to match every other size the customer is shown. */
+  maxFileSize: 5 * 1000 ** 3,
   /** Rejected outright — these are commonly blocked by browsers anyway. */
   blockedExtensions: [".exe", ".dll", ".app", ".bat", ".cmd", ".scr", ".msi"],
 } as const;

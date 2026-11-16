@@ -67,12 +67,17 @@ export function SiteHeader() {
       }
     };
 
+    // Captured now rather than read in the cleanup: by the time the effect tears
+    // down, the ref may point at a different element, and focus would be returned
+    // to the wrong control.
+    const triggerAtOpen = triggerRef.current;
+
     document.addEventListener("keydown", onKeyDown);
     return () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("keydown", onKeyDown);
       body.style.overflow = prevOverflow;
-      (previouslyFocused ?? triggerRef.current)?.focus?.();
+      (previouslyFocused ?? triggerAtOpen)?.focus?.();
     };
   }, [open]);
 
@@ -154,7 +159,11 @@ export function SiteHeader() {
       {/* Mobile sheet */}
       <div
         className={cn(
-          "fixed inset-0 z-[70] md:hidden",
+          // When closed the panel is translated off-screen but still laid out,
+          // which makes the document horizontally scrollable on mobile.
+          // overflow-hidden clips it at the viewport edge so the slide
+          // transition is untouched but no sideways scroll can appear.
+          "fixed inset-0 z-[70] overflow-hidden md:hidden",
           open ? "pointer-events-auto" : "pointer-events-none",
         )}
         aria-hidden={!open}

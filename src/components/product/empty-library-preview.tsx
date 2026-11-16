@@ -92,7 +92,7 @@ export function EmptyLibraryPreview({
               </ul>
             </div>
 
-            <StorageMeter used={0} total={10 * 1024 ** 3} compact />
+            <StorageMeter used={0} total={10 * 1000 ** 3} compact />
           </aside>
 
           {/* main */}

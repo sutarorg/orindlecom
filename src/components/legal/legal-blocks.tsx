@@ -103,7 +103,7 @@ function LegalBlockView({ block }: { block: LegalBlock }) {
               {block.caption}
             </figcaption>
           )}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto [contain:paint]">
             <table className="w-full min-w-[520px] border-collapse text-left">
               <thead>
                 <tr className="bg-[var(--brand-canvas)]">

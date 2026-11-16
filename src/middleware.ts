@@ -1,19 +1,112 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 /**
- * Region detection for display currency.
+ * Request middleware.
  *
- * Sets `orindle_region` from the CDN's country header so a first-time visitor
- * sees the prices for their region. This only chooses the *display* currency:
- * it never rewrites a subscriber's billing currency, which is fixed at
- * subscription time.
+ * Two jobs, in this order:
  *
- * A manual choice stored in `orindle_currency` always wins, and the middleware
- * never overwrites it.
+ *   1. **Refresh the session and gate the dashboard.** Previously this file only
+ *      set a region cookie, which meant `/dashboard/**` rendered for an anonymous
+ *      visitor with a placeholder identity. That was defensible while no real data
+ *      existed; now that it does, an unauthenticated request must not reach it.
+ *
+ *   2. **Region detection for display currency.** Unchanged: this only chooses the
+ *      currency a first-time visitor sees. It never rewrites a subscriber's
+ *      billing currency, which is fixed at subscription time.
+ *
+ * The auth check is deliberately soft: with no Supabase credentials configured the
+ * middleware does nothing, so the site still renders and every screen explains
+ * that accounts aren't connected. A hard gate would make the deployment
+ * unreviewable.
  */
-export function middleware(request: NextRequest) {
-  const response = NextResponse.next();
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+
+/** Routes that require a session. */
+const PROTECTED_PREFIXES = ["/dashboard", "/account"];
+
+function isProtected(pathname: string): boolean {
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function isApi(pathname: string): boolean {
+  return pathname.startsWith("/api/");
+}
+
+/**
+ * API routes that authenticate by some other means and must not be redirected.
+ *
+ * A webhook is called by Razorpay, not a browser; a cron job is called by Vercel.
+ * Both authenticate themselves (signature / bearer secret) and a redirect would
+ * break them silently.
+ */
+const SELF_AUTHENTICATING = ["/api/webhooks/", "/api/cron/", "/api/auth/", "/api/health"];
+
+function isSelfAuthenticating(pathname: string): boolean {
+  return SELF_AUTHENTICATING.some((prefix) => pathname.startsWith(prefix));
+}
+
+export async function middleware(request: NextRequest) {
+  // A response we can attach refreshed cookies to. If we end up redirecting, the
+  // cookies are carried onto the redirect so the session survives it.
+  let response = NextResponse.next({ request });
+
+  const { pathname, search } = request.nextUrl;
+  const needsAuth = isProtected(pathname) || (isApi(pathname) && !isSelfAuthenticating(pathname));
+
+  if (needsAuth && SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          for (const { name, value } of cookiesToSet) {
+            request.cookies.set(name, value);
+          }
+          response = NextResponse.next({ request });
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options);
+          }
+        },
+      },
+    });
+
+    // getUser() validates the token with the auth server. getSession() would
+    // trust the cookie's contents, which is exactly what a forged cookie relies on.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      if (isApi(pathname)) {
+        // An API client needs to know why, not to receive an HTML login page.
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "unauthenticated",
+            message: "You need to sign in to do that.",
+          },
+          { status: 401 },
+        );
+      }
+
+      const login = request.nextUrl.clone();
+      login.pathname = "/login";
+      login.search = "";
+      // Remember where they were going so sign-in returns them there. The path is
+      // validated server-side on the way back out, so this cannot become an open
+      // redirect.
+      login.searchParams.set("next", `${pathname}${search}`);
+      return NextResponse.redirect(login);
+    }
+  }
+
+  // ── Region detection for display currency ────────────────────────────────
   const country =
     request.headers.get("x-vercel-ip-country") ??
     request.headers.get("cf-ipcountry") ??

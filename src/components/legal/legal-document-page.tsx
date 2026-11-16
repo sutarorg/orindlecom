@@ -41,7 +41,7 @@ export function LegalDocumentPage({ document: doc }: { document: LegalDocument }
                 <li>
                   <Link
                     href="/legal"
-                    className="rounded underline-offset-2 transition-colors hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex min-h-[28px] items-center rounded underline-offset-2 transition-colors hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     Legal
                   </Link>
@@ -95,7 +95,7 @@ export function LegalDocumentPage({ document: doc }: { document: LegalDocument }
       {/* Body */}
       <section className="pb-16 pt-8 sm:pb-20">
         <div className="container-or">
-          <div className="mx-auto grid max-w-[980px] gap-8 lg:grid-cols-[228px_minmax(0,1fr)] lg:gap-12">
+          <div className="mx-auto grid max-w-[980px] grid-cols-1 gap-8 lg:grid-cols-[228px_minmax(0,1fr)] lg:gap-12">
             {/* Mobile navigator — above the article, where a reader needs it */}
             <div className="lg:hidden">
               <TableOfContents entries={entries} variant="disclosure" />
@@ -108,7 +108,7 @@ export function LegalDocumentPage({ document: doc }: { document: LegalDocument }
               </div>
             </aside>
 
-            <article>
+            <article className="min-w-0">
               <div className="space-y-9">
                 {doc.sections.map((section, index) => (
                   <section
