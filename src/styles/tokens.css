@@ -1,0 +1,262 @@
+/* ------------------------------------------------------------------ */
+/*  Orindle — design tokens                                            */
+/*  Every value below is derived from docs/design/reference-analysis.md */
+/*  Render the reference at 941px wide = 1.00× of these values.         */
+/* ------------------------------------------------------------------ */
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/fonts/plus-jakarta-sans-latin.woff2") format("woff2-variations"),
+    url("/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ---------- Brand ---------- */
+  --brand-primary: #3178fb; /* sampled: CTA fill, active tab, links */
+  --brand-primary-hover: #1e64e6;
+  --brand-primary-active: #1a57c9;
+  --brand-primary-soft: #eaf1ff; /* nav pill / badge background */
+  --brand-primary-soft-2: #dae7ff;
+  --brand-primary-ink: #1b4fbd; /* readable blue on soft surfaces */
+
+  /* ---------- Text ---------- */
+  --brand-ink: #171d3a; /* sampled headline ink #0F1537–#202649 */
+  --brand-ink-strong: #0e1430;
+  --brand-text: #333a5c;
+  --brand-text-muted: #6a6f8b; /* sampled 6A6F8B */
+  --brand-text-subtle: #8b90a8;
+
+  /* ---------- Surfaces ---------- */
+  --brand-background: #ffffff;
+  --brand-canvas: #fbfcff;
+  --brand-surface: #ffffff;
+  --brand-surface-muted: #f7f9fd;
+  --brand-surface-raised: #ffffff;
+  --brand-surface-glass: rgba(255, 255, 255, 0.72);
+
+  /* ---------- Borders ---------- */
+  --brand-border: #e6e9f2;
+  --brand-border-strong: #d5daea;
+  --brand-border-soft: #eef1f7;
+  --brand-border-focus: #3178fb;
+
+  /* ---------- Pastel atmosphere (reference background washes) ---------- */
+  --brand-pastel-lavender: #efe9fd;
+  --brand-pastel-periwinkle: #e3e6fe;
+  --brand-pastel-mint: #dff4f2;
+  --brand-pastel-sky: #dceafd;
+  --brand-pastel-peach: #ffe6dc;
+  --brand-pastel-blush: #ffe4ee;
+
+  /* ---------- Plan accents (icons only, never large fills) ---------- */
+  --brand-accent-free: #3178fb;
+  --brand-accent-basic: #34c77b;
+  --brand-accent-plus: #3178fb;
+  --brand-accent-premium: #8b5cf6;
+  --brand-accent-ultra: #fb5f8a;
+  --brand-accent-max: #f9a53b;
+
+  /* ---------- Typography ---------- */
+  --brand-font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* --- display (hero) ---
+     Measured: cap-height 39px, line pitch 54.5px, ink width 227px for "Your files."
+     → 56px / 0.974 line-height / −0.052em tracking reproduces all three exactly. */
+  --brand-display-size: 3.5rem; /* 56px @941 reference */
+  --brand-display-line: 0.974;
+  --brand-display-tracking: -0.052em;
+  --brand-display-weight: 800;
+  --brand-display-lg-size: 4rem; /* desktop hero */
+
+  /* --- h1 for interior pages --- */
+  --brand-h1-size: 3rem;
+  --brand-h1-line: 1.08;
+  --brand-h1-tracking: -0.042em;
+
+  /* --- h2 section headings ---
+     Measured: "Everything you need…" 521px, "Room for every kind of…" 371px,
+     "A little more" 281px, all at 22–24px with −0.043em. */
+  --brand-h2-size: 1.4375rem; /* 23px */
+  --brand-h2-line: 1.28;
+  --brand-h2-tracking: -0.043em;
+  --brand-h2-weight: 800;
+
+  /* --- h3 --- */
+  --brand-h3-size: 1.1875rem; /* 19px */
+  --brand-h3-line: 1.32;
+  --brand-h3-tracking: -0.014em;
+  --brand-h3-weight: 700;
+
+  /* --- body ---
+     Measured: "Store, access and share your files from anywhere." = 319px
+     → 14px with −0.045em. Line pitch 23px → 1.64. */
+  --brand-body-size: 0.875rem; /* 14px @941 */
+  --brand-body-line: 1.64;
+  --brand-body-tracking: -0.008em; /* reference body has almost no tracking */
+
+  --brand-body-sm-size: 0.8125rem; /* 13px */
+  --brand-body-sm-line: 1.6;
+  --brand-body-sm-tracking: -0.03em;
+
+  --brand-caption-size: 0.75rem; /* 12px */
+  --brand-caption-line: 1.5;
+  --brand-caption-tracking: -0.012em;
+
+  /* Measured: "Business" = 41px ink → 13.5px with −0.02em */
+  --brand-nav-size: 0.84375rem; /* 13.5px */
+  --brand-nav-weight: 500;
+  --brand-nav-tracking: -0.02em;
+
+  /* ---------- Layout ---------- */
+  --brand-container-max: 1280px;
+  --brand-container-pad: 1.5rem;
+  --brand-container-pad-md: 1.75rem; /* 28px */ /* 24px; reference copy sits at 36px = 24 + optical inset */
+  --brand-container-pad-lg: 2.25rem;
+  --brand-header-height: 58px; /* measured */
+  --brand-hero-top-offset: 40px;
+
+  /* ---------- Spacing scale (4px base) ---------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+  --space-28: 7rem;
+  --space-32: 8rem;
+
+  /* ---------- Radii ---------- */
+  --brand-radius-xs: 6px;
+  --brand-radius-sm: 8px;
+  --brand-radius-md: 12px;
+  --brand-radius-lg: 16px;
+  --brand-radius-xl: 20px;
+  --brand-radius-2xl: 28px;
+  --brand-radius-pill: 999px;
+
+  /* ---------- Elevation ---------- */
+  --brand-shadow-xs: 0 1px 2px rgba(23, 29, 58, 0.04);
+  --brand-shadow-sm: 0 1px 3px rgba(23, 29, 58, 0.05), 0 6px 16px -8px rgba(23, 29, 58, 0.08);
+  --brand-shadow-md: 0 2px 6px rgba(23, 29, 58, 0.04), 0 14px 32px -14px rgba(23, 29, 58, 0.12);
+  --brand-shadow-lg: 0 6px 18px rgba(23, 29, 58, 0.05), 0 32px 60px -28px rgba(23, 29, 58, 0.18);
+  --brand-shadow-xl: 0 10px 30px rgba(23, 29, 58, 0.06), 0 48px 90px -40px rgba(30, 40, 90, 0.26);
+  --brand-shadow-primary: 0 8px 20px -8px rgba(49, 120, 251, 0.55);
+
+  /* ---------- Motion ---------- */
+  --brand-ease-out: cubic-bezier(0.22, 0.68, 0.28, 1);
+  --brand-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --brand-duration-fast: 130ms;
+  --brand-duration-base: 200ms;
+  --brand-duration-slow: 420ms;
+
+  /* ---------- Focus ---------- */
+  --brand-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px var(--brand-primary);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Responsive token overrides                                          */
+/*  Small screens scale type down; the reference is a 941px viewport.   */
+/* ------------------------------------------------------------------ */
+
+/* The reference viewport (≥ 941px) uses the base values verbatim.
+   Below that the composition reflows and type grows *relatively* so the
+   mobile experience stays legible instead of shrinking the desktop page. */
+
+@media (min-width: 896px) {
+  :root {
+    /* The reference band: 941px capture.
+       NOTE: the reference's three headline lines cannot be reproduced at one
+       font size in any real typeface (line 3 measures 315px while its cap
+       height requires ~470px). We match the cap height that fits the column,
+       the three-line break structure and the 54.5px line pitch. */
+    --brand-container-pad: 2.25rem; /* 36px */
+    --brand-header-height: 58px;
+    /* Verified against the reference at 941px:
+       line pitch 52px (ref 52), "One simple place." ink 361px (ref 357). */
+    --brand-display-size: 2.875rem; /* 46px — largest size that keeps line 3 on one line */
+    --brand-display-line: 1.14;
+    --brand-display-tracking: -0.052em;
+    --brand-body-size: 0.875rem; /* 14px */
+    --brand-body-sm-size: 0.78125rem;
+    --brand-caption-size: 0.6875rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --brand-display-size: 3.25rem;
+    --brand-display-line: 1.06;
+    --brand-display-tracking: -0.052em;
+    --brand-h2-size: 1.5rem;
+    --brand-h3-size: 1.125rem;
+    --brand-body-size: 0.9375rem;
+    --brand-body-sm-size: 0.84375rem;
+    --brand-nav-size: 0.875rem;
+    --brand-caption-size: 0.8125rem;
+    --brand-header-height: 64px;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --brand-display-size: 3.75rem;
+    --brand-h1-size: 3.375rem;
+    --brand-h2-size: 1.9375rem;
+    --brand-body-size: 1rem;
+    --brand-body-sm-size: 0.9375rem;
+    --brand-nav-size: 0.875rem;
+    --brand-h3-size: 1.1875rem;
+    --brand-caption-size: 0.8125rem;
+    --brand-header-height: 76px;
+    --brand-container-pad: 2.5rem;
+  }
+}
+
+@media (max-width: 895px) {
+  :root {
+    --brand-display-size: 2.75rem;
+    --brand-h1-size: 2.375rem;
+    --brand-h2-size: 1.375rem;
+    --brand-body-size: 0.9375rem;
+    --brand-h3-size: 1.0625rem;
+    --brand-header-height: 60px;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --brand-display-size: 2.25rem;
+    --brand-h1-size: 2rem;
+    --brand-h2-size: 1.25rem;
+    --brand-h3-size: 1rem;
+    --brand-body-size: 0.9375rem;
+    --brand-body-sm-size: 0.875rem;
+    --brand-container-pad: 1.25rem;
+    --brand-header-height: 60px;
+  }
+}
+
+@media (max-width: 429px) {
+  :root {
+    --brand-display-size: 1.9375rem;
+    --brand-h1-size: 1.75rem;
+    --brand-h2-size: 1.1875rem;
+    --brand-container-pad: 1rem;
+  }
+}
+
+/* Alias so utilities written as `font-[family-name:var(--font-sans)]`
+   and the Tailwind default font stack share one definition. */
+:root {
+  --font-sans: var(--brand-font-sans);
+}

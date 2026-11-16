@@ -1,0 +1,291 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+/* ------------------------------------------------------------------ */
+/*  Bridge: expose the token layer as Tailwind utilities.              */
+/*  `inline` keeps tokens.css the single source of truth — Tailwind     */
+/*  emits utilities that reference the custom properties directly.      */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  /* Breakpoints tuned so the reference's 941px composition is the `lg` band. */
+  --breakpoint-sm: 40rem;   /* 640 */
+  --breakpoint-md: 48rem;   /* 768 */
+  --breakpoint-lg: 56rem;   /* 896 — reference two-column hero starts here */
+  --breakpoint-xl: 72rem;   /* 1152 */
+  --breakpoint-2xl: 80rem;  /* 1280 */
+}
+
+@theme inline {
+  /* colors — brand */
+  --color-primary: var(--brand-primary);
+  --color-primary-hover: var(--brand-primary-hover);
+  --color-primary-soft: var(--brand-primary-soft);
+  --color-primary-soft-2: var(--brand-primary-soft-2);
+  --color-primary-ink: var(--brand-primary-ink);
+
+  /* colors — text */
+  --color-ink: var(--brand-ink);
+  --color-ink-strong: var(--brand-ink-strong);
+  --color-text: var(--brand-text);
+  --color-text-muted: var(--brand-text-muted);
+  --color-text-subtle: var(--brand-text-subtle);
+
+  /* colors — surfaces */
+  --color-background: var(--brand-background);
+  --color-canvas: var(--brand-canvas);
+  --color-surface: var(--brand-surface);
+  --color-surface-muted: var(--brand-surface-muted);
+
+  /* colors — borders */
+  --color-border: var(--brand-border);
+  --color-border-strong: var(--brand-border-strong);
+  --color-border-soft: var(--brand-border-soft);
+
+  /* colors — pastel atmosphere */
+  --color-pastel-lavender: var(--brand-pastel-lavender);
+  --color-pastel-periwinkle: var(--brand-pastel-periwinkle);
+  --color-pastel-mint: var(--brand-pastel-mint);
+  --color-pastel-sky: var(--brand-pastel-sky);
+  --color-pastel-peach: var(--brand-pastel-peach);
+  --color-pastel-blush: var(--brand-pastel-blush);
+
+  /* colors — plan accents */
+  --color-accent-free: var(--brand-accent-free);
+  --color-accent-basic: var(--brand-accent-basic);
+  --color-accent-plus: var(--brand-accent-plus);
+  --color-accent-premium: var(--brand-accent-premium);
+  --color-accent-ultra: var(--brand-accent-ultra);
+  --color-accent-max: var(--brand-accent-max);
+
+  /* typography */
+  --font-sans: var(--brand-font-sans);
+
+  --text-display: var(--brand-display-size);
+  --text-display--line-height: var(--brand-display-line);
+  --text-display--letter-spacing: var(--brand-display-tracking);
+  --text-display--font-weight: var(--brand-display-weight);
+
+  --text-display-lg: var(--brand-display-lg-size);
+  --text-display-lg--line-height: var(--brand-display-line);
+  --text-display-lg--letter-spacing: var(--brand-display-tracking);
+  --text-display-lg--font-weight: var(--brand-display-weight);
+
+  --text-h1: var(--brand-h1-size);
+  --text-h1--line-height: var(--brand-h1-line);
+  --text-h1--letter-spacing: var(--brand-h1-tracking);
+
+  --text-h2: var(--brand-h2-size);
+  --text-h2--line-height: var(--brand-h2-line);
+  --text-h2--letter-spacing: var(--brand-h2-tracking);
+  --text-h2--font-weight: var(--brand-h2-weight);
+
+  --text-h3: var(--brand-h3-size);
+  --text-h3--line-height: var(--brand-h3-line);
+  --text-h3--letter-spacing: var(--brand-h3-tracking);
+  --text-h3--font-weight: var(--brand-h3-weight);
+
+  --text-body: var(--brand-body-size);
+  --text-body--line-height: var(--brand-body-line);
+  --text-body--letter-spacing: var(--brand-body-tracking);
+
+  --text-body-sm: var(--brand-body-sm-size);
+  --text-body-sm--line-height: var(--brand-body-sm-line);
+  --text-body-sm--letter-spacing: var(--brand-body-sm-tracking);
+
+  --text-caption: var(--brand-caption-size);
+  --text-caption--line-height: var(--brand-caption-line);
+  --text-caption--letter-spacing: var(--brand-caption-tracking);
+
+  --text-nav: var(--brand-nav-size);
+  --text-nav--letter-spacing: var(--brand-nav-tracking);
+
+  /* geometry */
+  --radius-xs: var(--brand-radius-xs);
+  --radius-sm: var(--brand-radius-sm);
+  --radius-md: var(--brand-radius-md);
+  --radius-lg: var(--brand-radius-lg);
+  --radius-xl: var(--brand-radius-xl);
+  --radius-2xl: var(--brand-radius-2xl);
+
+  /* elevation */
+  --shadow-xs: var(--brand-shadow-xs);
+  --shadow-sm: var(--brand-shadow-sm);
+  --shadow-md: var(--brand-shadow-md);
+  --shadow-lg: var(--brand-shadow-lg);
+  --shadow-xl: var(--brand-shadow-xl);
+  --shadow-primary: var(--brand-shadow-primary);
+
+  /* motion */
+  --ease-out: var(--brand-ease-out);
+  --ease-spring: var(--brand-ease-spring);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Base                                                              */
+/* ------------------------------------------------------------------ */
+
+@layer base {
+  * {
+    border-color: var(--brand-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--brand-header-height) + 1.5rem);
+  }
+
+  body {
+    background-color: var(--brand-background);
+    color: var(--brand-text);
+    font-family: var(--brand-font-sans);
+    font-size: var(--brand-body-size);
+    line-height: var(--brand-body-line);
+    letter-spacing: var(--brand-body-tracking);
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--brand-ink);
+    text-wrap: balance;
+  }
+
+  h1 {
+    font-size: var(--brand-h1-size);
+    line-height: var(--brand-h1-line);
+    letter-spacing: var(--brand-h1-tracking);
+    font-weight: 800;
+  }
+
+  h2 {
+    font-size: var(--brand-h2-size);
+    line-height: var(--brand-h2-line);
+    letter-spacing: var(--brand-h2-tracking);
+    font-weight: var(--brand-h2-weight);
+  }
+
+  h3 {
+    font-size: var(--brand-h3-size);
+    line-height: var(--brand-h3-line);
+    letter-spacing: var(--brand-h3-tracking);
+    font-weight: var(--brand-h3-weight);
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--brand-primary-soft-2);
+    color: var(--brand-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
+    border-radius: var(--brand-radius-xs);
+  }
+
+  /* Buttons and links opt out of the double-ring when the component
+     already paints its own focus treatment. */
+  .focus-ring-auto:focus-visible {
+    outline: none;
+    box-shadow: var(--brand-focus-ring);
+  }
+
+  img,
+  svg,
+  video {
+    display: block;
+    max-width: 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Reusable primitives                                               */
+/* ------------------------------------------------------------------ */
+
+@layer components {
+  .container-or {
+    width: 100%;
+    max-width: var(--brand-container-max);
+    margin-inline: auto;
+    padding-inline: var(--brand-container-pad);
+  }
+
+  @media (min-width: 768px) {
+    .container-or {
+      padding-inline: var(--brand-container-pad-md, 1.75rem);
+    }
+  }
+
+  @media (min-width: 896px) {
+    .container-or {
+      padding-inline: var(--brand-container-pad);
+    }
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* hero display type */
+  .type-display {
+    font-size: var(--brand-display-size);
+    line-height: var(--brand-display-line);
+    letter-spacing: var(--brand-display-tracking);
+    font-weight: var(--brand-display-weight);
+    color: var(--brand-ink-strong);
+  }
+
+  .hairline {
+    height: 1px;
+    background-color: var(--brand-border);
+  }
+
+  /* Faint grid used behind product surfaces, from the reference's
+     near-white panels. Never high-contrast. */
+  .surface-grid {
+    background-image: linear-gradient(
+        to right,
+        rgba(23, 29, 58, 0.035) 1px,
+        transparent 1px
+      ),
+      linear-gradient(to bottom, rgba(23, 29, 58, 0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+}
+
+/*
+ * Product mockup: below ~420px of panel width the nav text sits on its 9px floor
+ * while the geometry keeps shrinking, so the storage card would spill past the
+ * panel. Drop the card rather than let the mockup clip.
+ */
+@container (max-width: 385px) {
+  .mock-storage {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
