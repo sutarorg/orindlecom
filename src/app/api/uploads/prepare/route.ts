@@ -8,7 +8,7 @@
 import { handle, ok, readJson, requireNumber, requireString, requireUuid, withActor } from "@/lib/api";
 import { validateItemName } from "@/lib/api";
 import { prepareUpload } from "@/domain/storage/upload-service";
-import { consume, LIMITS, userBucket } from "@/lib/rate-limit";
+import { LIMITS, userBucket } from "@/lib/rate-limit";
 import { enforceRateLimit } from "@/lib/api";
 
 export const runtime = "nodejs";

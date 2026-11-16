@@ -165,12 +165,6 @@ export function createSupabaseDriveRepository(): DriveRepository {
     return { ok: true as const, actor: actor.actor, supabase };
   }
 
-  async function unauthorised(): Promise<DriveResult<never>> {
-    const actor = await resolveActor();
-    if (!actor.ok) return notConnected();
-    return { ok: false, code: "forbidden", message: "You don't have permission to do that." };
-  }
-
   return {
     configured: isStorageConfigured(),
 
@@ -532,14 +526,8 @@ export function createSupabaseDriveRepository(): DriveRepository {
       // Resolve the invitee by email. This is the only place an email becomes an
       // id, and it is a lookup rather than an accepted parameter — the caller
       // cannot name an arbitrary user id.
-      const { data: grantee } = await c.supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", (await resolveUserByEmail(email)) ?? "00000000-0000-0000-0000-000000000000")
-        .maybeSingle();
-
       const granteeId = await resolveUserByEmail(email);
-      if (!grantee) {
+      if (!granteeId) {
         return {
           ok: false as const,
           code: "not_found" as const,
@@ -667,7 +655,9 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const expiresAt =
         requestedExpiry ?? new Date(Date.now() + 7 * 86_400_000).toISOString();
 
-      const { data, error } = await c.supabase
+      // The generated row is not needed: the link is fully described by the token,
+      // permission and expiry we just chose.
+      const { error } = await c.supabase
         .from("share_links")
         .insert({
           file_id: itemId,
@@ -675,9 +665,7 @@ export function createSupabaseDriveRepository(): DriveRepository {
           permission,
           expires_at: expiresAt,
           created_by: c.actor.userId,
-        })
-        .select()
-        .single();
+        });
 
       if (error) return toDriveError(error);
 
@@ -688,6 +676,65 @@ export function createSupabaseDriveRepository(): DriveRepository {
     },
 
     /* ── Uploads ─────────────────────────────────────────────────────── */
+
+    /**
+     * Mint a signed read URL.
+     *
+     * Two conditions, both enforced here rather than by the caller:
+     *   - the file must be `available`, so a quarantined upload cannot be read
+     *     around the scan gate, and
+     *   - the row is read through the user's own client, so RLS decides whether
+     *     they may see it at all. A file shared with them resolves; someone
+     *     else's does not.
+     */
+    async downloadUrl({ id, disposition = "attachment" }): Promise<
+      DriveResult<{ url: string; expiresIn: number; filename: string }>
+    > {
+      const c = await ctx();
+      if (!c.ok) return c.result;
+
+      const { data, error } = await c.supabase
+        .from("files")
+        .select("id, name, mime_type, storage_key, status")
+        .eq("id", id)
+        .eq("status", "available")
+        .maybeSingle();
+
+      if (error) return toDriveError(error);
+      if (!data?.storage_key) {
+        return {
+          ok: false as const,
+          code: "not_found" as const,
+          message: "That file isn't available to download.",
+        };
+      }
+
+      if (!isStorageConfigured()) return notConnected();
+
+      const expiresIn = 300;
+      try {
+        // Never a permanent public URL: this expires in five minutes.
+        const url = await presignGet(data.storage_key as string, {
+          expiresIn,
+          filename: data.name as string,
+          disposition,
+          contentType: data.mime_type as string | undefined,
+        });
+        return {
+          ok: true,
+          data: { url, expiresIn, filename: data.name as string },
+        };
+      } catch (err) {
+        console.error("[drive] presign failed", {
+          message: err instanceof Error ? err.message : "unknown",
+        });
+        return {
+          ok: false as const,
+          code: "unknown" as const,
+          message: "We couldn't prepare that download. Nothing was changed.",
+        };
+      }
+    },
 
     async prepareUpload({ file, parentId }) {
       const actor = await resolveActor();
@@ -976,21 +1023,44 @@ async function softDelete(
  * Profiles are own-row-only under RLS, so a normal query cannot answer "who is
  * this?" without exposing a directory. This is a narrow, single-email lookup with
  * no listing, used only by grant creation.
+ *
+ * The address is normalised and matched exactly. Nothing is fuzzy-matched: granting
+ * a file to the wrong account because two addresses are similar would be a data
+ * leak, not a typo.
+ *
+ * An earlier version of this function ignored its argument and returned whichever
+ * profile happened to come first. That is the same class of bug as trusting a
+ * client-supplied user id — the grant would land on an arbitrary stranger — so the
+ * comparison lives in the query, not in a caller's optimism.
  */
 async function resolveUserByEmail(email: string): Promise<string | null> {
-  const { isServiceConfigured, getServiceClient } = await import("@/lib/supabase/service");
-  if (!isServiceConfigured()) return null;
+  const normalised = email.trim().toLowerCase();
+  if (!normalised) return null;
 
-  const { data } = await getServiceClient()
+  // Without a valid address there is nothing to look up, and a malformed one
+  // would only waste a round trip.
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalised)) return null;
+
+  const { isServiceConfigured, getServiceClient } = await import("@/lib/supabase/service");
+  if (!isServiceConfigured()) {
+    // No service client means this lookup cannot be performed at all. Returning
+    // null lets the caller report "no account yet" rather than granting to nobody.
+    return null;
+  }
+
+  const { data, error } = await getServiceClient()
     .from("profiles")
     .select("id")
-    .limit(1);
+    .ilike("email", normalised)
+    .limit(1)
+    .maybeSingle();
 
-  // A join through auth.users is not available through the anon client; the
-  // invite flow resolves the address when the invitee accepts. Returning null
-  // here means "no account yet", which the caller reports honestly rather than
-  // silently creating a grant for nobody.
-  return (data?.[0]?.id as string | undefined) ?? null;
+  if (error) {
+    console.error("[drive] resolveUserByEmail failed", { message: error.message });
+    return null;
+  }
+
+  return (data?.id as string | undefined) ?? null;
 }
 
 /** Trash retention, re-exported so callers do not hard-code 30. */

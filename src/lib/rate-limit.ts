@@ -36,6 +36,9 @@ export const LIMITS = {
   renameItem: { limit: 120, windowSeconds: 60 },
   trashItem: { limit: 120, windowSeconds: 60 },
   shareCreate: { limit: 30, windowSeconds: 60 },
+  // A person downloading a folder of 40 files mints 40 URLs. The cap is well above
+  // that so ordinary use never trips it.
+  download: { limit: 300, windowSeconds: 60 },
   checkout: { limit: 10, windowSeconds: 300 },
   emailSend: { limit: 20, windowSeconds: 3600 },
   supportMessage: { limit: 5, windowSeconds: 3600 },

@@ -39,7 +39,7 @@ export function FileGrid({
     setFocusIndex((current) => Math.min(current, Math.max(0, items.length - 1)));
   }, [items.length]);
 
-  const columnsFor = (index: number) => {
+  const columnsFor = (_index: number) => {
     // Mirrors the Tailwind grid: 2 / 3 / 4 / 5 columns.
     const width = window.innerWidth;
     if (width >= 1536) return 5;

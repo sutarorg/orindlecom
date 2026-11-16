@@ -28,6 +28,7 @@ import { PreviewPanel } from "./preview-panel";
 import { ShareDialog } from "./share-dialog";
 import { UploadZone } from "./upload-zone";
 import { useRegisterSearch } from "./search-bridge";
+import { api, triggerDownload } from "@/lib/drive/client";
 
 /**
  * The file manager.
@@ -128,6 +129,70 @@ function FileManagerInner({
     [toast],
   );
 
+  /**
+   * Save the selected files.
+   *
+   * Each file needs its own signed URL, so this walks the selection. If one fails
+   * the rest still run — a single unreadable file should not cancel the download
+   * of everything beside it — and the failures are reported together at the end so
+   * the toast count matches the number of files that did not arrive.
+   */
+  const downloadFiles = React.useCallback(
+    async (ids: string[]) => {
+      const itemsById = new Map(items.map((item) => [item.id, item]));
+      const failures: string[] = [];
+
+      for (const id of ids) {
+        const item = itemsById.get(id);
+        if (!item || item.kind === "folder") continue;
+
+        const result = await api.post<{ url: string; filename: string }>(
+          `/api/download/${id}`,
+          { disposition: "attachment" },
+        );
+
+        if (!result.ok) {
+          failures.push(item.name);
+          continue;
+        }
+        triggerDownload(result.data.url, result.data.filename);
+      }
+
+      if (failures.length > 0) {
+        toast({
+          tone: "error",
+          title:
+            failures.length === 1
+              ? `Couldn't download ${failures[0]}`
+              : `${failures.length} files couldn't be downloaded`,
+          description: failures.slice(0, 3).join(", ") + (failures.length > 3 ? "…" : ""),
+        });
+      }
+    },
+    [items, toast],
+  );
+
+  const restoreItems = React.useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const result = await api.post<{ restored: number }>("/api/trash/restore", { ids });
+      if (!result.ok) {
+        toast({ tone: "error", title: "Nothing was restored", description: result.message });
+        return;
+      }
+      toast({
+        tone: "success",
+        title:
+          result.data.restored === 1
+            ? "1 item restored"
+            : `${result.data.restored} items restored`,
+        description: "They are back where you left them.",
+      });
+      router.refresh();
+    },
+    [router, toast],
+  );
+
   const openItem = React.useCallback(
     (item: DriveItem) => {
       if (item.kind === "folder") {
@@ -143,9 +208,15 @@ function FileManagerInner({
 
   const handleSelectionAction = (action: string) => {
     switch (action) {
-      case "download":
-        notConnected("Download unavailable");
+      case "download": {
+        // Download every selected file the user can read. One request per file,
+        // sequential, so a burst of twenty files does not open twenty signed
+        // requests at once.
+        const ids = [...selected];
+        if (ids.length === 0) break;
+        void downloadFiles(ids);
         break;
+      }
       case "star":
         notConnected("Star unavailable");
         break;
@@ -155,9 +226,12 @@ function FileManagerInner({
       case "trash":
         setConfirmTrash(true);
         break;
-      case "restore":
-        notConnected("Nothing was restored");
+      case "restore": {
+        const ids = [...selected];
+        if (ids.length === 0) break;
+        void restoreItems(ids);
         break;
+      }
       case "purge":
         setConfirmPurge(true);
         break;
@@ -171,7 +245,7 @@ function FileManagerInner({
   const contextItems = (item: DriveItem): MenuItem[] => {
     if (mode === "trash") {
       return [
-        { key: "restore", label: "Restore", icon: Download, onSelect: () => notConnected("Nothing was restored") },
+        { key: "restore", label: "Restore", icon: Download, onSelect: () => void restoreItems([item.id]) },
         {
           key: "purge",
           label: "Delete permanently",

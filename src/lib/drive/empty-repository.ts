@@ -69,6 +69,7 @@ export function createEmptyDriveRepository(): DriveRepository {
     }),
     setShareLink: async () => notConnected(),
 
+    downloadUrl: async () => notConnected(),
     prepareUpload: async () => notConnected(),
     completeUpload: async () => notConnected(),
     cancelUpload: async () => notConnected(),

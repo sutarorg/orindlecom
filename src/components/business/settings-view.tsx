@@ -24,7 +24,6 @@ import {
   FOLDER_ACCESS_DESCRIPTION,
   FOLDER_ACCESS_LABEL,
   INVITATION_EXPIRY_DAYS,
-  type BusinessRole,
   type FolderAccess,
   type Organization,
 } from "@/lib/business/types";
@@ -45,7 +44,7 @@ import { cn } from "@/lib/utils";
  */
 export function BusinessSettingsView({
   organization,
-  memberCount,
+  memberCount: _memberCount,
   activeMemberCount,
 }: {
   organization: Organization;

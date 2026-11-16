@@ -38,7 +38,12 @@ export function ActivityView({
   const [family, setFamily] = React.useState("all");
   const [search, setSearch] = React.useState("");
 
-  const familyKinds = FAMILIES.find((entry) => entry.key === family)?.kinds ?? [];
+  // Memoised so the two memos below do not recompute on every keystroke elsewhere
+  // in the tree: a fresh array literal here would change identity every render.
+  const familyKinds = React.useMemo(
+    () => FAMILIES.find((entry) => entry.key === family)?.kinds ?? [],
+    [family],
+  );
   const needle = search.trim().toLowerCase();
 
   const filtered = React.useMemo(() => {

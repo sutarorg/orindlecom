@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Menu } from "@/components/ui/menu";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { formatDate, formatRelative } from "@/lib/drive/format";
@@ -62,7 +61,7 @@ const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
 export function MembersView({
   members,
   viewerRole,
-  viewerId,
+  viewerId: _viewerId,
   folders,
 }: {
   members: Member[];
@@ -311,7 +310,7 @@ export function MembersView({
                 if (!canChangeRole) return;
                 setRoleTarget(member);
               }}
-              onResend={(member) => reportUnbacked("Invitation wasn't resent")}
+              onResend={() => reportUnbacked("Invitation wasn't resent")}
               onRevoke={(member) => setRevokeTarget(member)}
               onRemove={(member) => {
                 if (!canRemove) return;

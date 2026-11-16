@@ -82,6 +82,19 @@ export interface DriveRepository {
     expiresAt?: string | null;
   }): Promise<DriveResult<ShareLink>>;
 
+  /**
+   * A short-lived signed URL for reading one file.
+   *
+   * Files live in a private bucket, so there is no permanent URL to hand out: every
+   * read mints a new one that expires. `inline` is for the preview panel, which
+   * needs the browser to render rather than save; `attachment` is for the download
+   * button, and carries the original filename so the saved file is not a UUID.
+   */
+  downloadUrl(input: {
+    id: string;
+    disposition?: "inline" | "attachment";
+  }): Promise<DriveResult<{ url: string; expiresIn: number; filename: string }>>;
+
   /* Upload — see docs/dashboard/upload-state-flow.md */
   prepareUpload(input: { file: File; parentId: string | null }): Promise<DriveResult<{ taskId: string; multipart: boolean }>>;
   completeUpload(input: { taskId: string }): Promise<DriveResult<DriveItem>>;

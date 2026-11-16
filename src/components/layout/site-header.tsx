@@ -67,12 +67,17 @@ export function SiteHeader() {
       }
     };
 
+    // Captured now rather than read in the cleanup: by the time the effect tears
+    // down, the ref may point at a different element, and focus would be returned
+    // to the wrong control.
+    const triggerAtOpen = triggerRef.current;
+
     document.addEventListener("keydown", onKeyDown);
     return () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("keydown", onKeyDown);
       body.style.overflow = prevOverflow;
-      (previouslyFocused ?? triggerRef.current)?.focus?.();
+      (previouslyFocused ?? triggerAtOpen)?.focus?.();
     };
   }, [open]);
 

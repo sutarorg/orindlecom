@@ -55,15 +55,22 @@ export function FolderAccessDialog({
     setPending(false);
   }, [folder]);
 
-  if (!folder) return <Dialog open={false} onClose={onClose} title="Folder access" />;
-
   /**
    * Count real differences against the saved state, not the size of the draft.
    * Counting draft entries reported a fresh dialog as "3 unsaved changes" on any
    * folder that already had overrides, which taught people to ignore the counter.
+   *
+   * These two memos sit ABOVE the `if (!folder)` early return on purpose. Hooks
+   * must run in the same order on every render, and returning before them meant
+   * that closing the dialog (folder -> null) rendered two fewer hooks than opening
+   * it, which React throws on. The empty-object fallback keeps the memo safe while
+   * there is no folder.
    */
   const original = React.useMemo(
-    () => Object.fromEntries(folder.access.map((entry) => [entry.memberId, entry.access])),
+    () =>
+      folder
+        ? Object.fromEntries(folder.access.map((entry) => [entry.memberId, entry.access]))
+        : {},
     [folder],
   );
 
@@ -75,6 +82,8 @@ export function FolderAccessDialog({
     }
     return count;
   }, [original, grants]);
+
+  if (!folder) return <Dialog open={false} onClose={onClose} title="Folder access" />;
 
   const changes =
     (folder.openToOrganization !== openToOrg ? 1 : 0) +

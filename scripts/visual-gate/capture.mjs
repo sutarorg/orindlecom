@@ -104,7 +104,7 @@ const browser = await puppeteer.launch({
 });
 
 const report = [];
-let violations = 0;
+let _violations = 0;
 
 for (const [name, route] of routes) {
   for (const width of WIDTHS) {
@@ -211,7 +211,7 @@ for (const [name, route] of routes) {
     if (pageErrors.length) problems.push(`pageerror: ${pageErrors[0]}`);
     if (smallTargets > 0) problems.push(`${smallTargets} targets <24px`);
 
-    if (problems.length) violations += 1;
+    if (problems.length) _violations += 1;
 
     report.push({ name, route, width, status, over: overflow.over, smallTargets, problems });
 

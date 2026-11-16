@@ -149,7 +149,7 @@ function ProfileSection({
 
 function SecuritySection({
   authenticated,
-  onSaved,
+  onSaved: _onSaved,
 }: {
   authenticated: boolean;
   onSaved: () => void;
@@ -161,7 +161,7 @@ function SecuritySection({
   const [confirm, setConfirm] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
-  const uid = React.useId();
+  const _uid = React.useId();
 
   React.useEffect(() => {
     if (open) {

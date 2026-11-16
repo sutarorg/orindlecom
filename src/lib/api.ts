@@ -160,7 +160,8 @@ export function validateItemName(raw: string): string {
   if (name.length > 255) {
     throw new AppError("invalid_name", "That name is too long — keep it under 255 characters.");
   }
-  // eslint-disable-next-line no-control-regex
+  // Control characters and separators. The ranges are intentional: this is the
+  // one place a control character is expected in a regex.
   if (/[/\\\u0000-\u001f\u007f]/.test(name)) {
     throw new AppError("invalid_name", USER_MESSAGES.invalidName);
   }

@@ -1,6 +1,5 @@
 import { Clock, Folder, Home, Share2, Trash2 } from "lucide-react";
 import { CloudGlyph } from "@/components/brand/logo";
-import { FolderGlyph } from "@/components/brand/plan-icon";
 import { cn } from "@/lib/utils";
 
 /**
