@@ -18,7 +18,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Menu, type MenuItem } from "@/components/ui/menu";
 import { useToast } from "@/components/ui/toast";
 import { TRASH_RETENTION, type DriveItem } from "@/lib/drive/types";
-import { NOT_CONNECTED_MESSAGE } from "@/lib/drive/repository";
 import { DriveProvider, useDrive } from "./drive-store";
 import { FileGrid } from "./file-grid";
 import { FileList } from "./file-list";
@@ -28,6 +27,7 @@ import { PreviewPanel } from "./preview-panel";
 import { ShareDialog } from "./share-dialog";
 import { UploadZone } from "./upload-zone";
 import { useRegisterSearch } from "./search-bridge";
+import { RenameDialog } from "./rename-dialog";
 import { api, triggerDownload } from "@/lib/drive/client";
 
 /**
@@ -123,11 +123,7 @@ function FileManagerInner({
   const [shareItem, setShareItem] = React.useState<DriveItem | null>(null);
   const [confirmTrash, setConfirmTrash] = React.useState(false);
   const [confirmPurge, setConfirmPurge] = React.useState(false);
-
-  const notConnected = React.useCallback(
-    (title: string) => toast({ tone: "error", title, description: NOT_CONNECTED_MESSAGE }),
-    [toast],
-  );
+  const [renameItem, setRenameItem] = React.useState<DriveItem | null>(null);
 
   /**
    * Save the selected files.
@@ -170,6 +166,63 @@ function FileManagerInner({
       }
     },
     [items, toast],
+  );
+
+  /**
+   * Copy a share link for one item.
+   *
+   * The link is created server-side first. Copying a URL this component constructed
+   * would put a dead address in someone's chat window, so nothing is copied unless
+   * the server confirmed a live link.
+   */
+  const copyLink = React.useCallback(
+    async (item: DriveItem) => {
+      const created = await api.put<{ url: string; enabled: boolean }>(
+        `/api/files/${item.id}/link`,
+        { permission: "viewer" },
+      );
+
+      if (!created.ok || !created.data.enabled) {
+        toast({
+          tone: "error",
+          title: "Link wasn't created",
+          description: created.ok ? "That link isn't active." : created.message,
+        });
+        return;
+      }
+
+      const absolute = new URL(created.data.url, window.location.origin).toString();
+      try {
+        await navigator.clipboard.writeText(absolute);
+        toast({
+          tone: "success",
+          title: "Link copied",
+          description: "Anyone with this link can view the file until it expires.",
+        });
+      } catch {
+        // Clipboard access can be denied. Put the URL somewhere they can select
+        // rather than telling them it worked.
+        window.prompt("Copy this link:", absolute);
+      }
+    },
+    [toast],
+  );
+
+  const renameItems = React.useCallback(
+    async (id: string, name: string) => {
+      const isFolder = items.find((item) => item.id === id)?.kind === "folder";
+      const result = await api.patch<{ name: string }>(
+        isFolder ? `/api/folders/${id}` : `/api/files/${id}`,
+        { name },
+      );
+      if (!result.ok) {
+        // Return the reason so the dialog can keep the text on screen.
+        return result.message;
+      }
+      router.refresh();
+      return null;
+    },
+    [items, router],
   );
 
   const trashItems = React.useCallback(
@@ -325,14 +378,14 @@ function FileManagerInner({
         key: "star",
         label: item.starred ? "Remove from Starred" : "Add to Starred",
         icon: Star,
-        onSelect: () => notConnected("Star unavailable"),
+        onSelect: () => void toggleStar([item.id]),
       },
       {
         key: "rename",
         label: "Rename",
         icon: PencilLine,
         shortcut: "F2",
-        onSelect: () => notConnected("Nothing was renamed"),
+        onSelect: () => setRenameItem(item),
       },
       {
         key: "share",
@@ -345,7 +398,7 @@ function FileManagerInner({
         key: "copy",
         label: "Copy link",
         icon: Link2,
-        onSelect: () => notConnected("No link was created"),
+        onSelect: () => void copyLink(item),
       },
       {
         key: "trash",
@@ -439,6 +492,12 @@ function FileManagerInner({
       />
 
       <ShareDialog item={shareItem} onClose={() => setShareItem(null)} />
+
+      <RenameDialog
+        item={renameItem}
+        onClose={() => setRenameItem(null)}
+        onRename={renameItems}
+      />
 
       <ConfirmDialog
         open={confirmTrash}
