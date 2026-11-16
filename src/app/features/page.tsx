@@ -245,9 +245,9 @@ function DeepDiveVisual({ index }: { index: number }) {
   if (index === 2) {
     return (
       <div className="space-y-4 rounded-[16px] border border-[var(--brand-border)] bg-white p-5 shadow-[var(--brand-shadow-md)]">
-        <StorageMeter used={8.2 * 1024 ** 3} total={10 * 1024 ** 3} />
-        <StorageMeter used={9.4 * 1024 ** 3} total={10 * 1024 ** 3} />
-        <StorageMeter used={10 * 1024 ** 3} total={10 * 1024 ** 3} />
+        <StorageMeter used={8.2 * 1000 ** 3} total={10 * 1000 ** 3} />
+        <StorageMeter used={9.4 * 1000 ** 3} total={10 * 1000 ** 3} />
+        <StorageMeter used={10 * 1000 ** 3} total={10 * 1000 ** 3} />
         <p className="text-[11px] leading-relaxed text-text-subtle">
           Three example states: comfortable, above 80% (amber), and full (red). The value is
           always written out, never colour alone.

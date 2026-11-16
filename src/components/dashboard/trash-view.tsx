@@ -99,7 +99,7 @@ export function TrashView({ items }: { items: DriveItem[] }) {
         requireTyping="EMPTY"
       >
         This permanently deletes {items.length} {items.length === 1 ? "item" : "items"}
-        {totalSize > 0 && ` (${(totalSize / 1024 ** 2).toFixed(1)} MB)`} and frees the space
+        {totalSize > 0 && ` (${(totalSize / 1000 ** 2).toFixed(1)} MB)`} and frees the space
         immediately. <strong className="font-semibold text-ink">It cannot be undone.</strong>
       </ConfirmDialog>
     </>

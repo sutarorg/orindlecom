@@ -174,9 +174,16 @@ export interface UploadTask {
 
 /** Limits the UI enforces before it bothers the backend. */
 export const UPLOAD_LIMITS = {
-  /** Files this size or larger use the multipart path. */
+  /**
+   * Files this size or larger use the multipart path.
+   *
+   * 16 MiB exactly: this is a protocol threshold that must match R2's minimum
+   * part size, so it stays binary. Only *displayed* storage figures are decimal;
+   * transfer mechanics keep their native units.
+   */
   multipartThreshold: 16 * 1024 * 1024,
-  maxFileSize: 5 * 1024 ** 3,
+  /** 5 GB, decimal, to match every other size the customer is shown. */
+  maxFileSize: 5 * 1000 ** 3,
   /** Rejected outright — these are commonly blocked by browsers anyway. */
   blockedExtensions: [".exe", ".dll", ".app", ".bat", ".cmd", ".scr", ".msi"],
 } as const;

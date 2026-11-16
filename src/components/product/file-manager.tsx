@@ -121,7 +121,7 @@ export function FileManager({
             </nav>
           </div>
 
-          <StorageMeter used={0} total={10 * 1024 ** 3} />
+          <StorageMeter used={0} total={10 * 1000 ** 3} />
         </aside>
 
         {/* ---------------- main ---------------- */}
