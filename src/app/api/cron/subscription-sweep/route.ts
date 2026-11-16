@@ -130,8 +130,21 @@ export async function GET(request: Request) {
     if (!error) recoveryClosed += 1;
   }
 
-  // 3. Warnings: 0, 7, 30, 60 and 83 days into the window. Emails are queued
-  //    through email_log so a failed send is retried rather than lost.
+  // 3. Warnings: 0, 7, 30, 60 and 83 days into the window.
+  //
+  //    Two things this loop has to get right, and got wrong before:
+  //
+  //    a. The address. The sweep has no session, so it resolves the owner's
+  //       address through the auth admin API. A row written with a placeholder
+  //       address is a row that can never be sent.
+  //    b. The dedupe key. It names the subscriber and the day, and the unique
+  //       index in 0013 enforces it. Asking "has anyone been warned" instead of
+  //       "has *this* subscriber been warned" suppressed day-7 mail for every
+  //       other customer once the first one received theirs.
+  //
+  //    Mail is queued, not sent: a warning that fails during the sweep would
+  //    otherwise be lost, and queued rows are picked up by email-retry with the
+  //    payload stored alongside them.
   const { data: expiring } = await supabase
     .from("subscriptions")
     .select("id, owner_id, recovery_ends_at, expired_at")
@@ -146,23 +159,35 @@ export async function GET(request: Request) {
     );
     if (![0, 7, 30, 60, 83].includes(daysIn)) continue;
 
-    const { data: already } = await supabase
-      .from("email_log")
-      .select("id")
-      .eq("template", `subscription-expiring-${daysIn}`)
-      .eq("status", "sent")
-      .limit(1);
+    const { data: owner, error: ownerError } = await supabase.auth.admin.getUserById(
+      sub.owner_id,
+    );
+    const address = owner?.user?.email;
+    if (ownerError || !address) {
+      console.warn("[subscription-sweep] no address for subscriber", { ownerId: sub.owner_id });
+      continue;
+    }
 
-    if (already?.length) continue;
+    const endsOn = new Date(sub.recovery_ends_at).toISOString().slice(0, 10);
 
-    // Resolving the address needs the auth admin API in production; the queue row
-    // is written here so the email-retry job can pick it up once resolved.
-    await supabase.from("email_log").insert({
-      to_address: "pending-resolution",
+    const { error: queueError } = await supabase.from("email_log").insert({
+      to_address: address,
       template: `subscription-expiring-${daysIn}`,
       status: "queued",
+      dedupe_key: `subscription-expiring-${daysIn}:${sub.owner_id}`,
+      payload: { date: endsOn, name: owner?.user?.user_metadata?.full_name ?? "" },
     });
-    warned += 1;
+
+    // 23505 means the unique index caught a second run racing this one. That is
+    // the index doing its job, not an error worth reporting.
+    if (queueError && queueError.code !== "23505") {
+      console.warn("[subscription-sweep] could not queue warning", {
+        ownerId: sub.owner_id,
+        error: queueError.message,
+      });
+      continue;
+    }
+    if (!queueError) warned += 1;
   }
 
   return NextResponse.json({

@@ -1,9 +1,19 @@
 /**
- * Retries failed transactional email, then gives up loudly.
+ * Sends queued transactional email, retries failed email, then gives up loudly.
  *
- * Backoff: 1m, 5m, 30m, 2h, 12h. After five attempts the row stays `failed` and
- * is surfaced by reconciliation rather than deleted — a permanently failing
- * address is information, and a row that vanishes is a mystery.
+ * Two kinds of row live here:
+ *
+ *   queued — handed over by a job that has no way to send mail itself (the
+ *            subscription sweep). Sent on the next run, which is at most an hour.
+ *   failed — attempted and refused. Backoff: 1m, 5m, 30m, 2h, 12h. After five
+ *            attempts the row stays `failed` and is surfaced by reconciliation
+ *            rather than deleted — a permanently failing address is information,
+ *            and a row that vanishes is a mystery.
+ *
+ * The payload is read from the row. An earlier version re-sent every retry with
+ * `data: {}`, which meant a retried `verify-email` arrived with a blank link —
+ * a malformed email is worse than a missing one, because the customer thinks
+ * they were helped.
  */
 
 import { NextResponse } from "next/server";
@@ -33,25 +43,34 @@ export async function GET(request: Request) {
 
   const supabase = getServiceClient();
 
-  const { data: due } = await supabase
-    .from("email_log")
-    .select("id, to_address, template, attempts")
-    .eq("status", "failed")
-    .lt("attempts", BACKOFF_MINUTES.length)
-    .lte("next_attempt_at", new Date().toISOString())
-    .limit(100);
+  const nowIso = new Date().toISOString();
+
+  const [queuedResult, failedResult] = await Promise.all([
+    supabase
+      .from("email_log")
+      .select("id, to_address, template, attempts, payload")
+      .eq("status", "queued")
+      .lte("next_attempt_at", nowIso)
+      .limit(100),
+    supabase
+      .from("email_log")
+      .select("id, to_address, template, attempts, payload")
+      .eq("status", "failed")
+      .lt("attempts", BACKOFF_MINUTES.length)
+      .lte("next_attempt_at", nowIso)
+      .limit(100),
+  ]);
+
+  const due = [...(queuedResult.data ?? []), ...(failedResult.data ?? [])];
 
   let sent = 0;
   let stillFailing = 0;
 
-  for (const row of due ?? []) {
+  for (const row of due) {
     const result = await sendEmail({
       to: row.to_address,
       template: row.template,
-      // A retry cannot reconstruct arbitrary payloads from the log, so templates
-      // that need data are re-rendered by the job that queued them. What this
-      // retries are the templates whose content is fully derivable from the row.
-      data: {},
+      data: (row.payload ?? {}) as Record<string, string>,
     });
 
     if (result.ok) {
@@ -87,6 +106,6 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    data: { processed: due?.length ?? 0, sent, stillFailing },
+    data: { processed: due.length, sent, stillFailing },
   });
 }

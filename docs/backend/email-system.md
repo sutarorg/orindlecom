@@ -1,7 +1,18 @@
 # Email System
 
-**Status:** Design locked. Resend is the provider. The contact-form path already
-exists and works; the transactional templates below do not yet.
+**Status:** Resend is the provider and is implemented. Eleven templates render today
+(§4.1). The rest of the table is the specification they will be added against — a
+template missing from the list below is a gap, not a surprise.
+
+**Queue semantics, and why they changed.** Mail that a job hands over is written to
+`email_log` with `status = 'queued'` and the data its template needs in `payload`.
+`/api/cron/email-retry` sends queued rows and retries failed ones, rendering from the
+stored payload. Without the payload, a retry could only be rendered empty — and a
+`verify-email` with a blank link is worse than no email at all.
+
+Duplicate suppression uses `dedupe_key`, unique in the database (0013). The key names
+the recipient *and* the notification. A global check on the template name would have
+meant the first customer to receive a day-7 warning suppressed it for everyone else.
 
 ---
 
@@ -56,6 +67,26 @@ the completion report must not claim email delivery works until the domain is ve
 
 Every template has a plain-text alternative. HTML-only mail is a deliverability and
 accessibility problem.
+
+### 4.1 Built
+
+| Template | Trigger | Key content |
+| --- | --- | --- |
+| `verify-email` | Sign-up / email change | Single clear action, expiry stated |
+| `reset-password` | Reset requested | 30-minute expiry, "ignore if not you" |
+| `password-changed` | Password changed | Security notice; how to recover |
+| `org-invite` | Member invited | Who invited, to which org, expiry, role |
+| `invite-accepted` | Invite accepted | Notify the inviter |
+| `storage-warning-80` | 80% of quota | Current usage, what happens at 100% |
+| `subscription-started` | Verified activation | Plan, amount, currency, next date |
+| `payment-failed` | Payment failed | What to do, grace period stated |
+| `subscription-cancelled` | Cancelled | Access until date, no data loss |
+| `subscription-expiring-N` | Day 0/7/30/60/83 of recovery | Exact date, what happens then |
+| `account-deletion-requested` | Deletion scheduled | Nothing deleted yet, how to cancel |
+| `account-deleted` | Deletion completed | Confirmation, retention exceptions |
+| `support-received` | Contact form accepted | Reference id and the 48-hour commitment |
+
+### 4.2 Specified, not built
 
 | Template | Trigger | Key content |
 | --- | --- | --- |
