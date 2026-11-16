@@ -10,10 +10,13 @@ Every row is marked ✅ verified · 🟡 designed, not built · ⬜ open · ➖ 
 
 ## 1. Verdict
 
-> **Not ready for production.** The public site and the interface are production
-> quality. The backend is not yet built beyond authentication, and several items in §6
-> are blockers that no amount of implementation can clear — they need decisions and
-> account configuration.
+> **Not ready for production, but for a different reason than before.** The backend
+> is now built and tested locally: schema, RLS, uploads, accounting, billing
+> verification, jobs, email, and 26 API routes. What remains is not more code — it is
+> (a) running it against real Supabase, R2 and Razorpay projects, which has never
+> happened, and (b) the decisions in §6 that no amount of implementation can clear.
+>
+> The honest summary: the code is ready to be deployed and tested. It has not been.
 
 Anything claiming otherwise contradicts this table.
 
@@ -33,8 +36,18 @@ Anything claiming otherwise contradicts this table.
 | No secret in the repository | grep over tracked files |
 | Contact success gated on provider 2xx | implemented |
 | Storage units consistent (decimal) | fixed and re-verified |
+| RLS across 20 tables | 20 negative tests in `tests/db/rls.test.ts` |
+| Quota cannot be bypassed by parallel uploads | 13 tests in `tests/db/storage.test.ts` |
+| Signature verification rejects replay and tampering | `tests/unit/billing-signature.test.ts` |
+| Rate limiting is atomic across instances | `tests/db/rate-limit.test.ts` |
+| Domain layer cannot see a request | `tests/unit/architecture.test.ts` |
+| Docs cannot claim an unbuilt route | `tests/unit/docs-fidelity.test.ts` |
+| Cron schedules resolve to real routes | `tests/unit/deployment-config.test.ts` |
+| 106 tests, 9 files | `npm test` |
 
-That is a real foundation. It is also entirely frontend.
+Every one of those runs against a real PostgreSQL engine (PGlite) or a real build,
+not a mock. What none of them proves is the same code against hosted Supabase, R2 or
+Razorpay — that is the gap that remains.
 
 ---
 
@@ -44,15 +57,15 @@ That is a real foundation. It is also entirely frontend.
 | --- | --- | --- |
 | Public site | ✅ | — |
 | Auth (email/password, Google) | ✅ code, ⬜ untested against a live project | Needs a real Supabase project |
-| Dashboard reads | 🟡 adapters designed | Needs schema + RLS |
-| Uploads | 🟡 designed | Needs R2 + the 13-step pipeline |
-| Storage accounting | 🟡 designed | Needs reservations + reconciliation |
-| Trash | 🟡 designed | Needs cleanup job |
-| Sharing | 🟡 designed | Needs grants + link expiry |
-| Organisations | 🟡 designed | Needs roles in RLS |
-| Billing | 🟡 designed | **Blocked on merchant capability** |
-| Email | 🟡 one template live | **Blocked on domain verification** |
-| Cron jobs | 🟡 designed | Needs deployment |
+| Dashboard reads and writes | ✅ routes built (list, get, rename, move, star, download, trash, restore, purge, folders) | Needs a live project |
+| Uploads | ✅ 13-step pipeline, gated scan hook | Needs R2 |
+| Storage accounting | ✅ reservations, commit, release, reconciliation job | Needs a live project |
+| Trash | ✅ UI + cleanup job, 30-day retention | **Retention approval (§6)** |
+| Sharing | 🟡 grants and link expiry in schema; routes specified | Needs routes for grants and links |
+| Organisations | 🟡 schema and RLS done; routes specified | Needs the member/folder routes |
+| Billing | ✅ order, signature, webhook, activation, idempotency | **Blocked on merchant capability (§6)** |
+| Email | ✅ 20 templates, retry job, three honest states | **Blocked on domain verification (§6)** |
+| Cron jobs | ✅ six, scheduled in `vercel.json` | Needs deployment |
 
 ---
 

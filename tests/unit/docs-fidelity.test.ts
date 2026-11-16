@@ -21,11 +21,13 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = process.cwd();
 
+/**
+ * Turn a Next.js segment (`[taskId]`) into the reference's notation (`:taskId`).
+ * Generic rather than a list, so adding a dynamic route cannot silently break the
+ * comparison.
+ */
 function normalise(urlPath: string): string {
-  return urlPath
-    .replace(/\[taskId\]/g, ":taskId")
-    .replace(/\[id\]/g, ":id")
-    .replace(/\[provider\]/g, ":provider");
+  return urlPath.replace(/\[([A-Za-z0-9_]+)\]/g, ":$1");
 }
 
 async function actualRoutes(): Promise<string[]> {

@@ -153,13 +153,13 @@ does date arithmetic that could disagree with the cleanup job.
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
-| ⬜ | `GET` | `/api/files/:id/grants` | | People with access |
-| ⬜ | `POST` | `/api/files/:id/grants` | | `{ email, permission }` |
-| ⬜ | `PATCH` | `/api/grants/:grantId` | | `{ permission }` |
-| ⬜ | `DELETE` | `/api/grants/:grantId` | | Revoke |
-| ⬜ | `GET` | `/api/files/:id/link` | | Current link or null |
-| ⬜ | `PUT` | `/api/files/:id/link` | | `{ permission, expiresInDays }` |
-| ⬜ | `DELETE` | `/api/files/:id/link` | | Revoke |
+| ✅ | `GET` | `/api/files/:id/grants` | | People with access |
+| ✅ | `POST` | `/api/files/:id/grants` | | `{ email, permission }` |
+| ✅ | `PATCH` | `/api/grants/:grantId` | | `{ permission }` |
+| ✅ | `DELETE` | `/api/grants/:grantId` | | Revoke |
+| ✅ | `GET` | `/api/files/:id/link` | | Current link or null |
+| ✅ | `PUT` | `/api/files/:id/link` | | `{ permission, expiresInDays }` |
+| ✅ | `DELETE` | `/api/files/:id/link` | | Revoke |
 
 Granting to an email that is not a user creates an invite, not a silent no-op. The
 response says which happened.

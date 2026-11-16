@@ -10,7 +10,7 @@ import {
   type DriveItem,
   type PermissionLevel,
 } from "@/lib/drive/types";
-import { NOT_CONNECTED_MESSAGE } from "@/lib/drive/repository";
+import { api } from "@/lib/drive/client";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +33,9 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
   const [error, setError] = React.useState<string | undefined>();
   const [pending, setPending] = React.useState(false);
   const [linkEnabled, setLinkEnabled] = React.useState(false);
+  // The URL the server returned, if a link has been created. Null until then —
+  // there is nothing to show before the backend has agreed one exists.
+  const [linkUrl, setLinkUrl] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
   const emailId = React.useId();
 
@@ -44,8 +47,36 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
       setPending(false);
       setCopied(false);
       setLinkEnabled(false);
+      setLinkUrl(null);
     }
   }, [item]);
+
+  const [grants, setGrants] = React.useState<
+    { id: string; email: string; permission: PermissionLevel }[]
+  >([]);
+
+  const loadGrants = React.useCallback(async (id: string) => {
+    const result = await api.get<{
+      grants: { id: string; email: string; permission: PermissionLevel }[];
+    }>(`/api/files/${id}/grants`);
+    // A failure here is not worth a toast: the dialog still works for adding
+    // access, and an empty list is the honest default.
+    setGrants(result.ok ? result.data.grants : []);
+  }, []);
+
+  React.useEffect(() => {
+    if (item) void loadGrants(item.id);
+  }, [item, loadGrants]);
+
+  const revokeGrant = async (grantId: string) => {
+    const result = await api.del(`/api/grants/${grantId}`);
+    if (!result.ok) {
+      toast({ tone: "error", title: "Access wasn't removed", description: result.message });
+      return;
+    }
+    setGrants((current) => current.filter((grant) => grant.id !== grantId));
+    toast({ tone: "success", title: "Access removed" });
+  };
 
   const open = Boolean(item);
   if (!item) return <Dialog open={false} onClose={onClose} title="Share" />;
@@ -70,27 +101,71 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
       return;
     }
     setPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const result = await api.post<{ email: string; permission: PermissionLevel }>(
+      `/api/files/${item.id}/grants`,
+      { email: email.trim().toLowerCase(), permission },
+    );
+
     setPending(false);
+
+    if (!result.ok) {
+      // An address with no account is a real, actionable answer — offer the link
+      // flow instead of leaving them stuck.
+      setError(result.message);
+      return;
+    }
+
+    setEmail("");
+    // Only claim an email was sent if the backend said the grant exists. Whether a
+    // notification was delivered is a separate fact and is not claimed here.
     toast({
-      tone: "error",
-      title: "Invite wasn't sent",
-      description: NOT_CONNECTED_MESSAGE,
+      tone: "success",
+      title: "Access granted",
+      description: `${result.data.email} can now ${
+        result.data.permission === "editor" ? "edit" : "view"
+      } this item.`,
     });
   };
 
   const copyLink = async () => {
-    // The link is only meaningful once a grant exists server-side. Copying a
-    // fake URL to the clipboard would be actively harmful, so this explains
-    // instead.
     setPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    // A link only exists once the server has created one. Copying a constructed URL
+    // to the clipboard would put a dead address in someone's message, so the URL
+    // comes from the response or nothing is copied.
+    const created = await api.put<{ url: string; enabled: boolean }>(
+      `/api/files/${item.id}/link`,
+      { permission },
+    );
+
+    if (!created.ok || !created.data.enabled) {
+      setPending(false);
+      toast({
+        tone: "error",
+        title: "Link wasn't created",
+        description: created.ok ? "That link isn't active." : created.message,
+      });
+      return;
+    }
+
+    const absolute = new URL(created.data.url, window.location.origin).toString();
+    setLinkUrl(absolute);
+
+    try {
+      await navigator.clipboard.writeText(absolute);
+      setCopied(true);
+    } catch {
+      // The clipboard API needs a secure context and permission. The link is on
+      // screen either way, so say so rather than pretending the copy worked.
+      toast({
+        tone: "error",
+        title: "Couldn't copy automatically",
+        description: "Select the link shown and copy it manually.",
+      });
+    }
+
     setPending(false);
-    toast({
-      tone: "error",
-      title: "No link to copy yet",
-      description: NOT_CONNECTED_MESSAGE,
-    });
   };
 
   return (
@@ -195,12 +270,36 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
           </li>
         </ul>
 
-        {/* No recipients exist yet, and saying so is more useful than a
-            spinner that never resolves. */}
-        <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--brand-canvas)] px-2.5 py-2 text-[11px] leading-relaxed text-text-muted">
-          <ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2} aria-hidden="true" />
-          No one else has access. Recipients appear here once an invite is accepted.
-        </p>
+        {grants.length === 0 ? (
+          <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--brand-canvas)] px-2.5 py-2 text-[11px] leading-relaxed text-text-muted">
+            <ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2} aria-hidden="true" />
+            No one else has access yet.
+          </p>
+        ) : (
+          <ul className="mt-2 space-y-1">
+            {grants.map((grant) => (
+              <li
+                key={grant.id}
+                className="flex items-center justify-between gap-2 rounded-lg px-1.5 py-1.5"
+              >
+                <span className="min-w-0 truncate text-[12px] text-ink">{grant.email}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="text-[10.5px] font-medium text-text-subtle">
+                    {PERMISSION_LABEL[grant.permission]}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void revokeGrant(grant.id)}
+                    aria-label={`Remove access for ${grant.email}`}
+                    className="flex h-6 w-6 items-center justify-center rounded text-text-subtle transition-colors hover:bg-[var(--brand-surface-muted)] hover:text-[#C93B2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <UserX className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Link sharing */}
@@ -230,6 +329,15 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
                     </option>
                   ))}
                 </select>
+                {linkUrl && (
+                  <input
+                    readOnly
+                    value={linkUrl}
+                    aria-label="Share link"
+                    onFocus={(event) => event.currentTarget.select()}
+                    className="h-7 w-full rounded-md border border-[var(--brand-border)] bg-[var(--brand-canvas)] px-1.5 font-mono text-[10.5px] text-text-muted focus:outline-none"
+                  />
+                )}
               </div>
             )}
           </div>

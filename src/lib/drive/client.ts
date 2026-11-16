@@ -77,6 +77,9 @@ export const api = {
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     request<T>(path, { method: "POST", body, signal }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body }),
+  // PUT is used where a call sets a resource to a known state (create-or-replace a
+  // share link) rather than partially updating it.
+  put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body }),
   del: <T>(path: string, body?: unknown) => request<T>(path, { method: "DELETE", body }),
 };
 
