@@ -19,10 +19,17 @@ import {
   Star,
   Trash2,
   Plus,
+  Building2,
+  Users,
+  ShieldCheck,
+  Activity,
 } from "lucide-react";
 import { CloudGlyph } from "@/components/brand/logo";
 import { NAV_GROUPS, type NavEntry } from "@/config/dashboard";
+import { BUSINESS_NAV_GROUPS, type BusinessNavEntry, type BusinessNavIcon } from "@/config/business";
 import { formatPercent } from "@/lib/drive/format";
+import { WorkspaceSwitcher } from "@/components/business/workspace-switcher";
+import type { BusinessRole } from "@/lib/business/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,20 +57,43 @@ const ICONS = {
   user: Settings,
 } as const;
 
+const BUSINESS_ICONS: Record<BusinessNavIcon, React.ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean }>> = {
+  building: Building2,
+  users: Users,
+  folder: Folder,
+  shield: ShieldCheck,
+  database: Database,
+  activity: Activity,
+  settings: Settings,
+};
+
 export function Sidebar({
   collapsed,
   onToggleCollapsed,
   onNewUpload,
   onNewFolder,
   usage,
+  workspace,
 }: {
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onNewUpload: () => void;
   onNewFolder: () => void;
   usage: { used: number; total: number; label: string } | null;
+  /**
+   * Which navigation to render. The shell derives the active workspace from
+   * the pathname, so this is a display decision only — but it is passed
+   * explicitly rather than re-derived here so the nav and the switcher can
+   * never disagree about which workspace is active.
+   */
+  workspace: {
+    kind: "personal" | "business";
+    organization: { name: string; shortName: string; initials: string } | null;
+    viewerRole: BusinessRole | null;
+  };
 }) {
   const pathname = usePathname();
+  const inBusiness = workspace.kind === "business";
 
   return (
     <div
@@ -89,6 +119,15 @@ export function Sidebar({
             <span className="text-[17px] font-bold tracking-[-0.02em] text-ink">Orindle</span>
           )}
         </Link>
+      </div>
+
+      {/* Workspace switcher — always visible, states the active context. */}
+      <div className={cn("shrink-0 pt-3", collapsed ? "px-2" : "px-3")}>
+        <WorkspaceSwitcher
+          collapsed={collapsed}
+          organization={workspace.organization}
+          viewerRole={workspace.viewerRole}
+        />
       </div>
 
       {/* Primary actions */}
@@ -128,13 +167,37 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav
-        aria-label="Dashboard"
+        aria-label={inBusiness ? "Organization" : "Dashboard"}
         className={cn(
           "mt-3 min-h-0 flex-1 overflow-y-auto pb-3",
           collapsed ? "px-2" : "px-3",
         )}
       >
-        {NAV_GROUPS.map((group) => (
+        {inBusiness
+          ? BUSINESS_NAV_GROUPS.map((group) => (
+              <div key={group.label} className="mb-4 last:mb-0">
+                {!collapsed ? (
+                  <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-text-subtle">
+                    {group.label}
+                  </p>
+                ) : (
+                  <div aria-hidden="true" className="mx-auto mb-1.5 h-px w-6 bg-[var(--brand-border-soft)]" />
+                )}
+                <ul className="space-y-0.5">
+                  {group.items.map((item) => (
+                    <li key={item.key}>
+                      <BusinessNavItem
+                        item={item}
+                        active={isActive(pathname, item.href)}
+                        collapsed={collapsed}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          : null}
+        {!inBusiness && NAV_GROUPS.map((group) => (
           <div key={group.label} className="mb-4 last:mb-0">
             {!collapsed ? (
               <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-text-subtle">
@@ -163,7 +226,7 @@ export function Sidebar({
       >
         {usage && !collapsed && (
           <Link
-            href="/dashboard/storage"
+            href={inBusiness ? "/dashboard/business/storage" : "/dashboard/storage"}
             className="group block rounded-xl border border-[var(--brand-border-soft)] bg-[var(--brand-canvas)] p-3 transition-colors hover:border-[var(--brand-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <div className="flex items-baseline justify-between">
@@ -261,3 +324,43 @@ function NavItem({ item, active, collapsed }: { item: NavEntry; active: boolean;
 }
 
 export { ICONS as NAV_ICONS };
+
+function BusinessNavItem({
+  item,
+  active,
+  collapsed,
+}: {
+  item: BusinessNavEntry;
+  active: boolean;
+  collapsed: boolean;
+}) {
+  const Icon = BUSINESS_ICONS[item.icon];
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      title={collapsed ? item.label : undefined}
+      className={cn(
+        "relative flex items-center rounded-lg text-[12.5px] font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        collapsed ? "h-9 w-9 justify-center" : "h-8 gap-2.5 px-2",
+        active
+          ? "bg-primary-soft text-primary-ink"
+          : "text-text hover:bg-[var(--brand-surface-muted)] hover:text-ink",
+      )}
+    >
+      {active && !collapsed && (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-primary"
+        />
+      )}
+      <Icon
+        className={cn("shrink-0", active ? "text-primary" : "text-text-subtle")}
+        strokeWidth={active ? 2.2 : 1.9}
+        aria-hidden
+      />
+      {!collapsed && <span className="truncate">{item.label}</span>}
+    </Link>
+  );
+}
