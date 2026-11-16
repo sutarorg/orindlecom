@@ -72,8 +72,8 @@ export async function POST(request: Request) {
     }
 
     const period = notes.period === "yearly" ? "yearly" : "monthly";
-    const candidateCurrency = (order?.currency ?? notes.currency ?? "INR").toUpperCase();
-    const currency = isSupportedCurrency(candidateCurrency) ? candidateCurrency : "INR";
+    const candidateCurrency = (order?.currency ?? notes.currency ?? "USD").toUpperCase();
+    const currency = isSupportedCurrency(candidateCurrency) ? candidateCurrency : "USD";
 
     await activateSubscription({
       userId: auth.actor.userId,

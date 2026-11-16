@@ -245,18 +245,21 @@ export const CURRENCIES: {
 ];
 
 /**
- * Region → default display currency. Applied when no manual override exists.
- * A stored subscriber's billing currency is never changed by this mapping;
- * it only chooses which currency a *new* visitor sees prices in.
+ * Region → currency mapping, resolved strictly from server-side geolocation
+ * headers (never user-selectable). Any country not listed here defaults to USD.
+ * An existing paid subscriber's billing currency stays fixed to the currency
+ * their subscription was created in.
  */
 export const REGION_CURRENCY: Record<string, CurrencyCode> = {
   IN: "INR",
   US: "USD",
-  GB: "GBP",
-  // Eurozone
+  // United Kingdom & Crown Dependencies
+  GB: "GBP", GG: "GBP", JE: "GBP", IM: "GBP",
+  // Eurozone (including Bulgaria from 2026) & Euro-using territories
   DE: "EUR", FR: "EUR", ES: "EUR", IT: "EUR", NL: "EUR", BE: "EUR", AT: "EUR",
   IE: "EUR", PT: "EUR", FI: "EUR", GR: "EUR", LU: "EUR", SK: "EUR", SI: "EUR",
-  EE: "EUR", LV: "EUR", LT: "EUR", CY: "EUR", MT: "EUR", HR: "EUR",
+  EE: "EUR", LV: "EUR", LT: "EUR", CY: "EUR", MT: "EUR", HR: "EUR", BG: "EUR",
+  AD: "EUR", MC: "EUR", SM: "EUR", VA: "EUR", ME: "EUR", XK: "EUR",
   AE: "AED",
   SG: "SGD",
   AU: "AUD",

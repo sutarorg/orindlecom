@@ -10,7 +10,7 @@ import {
   type CurrencyCode,
 } from "@/config/pricing";
 import { PlanCard } from "./plan-card";
-import { BillingToggle, CurrencyNotice, CurrencySelector } from "./pricing-controls";
+import { BillingToggle, CurrencyBadge, CurrencyNotice } from "./pricing-controls";
 import { SectionHeading } from "@/components/marketing/section-heading";
 import { cn } from "@/lib/utils";
 
@@ -18,27 +18,18 @@ import { cn } from "@/lib/utils";
  * Pricing block.
  *
  * Six storage tiers (10 GB Free through 5 TB Max) with Premium (1 TB)
- * highlighted as Most Popular, monthly and annual (20% off) billing, and all
- * eight supported currencies.
+ * highlighted as Most Popular, monthly and annual (20% off) billing, and
+ * automatic location-based currency (non-editable; defaults to USD for
+ * countries outside the 8 supported currency regions).
  */
 export function PricingSection({
-  initialCurrency = DEFAULT_CURRENCY,
-  showCurrencySelector = true,
+  currency = DEFAULT_CURRENCY,
   className,
 }: {
-  initialCurrency?: CurrencyCode;
-  showCurrencySelector?: boolean;
+  currency?: CurrencyCode;
   className?: string;
 }) {
   const [billing, setBilling] = React.useState<BillingPeriod>("monthly");
-  const [currency, setCurrency] = React.useState<CurrencyCode>(initialCurrency);
-
-  // Persist the visitor's choice so a reload keeps their region. A stored
-  // subscriber's billing currency is never rewritten by this.
-  const changeCurrency = (next: CurrencyCode) => {
-    setCurrency(next);
-    document.cookie = `orindle_currency=${next}; path=/; max-age=31536000; samesite=lax`;
-  };
 
   return (
     <section
@@ -55,9 +46,7 @@ export function PricingSection({
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
           <BillingToggle value={billing} onChange={setBilling} />
-          {showCurrencySelector && (
-            <CurrencySelector value={currency} onChange={changeCurrency} />
-          )}
+          <CurrencyBadge currency={currency} />
         </div>
 
         <CurrencyNotice currency={currency} />
@@ -77,9 +66,9 @@ export function PricingSection({
         </ul>
 
         <p className="mt-5 text-center text-[11.5px] leading-relaxed text-text-subtle">
-          Storage is shared across every device you sign in on. Prices shown in{" "}
-          {currencyMeta(currency).code} for {currencyMeta(currency).region}. Save 20% with annual
-          billing. No credit card required to start.
+          Storage is shared across every device you sign in on. Prices are shown automatically in{" "}
+          {currencyMeta(currency).code} based on your location ({currencyMeta(currency).region}).
+          Save 20% with annual billing. No credit card required to start.
         </p>
       </div>
     </section>

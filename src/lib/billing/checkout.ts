@@ -82,17 +82,17 @@ function loadScript(): Promise<boolean> {
   return scriptPromise;
 }
 
-import type { CurrencyCode } from "@/config/pricing";
-
 export interface StartCheckoutInput {
   planId: string;
   planName: string;
   period: "monthly" | "yearly";
-  currency: CurrencyCode;
 }
 
 /**
  * Run the whole flow. Resolves only when the server has confirmed the outcome.
+ * Currency is intentionally omitted from the request body: the server always
+ * determines the billing currency authoritatively from geolocation or the
+ * user's existing active subscription.
  */
 export async function startCheckout(input: StartCheckoutInput): Promise<CheckoutOutcome> {
   // 1. Server creates the order.
@@ -103,7 +103,6 @@ export async function startCheckout(input: StartCheckoutInput): Promise<Checkout
     body: JSON.stringify({
       planId: input.planId,
       period: input.period,
-      currency: input.currency,
     }),
   })
     .then(async (response) => {

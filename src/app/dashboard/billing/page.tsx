@@ -4,6 +4,8 @@ import { BillingView, type InvoiceRow } from "@/components/dashboard/billing-vie
 import { getDriveRepository } from "@/lib/drive/service";
 import { createSupabaseServerClient, isAuthConfigured } from "@/lib/auth/supabase/server";
 import { resolveActor } from "@/domain/auth/actor";
+import { isSupportedCurrency, type CurrencyCode } from "@/config/pricing";
+import { resolveRequestCurrency } from "@/lib/geo/currency";
 import type { Subscription } from "@/lib/drive/types";
 import { pageMetadata } from "@/lib/seo";
 
@@ -17,7 +19,10 @@ export const metadata: Metadata = pageMetadata({
 export const dynamic = "force-dynamic";
 
 export default async function BillingPage() {
-  const result = await getDriveRepository().subscription();
+  const [result, locationCurrency] = await Promise.all([
+    getDriveRepository().subscription(),
+    resolveRequestCurrency(),
+  ]);
 
   const subscription: Subscription = result.ok
     ? result.data
@@ -25,13 +30,24 @@ export default async function BillingPage() {
         planId: "free",
         planName: "Free",
         status: "none",
-        currency: "INR",
+        currency: locationCurrency,
         amount: 0,
         interval: "month",
         currentPeriodEnd: null,
         renewsAutomatically: false,
         cancelAtPeriodEnd: false,
       };
+
+  // Existing active/past_due paid subscribers stay locked to their subscription
+  // currency; everyone else sees prices strictly in their server-detected
+  // location currency (defaulting to USD for countries outside the 8 regions).
+  const hasLockedPaidSub =
+    subscription.planId !== "free" &&
+    (subscription.status === "active" || subscription.status === "past_due") &&
+    isSupportedCurrency(subscription.currency);
+  const currency: CurrencyCode = hasLockedPaidSub
+    ? (subscription.currency as CurrencyCode)
+    : locationCurrency;
 
   let invoices: InvoiceRow[] = [];
   if (isAuthConfigured()) {
@@ -49,7 +65,7 @@ export default async function BillingPage() {
         id: String(row.id),
         paymentId: String(row.provider_payment_id),
         amountMinor: Number(row.amount_minor ?? 0),
-        currency: String(row.currency ?? "INR"),
+        currency: String(row.currency ?? locationCurrency),
         status: String(row.status),
         paidAt: row.paid_at ? String(row.paid_at) : String(row.created_at),
       }));
@@ -63,7 +79,7 @@ export default async function BillingPage() {
         description="Your plan, what it costs, and how you pay for it."
         className="mb-4"
       />
-      <BillingView subscription={subscription} invoices={invoices} />
+      <BillingView subscription={subscription} currency={currency} invoices={invoices} />
     </div>
   );
 }

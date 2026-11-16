@@ -4,16 +4,11 @@ import { createServerClient } from "@supabase/ssr";
 /**
  * Request middleware.
  *
- * Two jobs, in this order:
- *
- *   1. **Refresh the session and gate the dashboard.** Previously this file only
- *      set a region cookie, which meant `/dashboard/**` rendered for an anonymous
- *      visitor with a placeholder identity. That was defensible while no real data
- *      existed; now that it does, an unauthenticated request must not reach it.
- *
- *   2. **Region detection for display currency.** Unchanged: this only chooses the
- *      currency a first-time visitor sees. It never rewrites a subscriber's
- *      billing currency, which is fixed at subscription time.
+ * Refreshes the Supabase session and gates private routes (`/dashboard/**`,
+ * `/admin/**`, `/account`) so unauthenticated or unverified requests cannot
+ * reach customer data. Pricing currency is resolved directly on the server from
+ * edge geolocation headers (see `src/lib/geo/currency.ts`), never from a
+ * client-writable cookie.
  *
  * The auth check is deliberately soft: with no Supabase credentials configured the
  * middleware does nothing, so the site still renders and every screen explains
@@ -166,21 +161,6 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(setup);
       }
     }
-  }
-
-  // ── Region detection for display currency ────────────────────────────────
-  const country =
-    request.headers.get("x-vercel-ip-country") ??
-    request.headers.get("cf-ipcountry") ??
-    request.headers.get("x-country-code");
-
-  if (country && !request.cookies.get("orindle_region")) {
-    response.cookies.set("orindle_region", country.toUpperCase(), {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      sameSite: "lax",
-      httpOnly: false,
-    });
   }
 
   return response;

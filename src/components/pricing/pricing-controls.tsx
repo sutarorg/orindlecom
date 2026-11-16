@@ -1,10 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Globe } from "lucide-react";
 import {
   ANNUAL_DISCOUNT_PCT,
-  CURRENCIES,
   currencyMeta,
   isCurrencyPublished,
   type BillingPeriod,
@@ -91,104 +90,34 @@ export function BillingToggle({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Currency selector                                                  */
+/*  Read-only location currency badge                                  */
 /* ------------------------------------------------------------------ */
 
-export function CurrencySelector({
-  value,
-  onChange,
+/**
+ * Displays the visitor's location-determined currency. Deliberately read-only:
+ * currency is derived automatically from the user's location and cannot be
+ * manually changed.
+ */
+export function CurrencyBadge({
+  currency,
   className,
 }: {
-  value: CurrencyCode;
-  onChange: (next: CurrencyCode) => void;
+  currency: CurrencyCode;
   className?: string;
 }) {
-  const [open, setOpen] = React.useState(false);
-  const rootRef = React.useRef<HTMLDivElement>(null);
-  const meta = currencyMeta(value);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
+  const meta = currencyMeta(currency);
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Display currency: ${meta.label}. Change currency`}
-        className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-white px-3 text-[11.5px] font-semibold leading-none text-ink transition-colors hover:bg-[var(--brand-surface-muted)]"
-      >
-        <span className="text-[12px] text-text-muted">{meta.symbol.trim()}</span>
-        <span>{meta.code}</span>
-        <ChevronDown
-          className={cn("h-3 w-3 text-text-subtle transition-transform", open && "rotate-180")}
-          strokeWidth={2.4}
-        />
-      </button>
-
-      {open && (
-        <ul
-          role="listbox"
-          aria-label="Display currency"
-          className="absolute right-0 z-40 mt-2 w-[248px] overflow-hidden rounded-[12px] border border-[var(--brand-border)] bg-white p-1 shadow-[var(--brand-shadow-lg)]"
-        >
-          {CURRENCIES.map((currency) => {
-            const selected = currency.code === value;
-            const published = isCurrencyPublished(currency.code);
-            return (
-              <li key={currency.code}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => {
-                    onChange(currency.code);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left transition-colors",
-                    selected ? "bg-primary-soft" : "hover:bg-[var(--brand-surface-muted)]",
-                  )}
-                >
-                  <span className="w-7 shrink-0 text-center text-[11px] font-medium text-text-muted">
-                    {currency.symbol.trim()}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[12px] font-semibold leading-tight text-ink">
-                      {currency.code}
-                      <span className="ml-1.5 font-normal text-text-subtle">
-                        {currency.region}
-                      </span>
-                    </span>
-                    {!published && (
-                      <span className="mt-0.5 block text-[10px] leading-tight text-text-subtle">
-                        Pricing being finalised
-                      </span>
-                    )}
-                  </span>
-                  {selected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+    <span
+      aria-label={`Prices shown in ${meta.label} (${meta.code}) based on your location`}
+      className={cn(
+        "inline-flex h-[34px] items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--brand-canvas)] px-3 text-[11.5px] font-semibold leading-none text-text-muted",
+        className,
       )}
-    </div>
+    >
+      <Globe className="h-3.5 w-3.5 text-text-subtle" strokeWidth={2} aria-hidden="true" />
+      <span className="text-ink">{meta.symbol.trim()}</span>
+      <span className="text-ink">{meta.code}</span>
+    </span>
   );
 }
 
