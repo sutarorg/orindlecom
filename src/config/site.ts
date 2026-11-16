@@ -33,22 +33,27 @@ export const FOOTER_NAV = [
     title: "Company",
     links: [
       { label: "About", href: "/about" },
-      { label: "Contact", href: "/contact" },
+      { label: "Business", href: "/business" },
     ],
   },
   {
     title: "Resources",
     links: [
-      { label: "Overview", href: "/features" },
+      { label: "Help centre", href: "/help" },
       { label: "FAQ", href: "/faq" },
       { label: "Security", href: "/security" },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {
     title: "Legal",
     links: [
+      { label: "All policies", href: "/legal" },
       { label: "Privacy", href: "/privacy" },
       { label: "Terms", href: "/terms" },
+      { label: "Cookies", href: "/cookies" },
+      { label: "Acceptable use", href: "/acceptable-use" },
+      { label: "Data deletion", href: "/data-deletion" },
     ],
   },
 ] as const;
