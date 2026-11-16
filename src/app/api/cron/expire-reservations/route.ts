@@ -11,7 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { authoriseCron } from "@/lib/cron/auth";
-import { getServiceClient } from "@/lib/supabase/service";
+import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +19,20 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const denied = authoriseCron(request);
   if (denied) return denied;
+
+  // A scheduled job with no database is not an error worth paging for: the
+  // deployment simply has no storage configured. Say so in a shape Vercel's cron
+  // log makes readable, rather than throwing into an opaque 500.
+  if (!isServiceConfigured()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "not_configured",
+        message: "Nothing to sweep: the database isn't connected on this deployment.",
+      },
+      { status: 200 },
+    );
+  }
 
   const supabase = getServiceClient();
   const now = new Date().toISOString();
@@ -47,13 +61,23 @@ export async function GET(request: Request) {
       .eq("id", reservation.upload_id)
       .in("status", ["initiated", "uploaded"]);
 
-    // A pending file row for an abandoned upload must not linger: it would be
-    // invisible to the customer and invisible to cleanup otherwise.
-    await supabase
-      .from("files")
-      .update({ status: "failed" })
-      .eq("owner_id", reservation.owner_id)
-      .eq("status", "pending");
+    // Mark the abandoned upload's OWN pending file as failed. This must be
+    // scoped by file_id: an earlier version filtered only on owner_id and
+    // status, which would have failed every pending file the customer had —
+    // including uploads running concurrently in another tab.
+    const { data: session } = await supabase
+      .from("upload_sessions")
+      .select("file_id")
+      .eq("id", reservation.upload_id)
+      .maybeSingle();
+
+    if (session?.file_id) {
+      await supabase
+        .from("files")
+        .update({ status: "failed" })
+        .eq("id", session.file_id)
+        .eq("status", "pending");
+    }
   }
 
   return NextResponse.json({

@@ -14,7 +14,7 @@
 
 import { NextResponse } from "next/server";
 import { authoriseCron } from "@/lib/cron/auth";
-import { getServiceClient } from "@/lib/supabase/service";
+import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
 import { headObject } from "@/lib/r2/client";
 
 export const runtime = "nodejs";
@@ -23,6 +23,17 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const denied = authoriseCron(request);
   if (denied) return denied;
+
+  if (!isServiceConfigured()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "not_configured",
+        message: "Nothing to do: the database isn't connected on this deployment.",
+      },
+      { status: 200 },
+    );
+  }
 
   const supabase = getServiceClient();
 

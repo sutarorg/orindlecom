@@ -11,7 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { authoriseCron } from "@/lib/cron/auth";
-import { getServiceClient } from "@/lib/supabase/service";
+import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
 import { deleteObject } from "@/lib/r2/client";
 
 export const runtime = "nodejs";
@@ -22,6 +22,17 @@ const DEFAULT_DAYS = 30;
 export async function GET(request: Request) {
   const denied = authoriseCron(request);
   if (denied) return denied;
+
+  if (!isServiceConfigured()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "not_configured",
+        message: "Nothing to do: the database isn't connected on this deployment.",
+      },
+      { status: 200 },
+    );
+  }
 
   const days = Number.parseInt(process.env.TRASH_RETENTION_DAYS ?? "", 10) || DEFAULT_DAYS;
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();

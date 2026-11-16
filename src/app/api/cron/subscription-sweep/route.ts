@@ -12,7 +12,7 @@
 
 import { NextResponse } from "next/server";
 import { authoriseCron } from "@/lib/cron/auth";
-import { getServiceClient } from "@/lib/supabase/service";
+import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +22,17 @@ const DEFAULT_RECOVERY_DAYS = 90;
 export async function GET(request: Request) {
   const denied = authoriseCron(request);
   if (denied) return denied;
+
+  if (!isServiceConfigured()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "not_configured",
+        message: "Nothing to do: the database isn't connected on this deployment.",
+      },
+      { status: 200 },
+    );
+  }
 
   const recoveryDays =
     Number.parseInt(process.env.RECOVERY_WINDOW_DAYS ?? "", 10) || DEFAULT_RECOVERY_DAYS;
