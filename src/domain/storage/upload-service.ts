@@ -126,9 +126,41 @@ export async function prepareUpload(
   });
 
   if (reserveError) {
-    if (reserveError.message?.includes("quota_exceeded")) {
+    const message = reserveError.message ?? "";
+
+    if (message.includes("quota_exceeded")) {
+      // A refusal is information, and a *repeated* refusal is a signal. Recording
+      // it here means the escalation happens without anyone reading a log.
+      await recordQuotaRefusal(actor.userId);
       throw new AppError("quota_exceeded", USER_MESSAGES.quota);
     }
+
+    // The two anti-abuse refusals added in 0014. Both are temporary by
+    // construction — a restriction always carries an expiry — and the message
+    // says so, because "try again later" is actionable while "forbidden" is not.
+    if (message.includes("abuse_restricted")) {
+      const restriction = await activeUploadRestriction(actor.userId);
+      const until = restriction.expiresAt
+        ? new Date(restriction.expiresAt).toLocaleString("en-US", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          })
+        : null;
+      throw new AppError(
+        "forbidden",
+        until
+          ? `Uploads are paused on this account until ${until} while we check some unusual activity. Your files are safe and still downloadable.`
+          : "Uploads are paused on this account for a short while. Your files are safe and still downloadable.",
+      );
+    }
+
+    if (message.includes("email_unverified")) {
+      throw new AppError(
+        "email_unverified",
+        "Confirm your email address before uploading — your 10 GB starts once it's verified.",
+      );
+    }
+
     throw new AppError("unknown", USER_MESSAGES.unknown);
   }
 
@@ -394,6 +426,31 @@ export async function cancelUpload(actor: Actor, taskId: string) {
 
   await failUpload(supabase, session, "cancelled");
   return null;
+}
+
+/**
+ * Record a quota refusal so repeated attempts escalate.
+ *
+ * Reads the client address from the *session's* request via the cookie-bound
+ * client rather than accepting one as an argument, because a caller-supplied IP
+ * would be a spoofable input into an enforcement decision.
+ */
+async function recordQuotaRefusal(userId: string): Promise<void> {
+  try {
+    const { recordQuotaViolation } = await import("@/lib/security/quota-guard");
+    await recordQuotaViolation(userId);
+  } catch {
+    // Never let bookkeeping turn a clean "too big" into an opaque failure.
+  }
+}
+
+async function activeUploadRestriction(userId: string) {
+  try {
+    const { activeUploadRestriction: read } = await import("@/lib/security/risk");
+    return await read(userId);
+  } catch {
+    return { restricted: false, expiresAt: null, reason: null };
+  }
 }
 
 /** The allowance for an actor, in bytes, on the current plan. */

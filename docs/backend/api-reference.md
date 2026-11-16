@@ -297,6 +297,32 @@ one implementation.
 
 ---
 
+## Account security (MFA)
+
+Optional TOTP two-factor authentication. Nothing here is required at signup, and
+there is no phone or SMS path anywhere in this section.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| ✅ | `GET /api/account/mfa` | Current assurance level and enrolled factors |
+| ✅ | `POST /api/account/mfa` | `{ action: "enroll" \| "verify" \| "challenge" }` |
+| ✅ | `DELETE /api/account/mfa` | Remove a factor, after reauthentication |
+
+`GET` returns `recoveryCodes: false` explicitly. Supabase's MFA API does not issue
+recovery codes, and the field exists so the UI cannot imply otherwise.
+
+`POST { action: "enroll" }` returns the QR and the Base32 secret **once**. The
+secret is never stored, never logged, and does not appear in any error path. A
+factor is reported as enabled only after `verify` succeeds, and that is confirmed
+against the provider's own factor list rather than assumed from a 200.
+
+`DELETE` requires either the account password or, for a passwordless (Google)
+account, an AAL2 session. A password confirmation lowers the session to AAL1, so
+removal completes only after the corresponding challenge — a stolen password alone
+cannot strip the second factor.
+
+---
+
 ## 13. Cron
 
 All cron routes require `Authorization: Bearer ${CRON_SECRET}`, compared in constant
@@ -315,6 +341,8 @@ schedule, not an intention.
 | ✅ | `/api/cron/reconcile-storage` | `0 3 * * *` | Report accounting drift; repairs nothing silently |
 | ✅ | `/api/cron/orphan-sweep` | `0 4 * * *` | Delete R2 objects with no row, after a 24-hour grace |
 | ✅ | `/api/cron/account-purge` | `0 5 * * *` | Permanently delete accounts past their 7-day grace period |
+| ✅ | `/api/cron/abuse-maintenance` | `*/10 * * * *` | Release expired restrictions, sweep orphaned blocks, prune risk data |
+| ✅ | `/api/cron/domain-intel` | `0 6 * * *` | Refresh disposable-domain intelligence; validate the retained baseline |
 
 Each returns `{ ok: true, data: { … } }` and is safe to invoke twice concurrently.
 When the database isn't connected on a deployment, a scheduled run returns `200` with

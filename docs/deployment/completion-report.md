@@ -14,15 +14,15 @@ lists successes is a marketing document, and this is not one.
 
 | | Count | Where |
 | --- | --- | --- |
-| Database migrations | 13 | `supabase/migrations/` |
+| Database migrations | 16 | `supabase/migrations/` |
 | Tables with RLS enabled | 20 | `0009_row_level_security.sql` |
 | API route handlers | 35 | `src/app/api/` |
 | Documented endpoints built | 24 | `docs/backend/api-reference.md` (marked ✅) |
 | Documented endpoints specified, not built | 41 | same file (marked ⬜) |
 | Cron jobs, all scheduled | 7 | `vercel.json` |
-| Automated tests | 186 | `npm test`, 14 files |
+| Automated tests | 265 | `npm test`, 14 files |
 | Tests against a real Postgres engine | 71 | `tests/db/` (PGlite) |
-| Documentation files | 30 | `docs/backend`, `docs/security`, `docs/deployment`, `docs/seo` |
+| Documentation files | 38 | `docs/backend`, `docs/security`, `docs/deployment`, `docs/seo` |
 
 ---
 
@@ -81,11 +81,11 @@ requirement is only partly met, the row says so.
 
 | Gate | Result |
 | --- | --- |
-| Visual regression, 44 routes × 5 widths | **220 shots, 0 with problems** — re-run after every backend change that touched a component, with console-error detection on, so the CSP is proven not to break the app |
+| Visual regression, 49 routes × 5 widths | **245 shots, 0 with problems** — re-run after every backend change that touched a component, with console-error detection on, so the CSP is proven not to break the app |
 | `tsc --noEmit` | clean |
-| `next build` | clean, 35 API routes |
+| `next build` | clean, 38 API routes |
 | `npm run lint` | **0 errors**, 40 warnings |
-| `npm test` | **186 passed, 14 files** |
+| `npm test` | **265 passed, 17 files** |
 | Live behaviour with no credentials | `/api/health` reports every subsystem `missing`; protected endpoints answer 503 `not_configured` with a sentence, never a fake success |
 
 The lint script is worth a note. It had never run: `next lint` was removed in Next 16
@@ -188,7 +188,7 @@ What that means concretely.
 cannot be bypassed by concurrency; a payment cannot activate a plan without a verified
 signature belonging to the caller; expiry and downgrade never delete a file; every
 scheduled job is registered and refuses to run without its secret; nothing in the UI
-reports success the server did not confirm; and 186 automated checks fail if any of
+reports success the server did not confirm; and 265 automated checks fail if any of
 that stops being true.
 
 **Not true today, and never claimed:** that this has served a real request, charged a
@@ -201,7 +201,7 @@ real card, or stored a real file in R2. It has not. The health endpoint says
 
 ```bash
 npm install
-npm test                 # 186 tests, 14 files
+npm test                 # 265 tests, 17 files
 npm run test:count       # rewrites .verify/test-counts.json from the runner's report
 npm run lint             # 0 errors
 npx tsc --noEmit         # clean

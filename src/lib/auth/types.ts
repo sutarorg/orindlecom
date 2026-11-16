@@ -37,6 +37,9 @@ export type AuthErrorCode =
   | "provider_disabled"
   | "network"
   | "invalid_input"
+  | "mfa_required"
+  | "mfa_invalid"
+  | "mfa_factor_missing"
   | "unknown";
 
 /** A failure carries a code for logic and a message for humans. */
@@ -60,6 +63,46 @@ export interface AuthUser {
   fullName: string | null;
   emailConfirmed: boolean;
   avatarUrl: string | null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Multi-factor authentication                                        */
+/*                                                                     */
+/*  Optional, TOTP only, never phone-based. These types describe what  */
+/*  the UI may know: which assurance level the session reached, and    */
+/*  which factors are enrolled. The raw shared secret is never part of */
+/*  any type that crosses this boundary — it exists in exactly one      */
+/*  place, the string Supabase returns once at enrolment, and the      */
+/*  component that renders the QR code consumes it and forgets it.     */
+/* ------------------------------------------------------------------ */
+
+/** Supabase's assurance levels: al1 is one factor, aal2 is two. */
+export type AssuranceLevel = "aal1" | "aal2";
+
+export interface MfaFactor {
+  id: string;
+  /** Only TOTP is issued by this product. Named so the UI can say so. */
+  type: "totp";
+  friendlyName: string | null;
+  status: "verified" | "unverified";
+  createdAt: string | null;
+}
+
+export interface MfaState {
+  /** The session's current level, from Supabase — never from a cookie. */
+  currentLevel: AssuranceLevel;
+  /** The level the account is capable of, given its enrolled factors. */
+  nextLevel: AssuranceLevel;
+  /** Verified factors only. An unverified factor grants nothing. */
+  factors: MfaFactor[];
+}
+
+export interface EnrollFactorResult {
+  factorId: string;
+  /** Otpauth URL, for a QR code. */
+  qrCode: string;
+  /** Base32 secret, for manual entry when scanning is impossible. */
+  secret: string;
 }
 
 export interface AuthSession {
@@ -139,6 +182,26 @@ export interface AuthService {
     provider: OAuthProvider,
     options: { redirectTo: string; next?: string },
   ): Promise<AuthResult<{ url: string }>>;
+
+  /* ── Multi-factor authentication ────────────────────────────────────────
+   * Optional, TOTP only. Every method resolves to a result; none throws.
+   */
+
+  /** The session's assurance level and the factors enrolled on the account. */
+  mfaState(): Promise<AuthResult<MfaState>>;
+
+  /** Begin TOTP enrolment. The returned secret is shown once and never stored. */
+  enrollTotp(friendlyName?: string): Promise<AuthResult<EnrollFactorResult>>;
+
+  /** Verify a code for a challenge or an enrolment. Activating a factor only
+   *  happens on a successful verify — never before. */
+  verifyTotp(factorId: string, code: string): Promise<AuthResult<null>>;
+
+  /** Remove a factor. The caller must have reauthenticated first. */
+  unenrollFactor(factorId: string): Promise<AuthResult<null>>;
+
+  /** The challenge id Supabase issued for an unverified factor, if any. */
+  pendingChallenge(factorId: string): Promise<AuthResult<{ challengeId: string }>>;
 }
 
 export type OAuthProvider = "google";

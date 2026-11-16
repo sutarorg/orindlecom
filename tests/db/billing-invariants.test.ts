@@ -14,6 +14,8 @@ let owner: string;
 beforeAll(async () => {
   db = await createTestDb();
   owner = await db.createUser("billing@example.com");
+  // Verified, because an unverified account has no allowance at all (0014).
+  await db.verifyUser(owner);
 }, 120_000);
 
 afterAll(async () => {
@@ -67,6 +69,7 @@ describe("scheduled downgrade", () => {
 describe("the allowance shrinks without touching files", () => {
   it("applying a downgrade leaves every file row intact", async () => {
     const user = await db.createUser("downgrade@example.com");
+    await db.verifyUser(user);
     await seedFiles(user, 3, 4_000_000_000);
 
     const before = await db.asService<{ count: string }>(
@@ -103,6 +106,7 @@ describe("the allowance shrinks without touching files", () => {
 
   it("blocks new uploads once over the smaller allowance, without deleting anything", async () => {
     const user = await db.createUser("overlimit@example.com");
+    await db.verifyUser(user);
 
     // 12 GB committed, which is what the account would be left holding after a
     // downgrade to Free (10 GB). storage_usage is the materialised figure the quota
@@ -136,6 +140,7 @@ describe("the allowance shrinks without touching files", () => {
 describe("expiry", () => {
   it("moves to expired and records a recovery window, deleting nothing", async () => {
     const user = await db.createUser("expiry@example.com");
+    await db.verifyUser(user);
     await seedFiles(user, 2, 1_000_000_000);
 
     await db.asService(
@@ -176,6 +181,7 @@ describe("expiry", () => {
 describe("account deletion", () => {
   it("a request marks the profile and removes nothing", async () => {
     const user = await db.createUser("delete-me@example.com");
+    await db.verifyUser(user);
     await db.asService(
       `insert into public.files (owner_id, name, status, size_bytes, storage_key, category)
        values ($1, 'keep.bin', 'available', 1000, $2, 'other')`,
@@ -197,6 +203,7 @@ describe("account deletion", () => {
 
   it("is not due until the grace period has elapsed", async () => {
     const user = await db.createUser("recent-request@example.com");
+    await db.verifyUser(user);
     await db.asService(
       `update public.profiles set deletion_requested_at = now() - interval '1 day' where id = $1`,
       [user],
@@ -210,6 +217,7 @@ describe("account deletion", () => {
 
   it("is due after the grace period", async () => {
     const user = await db.createUser("old-request@example.com");
+    await db.verifyUser(user);
     await db.asService(
       `update public.profiles set deletion_requested_at = now() - interval '8 days' where id = $1`,
       [user],
@@ -223,6 +231,7 @@ describe("account deletion", () => {
 
   it("is cancellable by clearing the timestamp, and disappears from the queue", async () => {
     const user = await db.createUser("cancel-request@example.com");
+    await db.verifyUser(user);
     await db.asService(
       `update public.profiles set deletion_requested_at = now() - interval '30 days' where id = $1`,
       [user],
@@ -239,6 +248,7 @@ describe("account deletion", () => {
 
   it("is not once the purge has started, so a retry is not double-counted", async () => {
     const user = await db.createUser("purging@example.com");
+    await db.verifyUser(user);
     await db.asService(
       `update public.profiles
          set deletion_requested_at = now() - interval '10 days',

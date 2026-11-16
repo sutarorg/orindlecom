@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/drive/client";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
+import { TwoFactorPanel } from "@/components/security/two-factor-panel";
 
 /**
  * Settings.
@@ -250,15 +251,7 @@ function SecuritySection({
               Change
             </button>
           </li>
-          <li className="flex items-center justify-between gap-3 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-[12.5px] font-medium text-ink">Two-factor authentication</p>
-              <p className="text-[10.5px] text-text-subtle">Not available yet</p>
-            </div>
-            <span className="shrink-0 rounded-full bg-[var(--brand-surface-muted)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-text-subtle">
-              Planned
-            </span>
-          </li>
+          <TwoFactorPanel authenticated={authenticated} />
           <li className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
               <p className="text-[12.5px] font-medium text-ink">Active sessions</p>

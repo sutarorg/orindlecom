@@ -31,11 +31,47 @@ Legend: ✅ verified in this repo · 🟡 designed, not implemented · ⬜ open 
 | ✅ | Auth forms validate server-side as well as client-side | done |
 | ✅ | OAuth provider button shown only when the provider is enabled | done |
 | ✅ | Auth degrades honestly with no credentials (`not_configured`) | done |
-| 🟡 | Middleware refreshes session and gates `/dashboard/**` | designed |
-| 🟡 | `/api/**` returns 401 JSON, not a redirect | designed |
-| 🟡 | Email change and account deletion require the current password | designed |
-| ⬜ | Step-up MFA for destructive actions | open, accepted risk |
-| ⬜ | Session revocation on password change, all devices | open |
+| ✅ | Middleware refreshes session and gates `/dashboard/**` | built; `middleware-policy.test.ts` |
+| ✅ | `/api/**` returns 401 JSON, not a redirect | built |
+| ✅ | Email change and account deletion require the current password | built |
+| ✅ | Optional TOTP 2FA, AAL2 enforced server-side on protected operations | built; `auth-security-flow.test.ts` |
+| ✅ | MFA removal requires password **and** AAL2 | built; two-step by design |
+| ✅ | Set Password onboarding gate for Google accounts | built; database flag + middleware |
+| ⬜ | Step-up MFA for **billing** and **account deletion** specifically | open, accepted risk — 2FA exists, but these two flows do not yet demand AAL2 |
+| ⬜ | Session revocation on password change, all devices | open — delegated to Supabase, unverified |
+
+## 2b. Anti-abuse and free-plan protection
+
+Detail: `anti-abuse-system.md`. Every row here is enforced in the database where it
+matters, because application-level checks can be forgotten by one route.
+
+| | Item | State |
+| --- | --- | --- |
+| ✅ | Unverified address has **zero** storage allowance | `effective_plan_bytes()` returns 0; `anti-abuse.test.ts` |
+| ✅ | `reserve_storage()` refuses an unverified account and a restricted one | built; two new raises in 0014 |
+| ✅ | Turnstile verified server-side via Siteverify | built; fails closed when Cloudflare is unreachable |
+| ✅ | Turnstile tokens are single-use, including across a lost response | `turnstile_tokens` table |
+| ✅ | Disposable domains refused before an account exists | `email_domain_risk`, 49 seeded domains |
+| ✅ | Unclassified domains treated as **no signal**, never as suspicious | `classify_email_domain()` returns null |
+| ✅ | Risk scored from signals with a reasons array naming each factor | `score_signup()`, pure function of its inputs |
+| ✅ | Enforcement is proportionate and **always expires** | `account_restrictions.expires_at`, no permanent column |
+| ✅ | Automatic release without a human | `release_expired_restrictions()`, every 10 minutes |
+| ✅ | Enforcement never deletes user data | no delete branch exists; asserted in `security.test.ts` |
+| ✅ | Client IP resolved from trusted headers only, never the first XFF entry | `ip.ts`; 5 tests including the spoofing case |
+| ✅ | IP and device values hashed with a server-side salt | `ABUSE_HASH_SALT` |
+| ✅ | Device identifier is a random cookie, not a fingerprint | no canvas/font/UA enumeration anywhere |
+| ✅ | No admin dashboard, review queue or approval table | asserted in `auth-security-flow.test.ts` |
+| ✅ | Risk tables unreadable by any user, including the subject | 0015 grants SELECT but no policy; deny-all |
+| ✅ | Repeated quota refusals escalate after the third in an hour | `record_quota_violation()` |
+| ⬜ | Turnstile integration exercised against live Cloudflare | **not verified** — no keys configured |
+| ⬜ | Domain feed against a real external list | **not verified** — no `DOMAIN_INTEL_URL` set |
+| ⬜ | Behaviour on a real multi-instance Postgres | **not verified** — PGlite serialises on one connection |
+
+### What the six layers genuinely do not stop
+
+One determined person with several real email addresses and rotating IPs gets several
+accounts. That is stated in §11 and in `anti-abuse-system.md` §1, and no claim anywhere
+in this project contradicts it.
 
 ## 3. Authorization
 
@@ -150,20 +186,22 @@ Legend: ✅ verified in this repo · 🟡 designed, not implemented · ⬜ open 
 
 **Verified today:** secret hygiene in the repo, the contact form's honest failure
 behaviour, absence of fake success anywhere in the UI, the visual/a11y gate, the
-approved price list, RLS across 20 tables (50 database tests), the upload quota
-functions under concurrency, signature verification including replay and tampered
-bodies, cron authorisation, security headers on a live response, and rate limiting
-against the real Postgres engine.
+approved price list, RLS across 27 tables, the upload quota functions under
+concurrency, signature verification including replay and tampered bodies, cron
+authorisation, security headers on a live response, rate limiting against the real
+Postgres engine, and the anti-abuse layer's database behaviour (28 tests: banding,
+escalation, expiry, idempotent release, verified-email entitlement).
 
-**Built and tested:** the backend the previous revision of this document correctly
-described as unbuilt — RLS policies with negative tests, the 13-step upload flow with
-transactional reservations, storage accounting with reconciliation, Razorpay order
-and webhook verification with idempotent activation, six Vercel cron jobs, Resend
-templates with retry, and 186 tests across 14 files.
+**Built and tested:** the backend — RLS policies with negative tests, the 13-step upload
+flow with transactional reservations, storage accounting with reconciliation, Razorpay
+order and webhook verification with idempotent activation, nine Vercel cron jobs, Resend
+templates with retry, Google OAuth with Set Password onboarding, optional TOTP 2FA, and
+265 tests across 17 files.
 
 **Open and named:**
 
-- **MFA step-up** for billing and account deletion. Not built.
+- **MFA step-up** for billing and account deletion specifically. 2FA itself is built
+  and enforced at sign-in; these two destructive flows do not additionally demand AAL2.
 - **Malware scanning.** An integration point only — `MALWARE_SCAN_ENABLED` is false,
   and a file needing a scan stays `quarantined` with its reservation held.
 - **Merchant-account capability.** `BILLING_CAPABILITIES` defaults both international

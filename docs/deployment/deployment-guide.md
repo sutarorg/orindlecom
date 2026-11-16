@@ -51,7 +51,7 @@ Vercel dashboard, never in the repository.
 
 ### 3.1 First production deploy checklist
 
-1. Production Supabase project created; all thirteen migrations applied in filename
+1. Production Supabase project created; all sixteen migrations applied in filename
    order (`supabase db push`, or the reviewed SQL — `database-schema.md` §11). The
    order is load-bearing: 0001 defines the helper functions every later policy uses.
 2. RLS verified: enable and policies applied table by table in the same migration.
@@ -60,7 +60,7 @@ Vercel dashboard, never in the repository.
 4. Razorpay live keys set; webhook endpoint registered with the live secret.
 5. Resend domain verified; `RESEND_FROM_ADDRESS` points at it.
 6. `NEXT_PUBLIC_SITE_URL` is the production origin (metadata, sitemap, canonical URLs).
-7. `CRON_SECRET` set. The seven jobs are declared in `vercel.json`, so they register
+7. `CRON_SECRET` set. The nine jobs are declared in `vercel.json`, so they register
    themselves on deploy — but confirm on the Vercel dashboard that all seven appear,
    because a job that fails to register looks identical to one that runs.
 8. Health endpoint reports no `mismatch`. It reads configuration presence only and
@@ -112,7 +112,7 @@ LD_LIBRARY_PATH=$PWD/.verify/lib node scripts/visual-gate/capture.mjs \
   --base https://<deployment-host> --out /tmp/shots
 ```
 
-It must report `0 with problems` across all 44 routes × 5 widths. This catches
+It must report `0 with problems` across all 49 routes × 5 widths. This catches
 environment-specific breakage — a missing env var that changes rendering, a canonical
 URL pointing at localhost, a cookie that does not survive the real domain.
 

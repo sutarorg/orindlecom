@@ -62,6 +62,15 @@ describe("row level security", () => {
     "rate_limits", // counters; a client that could read these could infer traffic
     "support_requests", // contains other people's messages
     "webhook_events", // provider payloads, including payment metadata
+    // Anti-abuse internals (0015). A client that could read its own risk score
+    // could also learn exactly how to stay under the threshold, so these are
+    // server-only by design rather than merely unreadable.
+    "abuse_policy",
+    "email_domain_risk",
+    "device_signups",
+    "risk_events",
+    "account_restrictions",
+    "turnstile_tokens", // single-use token claims; a client that could write here could pre-claim tokens
   ]);
 
   it("every table with RLS has at least one policy, unless deny-all is the design", async () => {

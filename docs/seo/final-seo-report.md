@@ -15,11 +15,11 @@ Run from a clean `npm install`:
 
 ```
 npx tsc --noEmit                                  clean
-npm run lint                                      0 errors, 42 warnings (pre-existing)
-npx next build                                    clean, 26 pages + 35 API routes
-npx vitest run                                    181 passed, 14 files
+npm run lint                                      0 errors, 48 warnings (pre-existing)
+npx next build                                    clean, 26 pages + 38 API routes
+npx vitest run                                    265 passed, 17 files
 node scripts/seo-audit.mjs --base :4100           26 public routes, 0 problems
-visual gate                                       47 routes × 5 widths, 235 shots, 0 problems
+visual gate                                       49 routes × 5 widths, 245 shots, 0 problems
 ```
 
 The SEO audit is the new gate. It fetches every public route and checks the rendered
@@ -119,7 +119,7 @@ writing "Google now gives 5 GB", which would be false.
 | Private routes | 3 layers: robots.txt + noindex + middleware/RLS |
 | Structured data | WebSite, Organization, BlogPosting, BreadcrumbList — all valid |
 | Icons | 6 files, genuinely the site's own glyph |
-| Mobile | 47 routes × 5 widths, 0 defects |
+| Mobile | 49 routes × 5 widths, 0 defects |
 
 Full detail in `technical-seo-audit.md`.
 

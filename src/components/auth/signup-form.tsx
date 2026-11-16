@@ -18,6 +18,7 @@ import { TextInput } from "./text-input";
 import { PasswordInput } from "./password-input";
 import { PasswordStrength } from "./password-strength";
 import { SubmitButton } from "./submit-button";
+import { TurnstileWidget, isTurnstileEnabled } from "@/components/security/turnstile-widget";
 
 /**
  * Signup form.
@@ -35,6 +36,27 @@ export function SignupForm({ plan }: { plan?: string }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
+
+  // Turnstile. The token is held in a hidden input rather than an uncontrolled
+  // widget, so the server action receives it with the rest of the form. `resetKey`
+  // bumps after a failed submit: a Turnstile token is single-use, so retrying with
+  // the previous one would always fail.
+  const turnstile = isTurnstileEnabled();
+  const [turnstileToken, setTurnstileToken] = React.useState<string | null>(null);
+  const [resetKey, setResetKey] = React.useState(0);
+
+  React.useEffect(() => {
+    if (state.status !== "error") return;
+    // Any server-side rejection invalidates the token we sent.
+    if (turnstile) {
+      setTurnstileToken(null);
+      setResetKey((value) => value + 1);
+    }
+  }, [state, turnstile]);
+
+  // The challenge is a hard gate when configured: submitting without a token
+  // would always be rejected server-side, so the button says why instead.
+  const blockedOnChallenge = turnstile && !turnstileToken;
 
   const fieldError = (field: AuthField) => errors[field] ?? state.fieldErrors?.[field];
 
@@ -181,7 +203,24 @@ export function SignupForm({ plan }: { plan?: string }) {
         }
       />
 
-      <SubmitButton pending={pending} pendingLabel="Creating account…" className="mt-1">
+      {turnstile && (
+        <div>
+          <input type="hidden" name="turnstileToken" value={turnstileToken ?? ""} />
+          <TurnstileWidget onToken={setTurnstileToken} resetKey={resetKey} />
+          {state.fieldErrors?.token && (
+            <p role="alert" className="mt-1 text-[11px] font-medium text-[#C93B2B]">
+              {state.fieldErrors.token}
+            </p>
+          )}
+        </div>
+      )}
+
+      <SubmitButton
+        pending={pending}
+        pendingLabel="Creating account…"
+        className="mt-1"
+        disabled={blockedOnChallenge}
+      >
         Create account
       </SubmitButton>
 

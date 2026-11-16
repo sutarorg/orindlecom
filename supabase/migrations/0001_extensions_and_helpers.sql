@@ -29,6 +29,26 @@ begin
       email text unique,
       email_confirmed_at timestamptz,
       raw_user_meta_data jsonb not null default '{}'::jsonb,
+      -- 0014 reads this to learn which provider created the account. Supabase
+      -- populates it with {"provider": "google"} for an OAuth signup.
+      raw_app_meta_data jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    );
+  end if;
+end $do$;
+
+-- Minimal auth.identities stand-in. 0014's signup trigger reads the provider from
+-- here, which is where Supabase actually records it (one row per linked
+-- identity). Kept to the columns we read.
+do $do$
+begin
+  if not exists (select 1 from information_schema.tables
+                 where table_schema = 'auth' and table_name = 'identities') then
+    create table auth.identities (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references auth.users(id) on delete cascade,
+      provider text not null,
+      provider_id text,
       created_at timestamptz not null default now()
     );
   end if;
@@ -93,9 +113,11 @@ grant usage on schema auth to anon, authenticated, service_role;
 -- the stand-in must too, or a legitimate insert fails with "permission denied
 -- for table users" and looks like a policy bug.
 grant references on auth.users to anon, authenticated, service_role;
--- Test/fixture creation only. In Supabase, auth.users is written by the auth
--- service; in a bare database the harness needs to create accounts itself.
-grant select, insert on auth.users to service_role;
+-- Fixture creation only. In Supabase, auth.users is written by the auth service;
+-- in a bare database the harness needs to create accounts and, for the
+-- verification tests, confirm their addresses. Production code never writes here.
+grant select, insert, update on auth.users to service_role;
+grant select on auth.users to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- updated_at trigger helper. Every mutable table uses this rather than

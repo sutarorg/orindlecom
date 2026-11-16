@@ -269,6 +269,143 @@ export function createSupabaseAuthService(): AuthService {
       }
     },
 
+    /* ── Multi-factor authentication ────────────────────────────────────── */
+
+    async mfaState() {
+      if (!configured) return failure("not_configured", NOT_CONFIGURED_MESSAGE);
+      try {
+        const supabase = await client();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+        if (userError || !user) {
+          return failure("session_missing", "Sign in again to manage two-factor authentication.");
+        }
+
+        // `getAuthenticatorAssuranceLevel` reads the level from the *token*, not
+        // from anything the client sent, which is why the redirect decision can
+        // rely on it.
+        const { data: aal, error: aalError } =
+          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalError) return mapProviderError(aalError);
+
+        const { data: factorData, error: factorError } = await supabase.auth.mfa.listFactors();
+        if (factorError) return mapProviderError(factorError);
+
+        const totp = (factorData?.totp ?? []) as Array<{
+          id: string;
+          friendly_name?: string | null;
+          status: string;
+          created_at?: string | null;
+        }>;
+
+        return {
+          ok: true,
+          data: {
+            currentLevel: (aal?.currentLevel as "aal1" | "aal2" | null) ?? "aal1",
+            nextLevel: (aal?.nextLevel as "aal1" | "aal2" | null) ?? "aal1",
+            factors: totp.map((factor) => ({
+              id: factor.id,
+              type: "totp" as const,
+              friendlyName: factor.friendly_name ?? null,
+              status: factor.status === "verified" ? ("verified" as const) : ("unverified" as const),
+              createdAt: factor.created_at ?? null,
+            })),
+          },
+        };
+      } catch (error) {
+        return mapProviderError({ message: String(error) });
+      }
+    },
+
+    async enrollTotp(friendlyName?: string) {
+      if (!configured) return failure("not_configured", NOT_CONFIGURED_MESSAGE);
+      try {
+        const supabase = await client();
+        const { data, error } = await supabase.auth.mfa.enroll({
+          factorType: "totp",
+          friendlyName: friendlyName?.slice(0, 40) || `Authenticator ${new Date().toISOString().slice(0, 10)}`,
+        });
+        if (error) return mapProviderError(error);
+        if (!data?.id || !data.totp?.qr_code || !data.totp.secret) {
+          return failure("unknown", "The authenticator setup didn't return a secret. Try again.");
+        }
+
+        // Note what is deliberately NOT done here: the secret is not logged, not
+        // stored, and not returned by any endpoint that could be replayed. It is
+        // handed to the component that renders it and nowhere else.
+        return {
+          ok: true,
+          data: { factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret },
+        };
+      } catch (error) {
+        return mapProviderError({ message: String(error) });
+      }
+    },
+
+    async verifyTotp(factorId: string, code: string) {
+      if (!configured) return failure("not_configured", NOT_CONFIGURED_MESSAGE);
+      const trimmed = code.replace(/\s+/g, "");
+      if (!/^\d{6}$/.test(trimmed)) {
+        return failure("mfa_invalid", "Enter the six-digit code from your authenticator app.");
+      }
+      try {
+        const supabase = await client();
+
+        // challenge() creates a challenge for the *existing* factor; for an
+        // enrolment that has not been verified yet, Supabase treats the factor id
+        // the same way, so one path serves both.
+        const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+          factorId,
+        });
+        if (challengeError) return mapProviderError(challengeError);
+        if (!challenge?.id) {
+          return failure("mfa_invalid", "Couldn't start the verification. Try again.");
+        }
+
+        const { error: verifyError } = await supabase.auth.mfa.verify({
+          factorId,
+          challengeId: challenge.id,
+          code: trimmed,
+        });
+        if (verifyError) {
+          // A wrong code is an expected miss, not a system failure; the copy says
+          // so and the caller may retry within its rate limit.
+          return failure("mfa_invalid", "That code didn't match. Check the app and try the next one.");
+        }
+
+        return { ok: true, data: null };
+      } catch (error) {
+        return mapProviderError({ message: String(error) });
+      }
+    },
+
+    async unenrollFactor(factorId: string) {
+      if (!configured) return failure("not_configured", NOT_CONFIGURED_MESSAGE);
+      try {
+        const supabase = await client();
+        const { error } = await supabase.auth.mfa.unenroll({ factorId });
+        if (error) return mapProviderError(error);
+        return { ok: true, data: null };
+      } catch (error) {
+        return mapProviderError({ message: String(error) });
+      }
+    },
+
+    async pendingChallenge(factorId: string) {
+      if (!configured) return failure("not_configured", NOT_CONFIGURED_MESSAGE);
+      try {
+        const supabase = await client();
+        const { data, error } = await supabase.auth.mfa.challenge({ factorId });
+        if (error) return mapProviderError(error);
+        if (!data?.id) return failure("mfa_invalid", "Couldn't start the verification. Try again.");
+        return { ok: true, data: { challengeId: data.id } };
+      } catch (error) {
+        return mapProviderError({ message: String(error) });
+      }
+    },
+
     async startOAuth(provider: OAuthProvider, options: { redirectTo: string; next?: string }) {
       if (!configured) return failure("not_configured", NOT_CONFIGURED_MESSAGE);
       if (!ENABLED_PROVIDERS.includes(provider)) {

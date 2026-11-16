@@ -48,6 +48,11 @@ const ROUTES = [
   ["blog", "/blog"],
   ["blog-article", "/blog/best-google-drive-alternatives"],
   ["blog-article-long", "/blog/how-to-move-files-from-google-drive"],
+  // New auth surfaces. These redirect without a session, so the gate captures the
+  // login screen they land on — which is the correct thing to check: the redirect
+  // must not strand a visitor on an unstyled or broken page.
+  ["auth-set-password", "/auth/set-password"],
+  ["auth-mfa", "/auth/mfa"],
   ["login", "/login"],
   ["signup", "/signup"],
   ["sign-in", "/sign-in"],

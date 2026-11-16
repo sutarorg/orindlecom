@@ -217,10 +217,10 @@ Core Web Vitals require traffic and are measured in Search Console once deployed
 | CSP | Inline styles allowed for Tailwind; no `unsafe-eval` |
 
 Mobile-first is satisfied structurally rather than by assertion: the visual gate renders
-all 47 routes at five widths — 235 captures — and fails on horizontal overflow, console
+all 49 routes at five widths — 245 captures — and fails on horizontal overflow, console
 errors, page errors or touch targets below 24 px.
 
-**235 shots, 0 problems** on the final build. Two defects were found and fixed by this
+**245 shots, 0 problems** on the final build. Three defects were found and fixed by this
 gate when the blog routes were added: breadcrumb links on the article page were 15 px
 tall and source citation links were 23 px, both below the WCAG 2.5.8 minimum of 24 px at
 390 px wide. Both now carry `min-h-[24px]` and an inline-flex box.

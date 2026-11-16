@@ -207,7 +207,7 @@ Every previous phase reported browser-automation screenshots as outstanding. Tha
 gap is closed at commit `e4f6855`.
 
 The binary ships brotli-compressed inside `@sparticuz/chromium`. `scripts/visual-gate/prep-chromium.py`
-decompresses it; `scripts/visual-gate/capture.mjs` renders **44 routes × 5 widths =
+decompresses it; `scripts/visual-gate/capture.mjs` renders **49 routes × 5 widths =
 220 full-page captures**, asserting HTTP status, console errors, page errors,
 horizontal document overflow, and WCAG 2.5.8 pointer-target size. It exits non-zero
 on any defect, so it is a gate, not a report.

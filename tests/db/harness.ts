@@ -26,8 +26,10 @@ export interface TestDb {
   ): Promise<T[]>;
   /** Run a statement as an anonymous visitor. RLS applies. */
   asAnon<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
-  /** Create a user row; returns the id. */
+  /** Create a user row; returns the id. Unverified, like a fresh signup. */
   createUser(email: string): Promise<string>;
+  /** Mark a user's address verified, which is what grants the Free allowance. */
+  verifyUser(userId: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -78,6 +80,14 @@ export async function createTestDb(): Promise<TestDb> {
         [email],
       );
       return rows[0].id;
+    },
+    async verifyUser(userId: string) {
+      await runAs(
+        "service_role",
+        null,
+        `update auth.users set email_confirmed_at = now() where id = $1`,
+        [userId],
+      );
     },
     close: () => db.close(),
   };
