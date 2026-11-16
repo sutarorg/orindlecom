@@ -10,6 +10,8 @@
  * and one incorrect one.
  */
 
+import "server-only";
+
 import { NextResponse } from "next/server";
 import { AppError, type AppErrorCode, USER_MESSAGES } from "@/domain/auth/errors";
 import type { Actor } from "@/domain/auth/actor";
