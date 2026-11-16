@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronDown, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
+import { api } from "@/lib/drive/client";
 import { formatBytes } from "@/lib/drive/format";
 import { UPLOAD_LIMITS, type UploadStatus, type UploadTask } from "@/lib/drive/types";
 import { cn } from "@/lib/utils";
@@ -10,24 +12,44 @@ import { cn } from "@/lib/utils";
 /**
  * Upload manager.
  *
- * The state machine here is the frontend half of a signed direct-to-R2 flow.
- * What it deliberately does NOT do: pretend an upload finished. A task reaches
- * `complete` only when `completeUpload()` resolves — with no storage connected
- * that call fails, and the tray shows the failure with a retry. The progress
- * bar therefore never fills to 100% on its own.
+ * Implements the browser half of Orindle's signed direct-to-R2 pipeline:
+ *   1. POST /api/uploads/prepare — validates name, reserves quota in Postgres,
+ *      and returns either a single presigned PUT URL or multipart part URLs.
+ *   2. Direct browser -> R2 XHR PUT(s) with real byte-level upload progress.
+ *   3. POST /api/uploads/:taskId/complete — verifies object size via HeadObject
+ *      and commits the file metadata and storage accounting.
  *
- * See `docs/dashboard/upload-state-flow.md` for the full protocol.
+ * There is no artificial per-file size limit — only the account's available
+ * storage quota applies (enforced transactionally on the server).
  */
 
 interface UploadContextValue {
   tasks: UploadTask[];
-  addFiles: (files: File[]) => void;
+  addFiles: (files: File[], parentId?: string | null) => void;
   cancel: (id: string) => void;
   retry: (id: string) => void;
   dismiss: (id: string) => void;
   /** Aggregate for the header button. */
   activeCount: number;
 }
+
+interface InternalTask extends UploadTask {
+  parentId: string | null;
+  serverTaskId?: string;
+}
+
+interface PrepareResponse {
+  taskId: string;
+  fileId: string;
+  multipart: boolean;
+  uploadUrl?: string;
+  uploadId?: string;
+  partUrls?: { partNumber: number; url: string }[];
+  partSize?: number;
+  expiresAt: string;
+}
+
+const MULTIPART_CONCURRENCY = 3;
 
 const UploadContext = React.createContext<UploadContextValue | null>(null);
 
@@ -39,49 +61,232 @@ export function useUploadManager() {
 
 let counter = 0;
 
-export function UploadManagerProvider({ children }: { children: React.ReactNode }) {
-  const [tasks, setTasks] = React.useState<UploadTask[]>([]);
-  const { toast } = useToast();
+function putWithProgress(
+  url: string,
+  body: Blob,
+  contentType: string | null,
+  onProgress: (loaded: number) => void,
+  registerXhr: (xhr: XMLHttpRequest) => void,
+): Promise<{ etag: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    registerXhr(xhr);
 
-  /**
-   * Simulated transfer progress.
-   *
-   * This is the one place a fake number appears, and it is deliberate: the
-   * bytes really are being read locally while we wait for a storage backend
-   * that isn't there. It stops short of 100 and then fails, because claiming
-   * completion would be the lie. When the backend lands, this timer is replaced
-   * by real XHR progress events and nothing else in the UI changes.
-   */
-  const advance = React.useCallback((id: string, fileSize: number) => {
-    const timer = setInterval(() => {
-      setTasks((current) =>
-        current.map((task) => {
-          if (task.id !== id || task.status !== "uploading") return task;
-          // Larger files move proportionally faster so the bar feels honest
-          // rather than arbitrarily slow on a big file.
-          const step = Math.max(1.5, Math.min(9, 60_000_000 / Math.max(fileSize, 1)));
-          const next = Math.min(96, task.progress + step);
-          return {
-            ...task,
-            progress: next,
-            transferred: Math.round((next / 100) * task.file.size),
-          };
-        }),
-      );
-    }, 220);
-    return () => clearInterval(timer);
+    xhr.open("PUT", url, true);
+    if (contentType) {
+      xhr.setRequestHeader("Content-Type", contentType);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(event.loaded);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const rawEtag = xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "";
+        resolve({ etag: rawEtag.replace(/^"|"$/g, "") });
+      } else {
+        reject(new Error(`Storage rejected the upload (${xhr.status}).`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error while uploading directly to storage."));
+    xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
+
+    xhr.send(body);
+  });
+}
+
+export function UploadManagerProvider({ children }: { children: React.ReactNode }) {
+  const [tasks, setTasks] = React.useState<InternalTask[]>([]);
+  const { toast } = useToast();
+  const router = useRouter();
+
+  // Track active XHR handles & cancelled task IDs so cancel aborts in-flight bytes immediately.
+  const xhrsRef = React.useRef<Map<string, Set<XMLHttpRequest>>>(new Map());
+  const cancelledRef = React.useRef<Set<string>>(new Set());
+
+  const updateTask = React.useCallback((id: string, patch: Partial<InternalTask>) => {
+    setTasks((current) => current.map((task) => (task.id === id ? { ...task, ...patch } : task)));
   }, []);
 
-  React.useEffect(() => {
-    const timers = tasks
-      .filter((task) => task.status === "uploading")
-      .map((task) => advance(task.id, task.file.size));
-    return () => timers.forEach((stop) => stop());
-  }, [tasks, advance]);
+  const runUpload = React.useCallback(
+    async (task: InternalTask) => {
+      const localId = task.id;
+      cancelledRef.current.delete(localId);
+      const activeXhrs = new Set<XMLHttpRequest>();
+      xhrsRef.current.set(localId, activeXhrs);
+
+      let serverTaskId: string | undefined;
+
+      try {
+        updateTask(localId, {
+          status: "preparing",
+          progress: 0,
+          transferred: 0,
+          error: undefined,
+        });
+
+        const mimeType = task.file.type || "application/octet-stream";
+        const prepared = await api.post<PrepareResponse>("/api/uploads/prepare", {
+          name: task.file.name,
+          size: task.file.size,
+          mimeType,
+          parentId: task.parentId,
+        });
+
+        if (cancelledRef.current.has(localId)) return;
+
+        if (!prepared.ok) {
+          updateTask(localId, {
+            status: "failed",
+            error: prepared.message,
+          });
+          return;
+        }
+
+        const prep = prepared.data;
+        serverTaskId = prep.taskId;
+        updateTask(localId, {
+          status: "uploading",
+          serverTaskId: prep.taskId,
+          multipart: prep.multipart,
+        });
+
+        let completedParts: { partNumber: number; etag: string }[] | undefined;
+
+        if (!prep.multipart) {
+          if (!prep.uploadUrl) {
+            throw new Error("The server did not return an upload URL.");
+          }
+
+          await putWithProgress(
+            prep.uploadUrl,
+            task.file,
+            mimeType,
+            (loaded) => {
+              const pct = task.file.size > 0 ? Math.min(99, (loaded / task.file.size) * 100) : 0;
+              updateTask(localId, { progress: pct, transferred: loaded });
+            },
+            (xhr) => activeXhrs.add(xhr),
+          );
+        } else {
+          const partUrls = prep.partUrls ?? [];
+          const partSize = prep.partSize ?? 8 * 1024 * 1024;
+          if (!partUrls.length) {
+            throw new Error("The server did not return multipart upload URLs.");
+          }
+
+          const partLoaded = new Map<number, number>();
+          const partsResult: { partNumber: number; etag: string }[] = [];
+          let cursor = 0;
+
+          const reportAggregate = () => {
+            let totalLoaded = 0;
+            for (const bytes of partLoaded.values()) totalLoaded += bytes;
+            const pct = task.file.size > 0 ? Math.min(99, (totalLoaded / task.file.size) * 100) : 0;
+            updateTask(localId, { progress: pct, transferred: Math.min(totalLoaded, task.file.size) });
+          };
+
+          const worker = async () => {
+            while (cursor < partUrls.length) {
+              if (cancelledRef.current.has(localId)) {
+                throw new DOMException("Upload cancelled", "AbortError");
+              }
+              const idx = cursor++;
+              const { partNumber, url } = partUrls[idx];
+              const start = (partNumber - 1) * partSize;
+              const end = Math.min(start + partSize, task.file.size);
+              const slice = task.file.slice(start, end);
+
+              const { etag } = await putWithProgress(
+                url,
+                slice,
+                null,
+                (loaded) => {
+                  partLoaded.set(partNumber, loaded);
+                  reportAggregate();
+                },
+                (xhr) => activeXhrs.add(xhr),
+              );
+
+              partLoaded.set(partNumber, slice.size);
+              reportAggregate();
+              partsResult.push({ partNumber, etag });
+            }
+          };
+
+          await Promise.all(
+            Array.from({ length: Math.min(MULTIPART_CONCURRENCY, partUrls.length) }, () => worker()),
+          );
+
+          completedParts = partsResult.sort((a, b) => a.partNumber - b.partNumber);
+        }
+
+        if (cancelledRef.current.has(localId)) return;
+
+        updateTask(localId, {
+          status: "finalising",
+          progress: 99,
+          transferred: task.file.size,
+        });
+
+        const completed = await api.post(`/api/uploads/${encodeURIComponent(prep.taskId)}/complete`, {
+          parts: completedParts,
+        });
+
+        if (cancelledRef.current.has(localId)) return;
+
+        if (!completed.ok) {
+          updateTask(localId, {
+            status: "failed",
+            error: completed.message,
+          });
+          return;
+        }
+
+        updateTask(localId, {
+          status: "complete",
+          progress: 100,
+          transferred: task.file.size,
+        });
+        router.refresh();
+      } catch (err) {
+        if (
+          cancelledRef.current.has(localId) ||
+          (err instanceof DOMException && err.name === "AbortError")
+        ) {
+          if (serverTaskId) {
+            void api.delete(`/api/uploads/${encodeURIComponent(serverTaskId)}/cancel`);
+          }
+          updateTask(localId, { status: "cancelled" as UploadStatus });
+          return;
+        }
+
+        if (serverTaskId) {
+          void api.delete(`/api/uploads/${encodeURIComponent(serverTaskId)}/cancel`);
+        }
+
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "The upload couldn't finish. Nothing was saved.";
+        updateTask(localId, {
+          status: "failed",
+          error: message,
+        });
+      } finally {
+        xhrsRef.current.delete(localId);
+      }
+    },
+    [router, updateTask],
+  );
 
   const addFiles = React.useCallback(
-    (files: File[]) => {
-      const accepted: UploadTask[] = [];
+    (files: File[], parentId: string | null = null) => {
+      const accepted: InternalTask[] = [];
       const rejected: string[] = [];
 
       for (const file of files) {
@@ -90,7 +295,7 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
           rejected.push(`${file.name} — this file type isn't allowed`);
           continue;
         }
-        if (file.size > UPLOAD_LIMITS.maxFileSize) {
+        if (UPLOAD_LIMITS.maxFileSize !== null && file.size > UPLOAD_LIMITS.maxFileSize) {
           rejected.push(`${file.name} — larger than ${formatBytes(UPLOAD_LIMITS.maxFileSize)}`);
           continue;
         }
@@ -101,7 +306,8 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
         accepted.push({
           id: `upl-${++counter}`,
           file,
-          status: "uploading",
+          parentId,
+          status: "preparing",
           progress: 0,
           transferred: 0,
           startedAt: new Date().toISOString(),
@@ -109,7 +315,12 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
         });
       }
 
-      if (accepted.length) setTasks((current) => [...current, ...accepted]);
+      if (accepted.length) {
+        setTasks((current) => [...current, ...accepted]);
+        for (const task of accepted) {
+          void runUpload(task);
+        }
+      }
 
       if (rejected.length) {
         toast({
@@ -121,59 +332,52 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
           description: rejected.slice(0, 2).join(" · "),
         });
       }
-
-      // Fail after the bar has moved far enough to be legible. With a real
-      // backend this block is where `prepareUpload` → PUT → `completeUpload`
-      // happens instead.
-      for (const task of accepted) {
-        setTimeout(
-          () => {
-            setTasks((current) =>
-              current.map((item) =>
-                item.id === task.id && item.status === "uploading"
-                  ? {
-                      ...item,
-                      status: "failed" as UploadStatus,
-                      error:
-                        "Your storage provider isn't connected yet, so nothing was stored.",
-                    }
-                  : item,
-              ),
-            );
-          },
-          1200 + Math.random() * 900,
-        );
-      }
     },
-    [toast],
+    [runUpload, toast],
   );
 
   const cancel = React.useCallback((id: string) => {
+    cancelledRef.current.add(id);
+    const activeXhrs = xhrsRef.current.get(id);
+    if (activeXhrs) {
+      for (const xhr of activeXhrs) xhr.abort();
+      xhrsRef.current.delete(id);
+    }
+
     setTasks((current) =>
-      current.map((task) =>
-        task.id === id && (task.status === "uploading" || task.status === "queued")
-          ? { ...task, status: "cancelled" }
-          : task,
-      ),
+      current.map((task) => {
+        if (task.id !== id) return task;
+        if (task.serverTaskId) {
+          void api.delete(`/api/uploads/${encodeURIComponent(task.serverTaskId)}/cancel`);
+        }
+        if (
+          task.status === "uploading" ||
+          task.status === "preparing" ||
+          task.status === "queued"
+        ) {
+          return { ...task, status: "cancelled" };
+        }
+        return task;
+      }),
     );
   }, []);
 
-  const retry = React.useCallback((id: string) => {
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === id
-          ? { ...task, status: "uploading", progress: 0, transferred: 0, error: undefined }
-          : task,
-      ),
-    );
-  }, []);
+  const retry = React.useCallback(
+    (id: string) => {
+      const target = tasks.find((task) => task.id === id);
+      if (!target) return;
+      void runUpload(target);
+    },
+    [runUpload, tasks],
+  );
 
   const dismiss = React.useCallback((id: string) => {
     setTasks((current) => current.filter((task) => task.id !== id));
   }, []);
 
   const activeCount = tasks.filter(
-    (task) => task.status === "uploading" || task.status === "finalising" || task.status === "preparing",
+    (task) =>
+      task.status === "uploading" || task.status === "finalising" || task.status === "preparing",
   ).length;
 
   const value = React.useMemo(
@@ -188,13 +392,6 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
 /*  Tray                                                               */
 /* ------------------------------------------------------------------ */
 
-/**
- * Upload tray.
- *
- * A bottom-right panel above the toasts. Collapses to a one-line summary so it
- * never blocks the file grid, and stays open after a failure because a failed
- * upload is something the visitor has to act on.
- */
 export function UploadTray() {
   const { tasks, cancel, retry, dismiss, activeCount } = useUploadManager();
   const [open, setOpen] = React.useState(true);
@@ -205,9 +402,6 @@ export function UploadTray() {
   const done = tasks.filter((task) => task.status === "complete").length;
 
   return (
-    /* Sits above the toast stack (z-300) and clears it vertically: failures
-       raise both a toast and a tray entry, and stacking them on top of each
-       other hides whichever arrived second. */
     <div className="pointer-events-none fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.5rem)] left-1/2 z-[310] w-[calc(100%-1.5rem)] max-w-[380px] -translate-x-1/2 sm:left-auto sm:right-4 sm:translate-x-0 sm:bottom-[calc(5.5rem+max(1rem,env(safe-area-inset-bottom)))] lg:bottom-[5.5rem]">
       <div className="pointer-events-auto overflow-hidden rounded-xl border border-[var(--brand-border)] bg-white shadow-[0_16px_40px_-12px_rgba(23,29,58,0.28)] motion-safe:animate-[toastIn_180ms_cubic-bezier(0.22,0.68,0.28,1)]">
         <button
@@ -245,7 +439,9 @@ export function UploadTray() {
                     {task.status === "failed" && (
                       <TriangleAlert className="h-4 w-4 text-[#C93B2B]" strokeWidth={2.2} aria-hidden="true" />
                     )}
-                    {(task.status === "uploading" || task.status === "preparing") && (
+                    {(task.status === "uploading" ||
+                      task.status === "preparing" ||
+                      task.status === "finalising") && (
                       <span
                         aria-hidden="true"
                         className="mt-0.5 block h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/25 border-t-primary"
@@ -265,12 +461,18 @@ export function UploadTray() {
                           ? "Cancelled"
                           : task.status === "complete"
                             ? formatBytes(task.file.size)
-                            : `${formatBytes(task.transferred)} of ${formatBytes(task.file.size)}${
-                                task.multipart ? " · multipart" : ""
-                              }`}
+                            : task.status === "preparing"
+                              ? "Preparing upload…"
+                              : task.status === "finalising"
+                                ? "Verifying upload…"
+                                : `${formatBytes(task.transferred)} of ${formatBytes(task.file.size)}${
+                                    task.multipart ? " · multipart" : ""
+                                  }`}
                     </p>
 
-                    {(task.status === "uploading" || task.status === "preparing") && (
+                    {(task.status === "uploading" ||
+                      task.status === "preparing" ||
+                      task.status === "finalising") && (
                       <div
                         className="mt-1.5 overflow-hidden rounded-full bg-[#E9ECF4]"
                         style={{ height: 3 }}

@@ -43,10 +43,10 @@ everything else in this document.
 | Field | Value |
 | --- | --- |
 | **SEO title** | Cloud Storage Plans & Pricing |
-| **Description** | Compare Orindle cloud storage plans from 10 GB free to 10 TB. Explore affordable monthly storage options for personal files and business needs. |
+| **Description** | Compare Orindle cloud storage plans from 10 GB free to 5 TB. Explore affordable monthly and annual storage options across 8 currencies for personal and business use. |
 | **Primary keyword** | cloud storage pricing |
-| **Secondary keywords** | cloud storage plans · affordable cloud storage · cheap cloud storage · online storage plans · 100 GB cloud storage · 500 GB cloud storage · 1 TB cloud storage · 10 TB cloud storage |
-| **Meta keywords** | cloud storage pricing, cloud storage plans, affordable cloud storage, cheap cloud storage, online storage plans, 100GB cloud storage, 500GB cloud storage, 1TB cloud storage, 10TB cloud storage |
+| **Secondary keywords** | cloud storage plans · affordable cloud storage · cheap cloud storage · online storage plans · 100 GB cloud storage · 500 GB cloud storage · 1 TB cloud storage · 5 TB cloud storage |
+| **Meta keywords** | cloud storage pricing, cloud storage plans, affordable cloud storage, cheap cloud storage, online storage plans, 100GB cloud storage, 500GB cloud storage, 1TB cloud storage, 5TB cloud storage |
 | **H1** | Room for every kind of digital life. |
 | **Canonical** | https://orindle.com/pricing |
 | **Index/follow** | index, follow |

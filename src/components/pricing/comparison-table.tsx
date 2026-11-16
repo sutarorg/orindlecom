@@ -1,29 +1,34 @@
 import { Check, Minus } from "lucide-react";
-import { PLANS, currencyMeta, formatPrice, resolvePrice, type CurrencyCode } from "@/config/pricing";
+import {
+  HIGHLIGHTED_PLAN,
+  PLANS,
+  currencyMeta,
+  formatPrice,
+  resolvePrice,
+  type CurrencyCode,
+} from "@/config/pricing";
 import { PlanIcon } from "@/components/brand/plan-icon";
 import { cn } from "@/lib/utils";
 
 /**
  * Feature comparison.
  *
- * Every row states something the product genuinely does. Rows that differ by
- * tier are only those that really are tier-dependent (storage volume).
- * Above 768px this is a table; below, each plan becomes its own card so nothing
- * requires horizontal scrolling.
+ * Every row states something the product genuinely does. Everything below the
+ * storage line is available on every tier, including Free.
  */
 
 type Support = "yes" | "no" | string;
 
 const ROWS: { feature: string; get: (planId: string) => Support }[] = [
-  { feature: "Shared storage pool", get: () => "yes" },
+  { feature: "Shared storage pool across devices", get: () => "yes" },
+  { feature: "No per-file upload size limit", get: () => "yes" },
   { feature: "Folders and nested structure", get: () => "yes" },
   { feature: "Share by invitation or link", get: () => "yes" },
-  { feature: "View and edit permissions", get: () => "yes" },
-  { feature: "Trash with recovery", get: () => "yes" },
-  { feature: "Access from any browser", get: () => "yes" },
+  { feature: "View, comment and edit permissions", get: () => "yes" },
+  { feature: "30-day Trash with recovery", get: () => "yes" },
+  { feature: "Two-factor authentication (TOTP)", get: () => "yes" },
   { feature: "Encryption in transit and at rest", get: () => "yes" },
-  { feature: "Organisation accounts", get: () => "separate plan" },
-  { feature: "Priority support", get: () => "not yet available" },
+  { feature: "Business workspace", get: () => "inherits owner's plan" },
 ];
 
 export function ComparisonTable({ currency }: { currency: CurrencyCode }) {
@@ -57,7 +62,7 @@ export function ComparisonTable({ currency }: { currency: CurrencyCode }) {
                     scope="col"
                     className={cn(
                       "px-3 py-3 text-center align-bottom",
-                      plan.id === "plus" && "bg-primary-soft/60",
+                      plan.id === HIGHLIGHTED_PLAN && "bg-primary-soft/60",
                     )}
                   >
                     <span className="flex flex-col items-center gap-1.5">
@@ -95,7 +100,7 @@ export function ComparisonTable({ currency }: { currency: CurrencyCode }) {
                         key={plan.id}
                         className={cn(
                           "border-t border-[var(--brand-border-soft)] px-3 py-2.5 text-center",
-                          plan.id === "plus" && "bg-primary-soft/40",
+                          plan.id === HIGHLIGHTED_PLAN && "bg-primary-soft/40",
                         )}
                       >
                         <CellValue value={value} />
@@ -155,7 +160,8 @@ export function ComparisonTable({ currency }: { currency: CurrencyCode }) {
         </div>
 
         <p className="mt-4 text-[11.5px] text-text-subtle">
-          Prices displayed in {meta.code}. {meta.published ? "" : "This currency is not published yet."}
+          Monthly rates displayed in {meta.code}. Switch to Yearly above to save 20%. GST and
+          downloadable tax invoices are not currently enabled.
         </p>
       </div>
     </section>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Check, ChevronDown } from "lucide-react";
 import {
+  ANNUAL_DISCOUNT_PCT,
   CURRENCIES,
   currencyMeta,
   isCurrencyPublished,
@@ -26,9 +27,13 @@ export function BillingToggle({
   className?: string;
   size?: "default" | "large";
 }) {
-  const options: { id: BillingPeriod; label: string }[] = [
+  const options: { id: BillingPeriod; label: string; badge?: string }[] = [
     { id: "monthly", label: "Monthly" },
-    { id: "yearly", label: "Yearly" },
+    {
+      id: "yearly",
+      label: "Yearly",
+      badge: ANNUAL_DISCOUNT_PCT > 0 ? `Save ${ANNUAL_DISCOUNT_PCT}%` : undefined,
+    },
   ];
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -58,14 +63,26 @@ export function BillingToggle({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option.id)}
             className={cn(
-              "rounded-full font-semibold leading-none transition-colors duration-150",
+              "inline-flex items-center gap-1.5 rounded-full font-semibold leading-none transition-colors duration-150",
               size === "large" ? "h-8 px-4 text-[12.5px]" : "h-[28px] px-3.5 text-[11px]",
               selected
                 ? "bg-primary text-white shadow-[var(--brand-shadow-primary)]"
                 : "text-ink hover:bg-[var(--brand-surface-muted)]",
             )}
           >
-            {option.label}
+            <span>{option.label}</span>
+            {option.badge && (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-[2px] text-[9.5px] font-bold leading-none",
+                  selected
+                    ? "bg-white/20 text-white"
+                    : "bg-[#EAF9F1] text-[#1B7F4B]",
+                )}
+              >
+                {option.badge}
+              </span>
+            )}
           </button>
         );
       })}
@@ -116,7 +133,7 @@ export function CurrencySelector({
         aria-label={`Display currency: ${meta.label}. Change currency`}
         className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-white px-3 text-[11.5px] font-semibold leading-none text-ink transition-colors hover:bg-[var(--brand-surface-muted)]"
       >
-        <span className="text-[12px] text-text-muted">{meta.symbol}</span>
+        <span className="text-[12px] text-text-muted">{meta.symbol.trim()}</span>
         <span>{meta.code}</span>
         <ChevronDown
           className={cn("h-3 w-3 text-text-subtle transition-transform", open && "rotate-180")}
@@ -148,8 +165,8 @@ export function CurrencySelector({
                     selected ? "bg-primary-soft" : "hover:bg-[var(--brand-surface-muted)]",
                   )}
                 >
-                  <span className="w-5 shrink-0 text-center text-[12px] text-text-muted">
-                    {currency.symbol}
+                  <span className="w-7 shrink-0 text-center text-[11px] font-medium text-text-muted">
+                    {currency.symbol.trim()}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[12px] font-semibold leading-tight text-ink">

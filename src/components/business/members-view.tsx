@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
+  Crown,
   Loader2,
   Mail,
   Search,
@@ -15,8 +17,8 @@ import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { api } from "@/lib/drive/client";
 import { formatDate, formatRelative } from "@/lib/drive/format";
-import { BUSINESS_NOT_CONNECTED } from "@/lib/business/repository";
 import {
   can,
   removalBlocker,
@@ -38,15 +40,6 @@ import { RoleBadge } from "./role-badge";
 import { RoleBoundaryNote, RoleSelector } from "./role-selector";
 import { cn } from "@/lib/utils";
 
-/**
- * Members.
- *
- * Four surfaces in one route: the list, the invite flow, the change-role dialog
- * and the remove confirmation. They are kept together because they are one
- * conversation — "who is on my team and what can they do" — and splitting them
- * across routes would mean losing the list every time you adjust somebody.
- */
-
 type StatusFilter = MemberStatus | "all";
 
 const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
@@ -59,17 +52,20 @@ const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
 ];
 
 export function MembersView({
+  organizationId = "workspace",
   members,
   viewerRole,
   viewerId: _viewerId,
   folders,
 }: {
+  organizationId?: string;
   members: Member[];
   viewerRole: BusinessRole;
   viewerId: string | null;
   folders: BusinessFolder[];
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState<StatusFilter>("all");
   const [inviteOpen, setInviteOpen] = React.useState(false);
@@ -77,14 +73,13 @@ export function MembersView({
   const [roleTarget, setRoleTarget] = React.useState<Member | null>(null);
   const [removeTarget, setRemoveTarget] = React.useState<Member | null>(null);
   const [revokeTarget, setRevokeTarget] = React.useState<Member | null>(null);
-  // Always false: no member action issues a request yet, so nothing is ever pending.
-  // Kept as a named value rather than deleting the plumbing, which the pending prop
-  // below still reads.
-  const pendingAction = false;
+  const [transferTarget, setTransferTarget] = React.useState<Member | null>(null);
+  const [pendingAction, setPendingAction] = React.useState(false);
 
   const canInvite = can(viewerRole, "members.invite");
   const canRemove = can(viewerRole, "members.remove");
   const canChangeRole = can(viewerRole, "members.changeRole");
+  const canTransfer = can(viewerRole, "members.transferOwnership");
   const canSeeInvitations = canInvite;
 
   const filtered = React.useMemo(() => {
@@ -112,13 +107,102 @@ export function MembersView({
   ).length;
 
   const filteredBySearch = search.trim().length > 0 || status !== "all";
+  const orgUrl = `/api/organizations/${encodeURIComponent(organizationId)}`;
 
-  /**
-   * Member management has no route yet. Reported immediately, with no simulated
-   * request: the honest answer is available without waiting.
-   */
-  const reportUnbacked = (title: string) => {
-    toast({ tone: "error", title, description: BUSINESS_NOT_CONNECTED });
+  const handleResend = async (member: Member) => {
+    setPendingAction(true);
+    const result = await api.post(`${orgUrl}/members/${encodeURIComponent(member.id)}/resend`);
+    setPendingAction(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Invitation wasn't resent", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Invitation resent",
+      description: `A fresh invitation link was sent to ${member.email}.`,
+    });
+    router.refresh();
+  };
+
+  const handleRevoke = async (member: Member) => {
+    setRevokeTarget(null);
+    setPendingAction(true);
+    const result = await api.delete(`${orgUrl}/members/${encodeURIComponent(member.id)}/invite`);
+    setPendingAction(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Invitation wasn't revoked", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Invitation revoked",
+      description: `${member.email}'s invitation link no longer works.`,
+    });
+    router.refresh();
+  };
+
+  const handleRoleChange = async (member: Member, nextRole: BusinessRole) => {
+    setPendingAction(true);
+    const result = await api.patch(`${orgUrl}/members/${encodeURIComponent(member.id)}/role`, {
+      role: nextRole,
+    });
+    setPendingAction(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Role wasn't changed", description: result.message });
+      return;
+    }
+
+    setRoleTarget(null);
+    toast({
+      tone: "success",
+      title: "Role updated",
+      description: `${member.name ?? member.email} is now ${roleDefinition(nextRole).name}.`,
+    });
+    router.refresh();
+  };
+
+  const handleRemove = async (member: Member) => {
+    setRemoveTarget(null);
+    setPendingAction(true);
+    const result = await api.delete(`${orgUrl}/members/${encodeURIComponent(member.id)}`);
+    setPendingAction(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Member wasn't removed", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Member removed",
+      description: `${member.name ?? member.email} no longer has access to this organization.`,
+    });
+    router.refresh();
+  };
+
+  const handleTransfer = async (member: Member) => {
+    setTransferTarget(null);
+    setPendingAction(true);
+    const result = await api.post(`${orgUrl}/transfer`, { memberId: member.id });
+    setPendingAction(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Ownership wasn't transferred", description: result.message });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Ownership transferred",
+      description: `${member.name ?? member.email} is now the owner. Your role is now Admin.`,
+    });
+    router.refresh();
   };
 
   return (
@@ -141,8 +225,6 @@ export function MembersView({
         className="mb-4"
       />
 
-      {/* A member-role viewer sees the list but not the controls. Saying so
-          up front is better than a page of disabled buttons. */}
       {!canInvite && (
         <div className="mb-3 flex items-start gap-2 rounded-xl border border-[var(--brand-border)] bg-white px-3.5 py-2.5">
           <ShieldAlert
@@ -157,7 +239,6 @@ export function MembersView({
         </div>
       )}
 
-      {/* Stale invitations need action, so they get a banner above the table. */}
       {canSeeInvitations && staleInvitations > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#F6E2BC] bg-[#FEF7EA] px-3.5 py-2.5">
           <Mail className="h-3.5 w-3.5 shrink-0 text-[#96610B]" strokeWidth={2.1} aria-hidden="true" />
@@ -178,7 +259,6 @@ export function MembersView({
         </div>
       )}
 
-      {/* Controls */}
       {members.length > 0 && (
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1 sm:max-w-[300px]">
@@ -207,9 +287,6 @@ export function MembersView({
             )}
           </div>
 
-          {/* Status filter as tabs. Only statuses that actually occur get a tab —
-              an empty "Suspended" tab would suggest people are suspended when
-              none are. */}
           <div
             role="tablist"
             aria-label="Filter by status"
@@ -250,7 +327,6 @@ export function MembersView({
         </div>
       )}
 
-      {/* Table or empty */}
       {members.length === 0 ? (
         <div className="rounded-xl border border-[var(--brand-border)] bg-white">
           <EmptyState
@@ -303,7 +379,6 @@ export function MembersView({
         </div>
       ) : (
         <>
-          {/* Desktop + tablet table */}
           <div className="hidden md:block">
             <MemberTable
               members={filtered}
@@ -313,7 +388,7 @@ export function MembersView({
                 if (!canChangeRole) return;
                 setRoleTarget(member);
               }}
-              onResend={() => reportUnbacked("Invitation wasn't resent")}
+              onResend={(member) => void handleResend(member)}
               onRevoke={(member) => setRevokeTarget(member)}
               onRemove={(member) => {
                 if (!canRemove) return;
@@ -322,7 +397,6 @@ export function MembersView({
             />
           </div>
 
-          {/* Mobile cards */}
           <div className="space-y-2 md:hidden">
             {filtered.map((member) => (
               <MemberCard key={member.id} member={member} onOpen={(m) => setSelected(m)} />
@@ -337,22 +411,26 @@ export function MembersView({
         </p>
       )}
 
-      {/* Invite */}
       <InviteDialog
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
+        organizationId={organizationId}
         actorRole={viewerRole}
         folders={folders}
       />
 
-      {/* Details */}
       <MemberDetailsDialog
         member={selected}
         onClose={() => setSelected(null)}
         actorRole={viewerRole}
+        canTransfer={canTransfer}
         onChangeRole={(member) => {
           setSelected(null);
           setRoleTarget(member);
+        }}
+        onTransfer={(member) => {
+          setSelected(null);
+          setTransferTarget(member);
         }}
         onRemove={(member) => {
           setSelected(null);
@@ -360,25 +438,21 @@ export function MembersView({
         }}
       />
 
-      {/* Change role */}
       <ChangeRoleDialog
         member={roleTarget}
         actorRole={viewerRole}
         pending={pendingAction}
         onClose={() => setRoleTarget(null)}
-        onConfirm={() => {
-          setRoleTarget(null);
-          reportUnbacked("Role wasn't changed");
+        onConfirm={(nextRole) => {
+          if (roleTarget) void handleRoleChange(roleTarget, nextRole);
         }}
       />
 
-      {/* Remove */}
       <ConfirmDialog
         open={removeTarget !== null}
         onClose={() => setRemoveTarget(null)}
         onConfirm={() => {
-          setRemoveTarget(null);
-          reportUnbacked("Member wasn't removed");
+          if (removeTarget) void handleRemove(removeTarget);
         }}
         title={`Remove ${removeTarget?.name ?? removeTarget?.email ?? "this member"}?`}
         confirmLabel="Remove member"
@@ -391,13 +465,11 @@ export function MembersView({
         invitation.
       </ConfirmDialog>
 
-      {/* Revoke invitation */}
       <ConfirmDialog
         open={revokeTarget !== null}
         onClose={() => setRevokeTarget(null)}
         onConfirm={() => {
-          setRevokeTarget(null);
-          reportUnbacked("Invitation wasn't revoked");
+          if (revokeTarget) void handleRevoke(revokeTarget);
         }}
         title="Revoke this invitation?"
         confirmLabel="Revoke invitation"
@@ -406,25 +478,41 @@ export function MembersView({
         The link in {revokeTarget?.email}&rsquo;s invitation email stops working immediately. If they
         haven&rsquo;t accepted yet, they won&rsquo;t be able to. You can invite them again later.
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={transferTarget !== null}
+        onClose={() => setTransferTarget(null)}
+        onConfirm={() => {
+          if (transferTarget) void handleTransfer(transferTarget);
+        }}
+        title={`Transfer ownership to ${transferTarget?.name ?? transferTarget?.email ?? "this member"}?`}
+        confirmLabel="Transfer ownership"
+        destructive
+        requireTyping={transferTarget?.email}
+      >
+        They become the organization Owner and you become an Admin in the same atomic step. The
+        organization&rsquo;s storage quota will inherit the new owner&rsquo;s active plan. Type their
+        email to confirm.
+      </ConfirmDialog>
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Details dialog                                                     */
-/* ------------------------------------------------------------------ */
 
 function MemberDetailsDialog({
   member,
   onClose,
   actorRole,
+  canTransfer,
   onChangeRole,
+  onTransfer,
   onRemove,
 }: {
   member: Member | null;
   onClose: () => void;
   actorRole: BusinessRole;
+  canTransfer: boolean;
   onChangeRole: (member: Member) => void;
+  onTransfer: (member: Member) => void;
   onRemove: (member: Member) => void;
 }) {
   const open = member !== null;
@@ -439,7 +527,7 @@ function MemberDetailsDialog({
   const changeBlocker = roleChangeBlocker({
     actorRole,
     targetRole: member.role,
-    nextRole: "admin",
+    nextRole: member.role === "admin" ? "member" : "admin",
     isSelf: member.isViewer,
   });
   const removeBlocker = removalBlocker({
@@ -448,6 +536,7 @@ function MemberDetailsDialog({
     isSelf: member.isViewer,
     isLastOwner: member.isLastOwner,
   });
+  const canTransferToMember = canTransfer && !member.isViewer && member.status === "active";
 
   return (
     <Dialog open={open} onClose={onClose} title={member.name ?? member.email} size="md">
@@ -508,6 +597,16 @@ function MemberDetailsDialog({
         >
           Change role
         </button>
+        {canTransferToMember && (
+          <button
+            type="button"
+            onClick={() => onTransfer(member)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--brand-border-strong)] bg-white px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Crown className="h-3.5 w-3.5 text-[#8B5CF6]" strokeWidth={2} aria-hidden="true" />
+            Transfer ownership
+          </button>
+        )}
         <button
           type="button"
           disabled={Boolean(removeBlocker)}
@@ -532,10 +631,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Change role dialog                                                 */
-/* ------------------------------------------------------------------ */
-
 function ChangeRoleDialog({
   member,
   actorRole,
@@ -547,7 +642,7 @@ function ChangeRoleDialog({
   actorRole: BusinessRole;
   pending: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (nextRole: BusinessRole) => void;
 }) {
   const [next, setNext] = React.useState<BusinessRole>("member");
 
@@ -587,7 +682,7 @@ function ChangeRoleDialog({
             <button
               type="button"
               disabled={Boolean(blocker) || pending || member.role === next}
-              onClick={onConfirm}
+              onClick={() => onConfirm(next)}
               className={cn(
                 "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3.5 text-[12px] font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50",
                 isDowngrade
@@ -637,9 +732,7 @@ function ChangeRoleDialog({
             </p>
           ) : (
             <div className="mt-3">
-              <RoleBoundaryNote>
-                {roleDefinition(next).detail}
-              </RoleBoundaryNote>
+              <RoleBoundaryNote>{roleDefinition(next).detail}</RoleBoundaryNote>
             </div>
           )}
 

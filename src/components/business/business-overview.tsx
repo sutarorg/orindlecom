@@ -229,6 +229,7 @@ export function BusinessOverview({
       <InviteDialog
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
+        organizationId={organization.id}
         actorRole={organization.viewerRole}
         folders={folders}
       />

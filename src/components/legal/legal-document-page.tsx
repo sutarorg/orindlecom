@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, FileText, Scale } from "lucide-react";
+import { CalendarClock, CheckCircle2, FileText, Scale } from "lucide-react";
 import { SiteShell } from "@/components/layout/site-shell";
 import { LEGAL_DOCUMENTS } from "@/config/legal";
 import type { LegalDocument } from "@/config/legal/types";
@@ -11,14 +11,8 @@ import { cn } from "@/lib/utils";
 /**
  * Editorial shell shared by all five policies.
  *
- * The layout is a 260px TOC rail beside a 68-character measure, which is the
- * whole design decision: legal text is read in lines, so the content column is
- * sized by character count rather than by grid fraction, and the rail lives in
- * the space that would otherwise be margin.
- *
- * The draft banner is not a nicety. A policy that has not been reviewed by a
- * lawyer should say so on the page, in the reader's eyeline, not in a code
- * comment.
+ * The layout is a 228px TOC rail beside a comfortable reading measure so long
+ * legal prose stays readable on every viewport.
  */
 export function LegalDocumentPage({ document: doc }: { document: LegalDocument }) {
   const entries: TocEntry[] = doc.sections.map((section) => ({
@@ -64,30 +58,33 @@ export function LegalDocumentPage({ document: doc }: { document: LegalDocument }
               <div className="shrink-0 rounded-[12px] border border-[var(--brand-border)] bg-[var(--brand-canvas)] px-3 py-2">
                 <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-text-subtle">
                   <CalendarClock className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
-                  Last updated
+                  Effective
                 </p>
                 <p className="mt-0.5 text-[12.5px] font-semibold text-ink">
                   <time dateTime={doc.updated}>{formatUpdated(doc.updated)}</time>
                 </p>
+                {doc.approved && (
+                  <p className="mt-1 flex items-center gap-1 text-[10.5px] font-semibold text-[#1B7F4B]">
+                    <CheckCircle2 className="h-3 w-3" strokeWidth={2.3} aria-hidden="true" />
+                    Published policy
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Draft notice */}
-            <div className="mt-5 rounded-[12px] border border-[#F1D9A8] bg-[#FEFBF3] px-3.5 py-3">
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] font-bold text-[#7A4E06]">
-                <Scale className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden="true" />
-                Draft — not yet reviewed by a lawyer
-                {reviewCount > 0 && (
-                  <span className="rounded bg-[#F5E4BE] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em]">
-                    {reviewCount} {reviewCount === 1 ? "section needs" : "sections need"} review
-                  </span>
-                )}
-              </p>
-              <p className="mt-1.5 max-w-[70ch] text-[12px] leading-[1.6] text-[#7A5209]">
-                Every factual statement here matches how the product is built. Anything Orindle has
-                not decided appears as a visible placeholder rather than a plausible guess.
-              </p>
-            </div>
+            {!doc.approved && (
+              <div className="mt-5 rounded-[12px] border border-[#F1D9A8] bg-[#FEFBF3] px-3.5 py-3">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] font-bold text-[#7A4E06]">
+                  <Scale className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden="true" />
+                  Draft — pending approval
+                  {reviewCount > 0 && (
+                    <span className="rounded bg-[#F5E4BE] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em]">
+                      {reviewCount} {reviewCount === 1 ? "section needs" : "sections need"} review
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -183,7 +180,7 @@ function ReviewNote({ text }: { text: string }) {
     <div className="mt-4 rounded-[10px] border border-dashed border-[#D9A63E] bg-[#FEFBF3] px-3 py-2.5 sm:ml-[34px]">
       <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[#8A5A0A]">
         <Scale className="h-3 w-3" strokeWidth={2.4} aria-hidden="true" />
-        Requires legal review
+        Requires review
       </p>
       <p className="mt-1 text-[12px] leading-[1.6] text-[#7A5209]">{text}</p>
     </div>

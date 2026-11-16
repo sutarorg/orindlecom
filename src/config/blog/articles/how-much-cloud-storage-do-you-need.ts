@@ -172,19 +172,19 @@ export const howMuchCloudStorageDoYouNeed: BlogArticle = {
     { type: "h2", id: "orindle-plans", text: "Mapping the answer onto Orindle's six plans" },
     {
       type: "p",
-      text: "Orindle publishes six monthly plans, listed in full on the [pricing page](/pricing) with INR and USD prices:",
+      text: "Orindle publishes six plans across eight currencies with monthly or annual billing (20% off annually), listed in full on the [pricing page](/pricing):",
     },
     {
       type: "table",
-      caption: "Orindle plans. Decimal storage units; monthly billing only.",
+      caption: "Orindle plans. Decimal storage units; monthly and annual billing across 8 currencies.",
       head: ["Plan", "Storage", "Fits"],
       rows: [
         ["Free", "10 GB", "Documents, a few thousand photos, trying the product"],
         ["Basic", "100 GB", "One person's photos, documents and light video"],
         ["Plus", "500 GB", "A household, or freelance work with video"],
-        ["Premium", "1 TB", "Photo libraries plus regular video"],
-        ["Ultra", "5 TB", "Serious media work"],
-        ["Max", "10 TB", "Archives, production libraries, larger teams"],
+        ["Premium", "1 TB", "Photo libraries plus regular video (Most popular)"],
+        ["Ultra", "2 TB", "Serious media work and multi-device backups"],
+        ["Max", "5 TB", "Archives, production libraries, and growing teams"],
       ],
     },
     {

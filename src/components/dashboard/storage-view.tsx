@@ -21,11 +21,11 @@ export function StorageView({ usage }: { usage: StorageUsage }) {
   const plan = PLANS.find((p) => p.id === usage.planId) ?? PLANS[0];
   const nextPlan = PLANS[PLANS.indexOf(plan) + 1];
 
-  // Only INR/USD monthly prices are approved; anything else renders as
-  // "being finalised" rather than a placeholder number.
+  // Display the user's monthly INR rate here; all 8 currencies and annual
+  // savings are selectable on the Billing page.
   const price = (p: (typeof PLANS)[number]) => {
     const amount = resolvePrice(p, "INR", "monthly");
-    return amount === null ? "Being finalised" : `${formatPrice(amount, "INR")}/mo`;
+    return amount === null ? "—" : `${formatPrice(amount, "INR")}/mo`;
   };
 
   const breakdown = Object.entries(usage.byCategory).filter(([, bytes]) => bytes > 0);

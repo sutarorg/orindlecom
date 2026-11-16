@@ -1,8 +1,8 @@
 # Email System
 
-**Status:** Resend is the provider and is implemented. Thirteen templates render today
-(§4.1). The rest of the table is the specification they will be added against — a
-template missing from the list below is a gap, not a surprise.
+**Status:** Resend is the provider and is implemented. All 22 transactional email
+templates in `src/lib/resend/client.ts` render today with HTML + plain-text bodies
+(§4.1), alongside `email_log` persistence and `/api/cron/email-retry` backoff delivery.
 
 **Queue semantics, and why they changed.** Mail that a job hands over is written to
 `email_log` with `status = 'queued'` and the data its template needs in `payload`.
@@ -68,22 +68,30 @@ the completion report must not claim email delivery works until the domain is ve
 Every template has a plain-text alternative. HTML-only mail is a deliverability and
 accessibility problem.
 
-### 4.1 Built
+### 4.1 Built (22 templates)
 
 | Template | Trigger | Key content |
 | --- | --- | --- |
+| `welcome` | Sign-up confirmed | What Orindle is, the 10 GB Free allowance, dashboard CTA |
 | `verify-email` | Sign-up / email change | Single clear action, expiry stated |
 | `reset-password` | Reset requested | 30-minute expiry, "ignore if not you" |
 | `password-changed` | Password changed | Security notice; how to recover |
-| `org-invite` | Member invited | Who invited, to which org, expiry, role |
-| `invite-accepted` | Invite accepted | Notify the inviter |
+| `email-changed` | Email change requested | Sent to the current address with old/new email security notice |
+| `org-invite` | Member invited | Who invited, to which org, 7-day expiry, assigned role, accept URL |
+| `invite-accepted` | Invite accepted | Notifies the inviter |
+| `role-changed` | Role changed / ownership transferred | Old → new role, by whom |
+| `member-removed` | Member removed | Access ended, personal files untouched |
 | `storage-warning-80` | 80% of quota | Current usage, what happens at 100% |
-| `subscription-started` | Verified activation | Plan, amount, currency, next date |
+| `storage-full` | 100% of quota | Uploads blocked; download, delete and trash cleanup still work |
+| `subscription-started` | Verified activation | Plan, amount, currency, next billing date |
+| `payment-receipt` | Invoice paid | Amount, period, provider payment id |
 | `payment-failed` | Payment failed | What to do, grace period stated |
 | `subscription-cancelled` | Cancelled | Access until date, no data loss |
-| `subscription-expiring-N` | Day 0/7/30/60/83 of recovery | Exact date, what happens then |
-| `account-deletion-requested` | Deletion scheduled | Nothing deleted yet, how to cancel |
+| `subscription-expiring-N` / `subscription-expiring` | Day 0/7/30/60/83 of recovery | Exact date, what happens then, how to restore |
+| `subscription-expired` | Recovery ended | Now Free (10 GB), files kept, how to upgrade |
+| `account-deletion-requested` | Deletion scheduled | 7-day grace period, nothing deleted yet, how to cancel |
 | `account-deleted` | Deletion completed | Confirmation, retention exceptions |
+| `data-export-ready` | Data export generated | Confirmation of export download |
 | `support-received` | Contact form accepted | Reference id and the 48-hour commitment |
 | `support-reply` | An operator replies from `/admin/support` | The customer's original message, the reply, and the reference. Sent only for a **public** reply — an internal note is never emailed, and a database constraint refuses to mark one as delivered |
 
@@ -97,33 +105,7 @@ has two properties worth stating:
   keeps the operator's draft and shows the provider's message verbatim. No code path
   reports a reply as delivered because the handler returned.
 
-### 4.2 Specified, not built
-
-| Template | Trigger | Key content |
-| --- | --- | --- |
-| `welcome` | Sign-up confirmed | What Orindle is, the Free allowance, one action |
-| `verify-email` | Sign-up / email change | Single clear action, expiry stated |
-| `reset-password` | Reset requested | 30-minute expiry, "ignore if not you" |
-| `password-changed` | Password changed | Security notice; how to recover |
-| `email-changed` | Email changed | Sent to **both** old and new address |
-| `org-invite` | Member invited | Who invited, to which org, expiry, role |
-| `invite-accepted` | Invite accepted | Notify the inviter |
-| `role-changed` | Role changed | Old → new, by whom |
-| `member-removed` | Member removed | Access ended, what remains |
-| `storage-warning-80` | 80% of quota | Current usage, what happens at 100% |
-| `storage-full` | 100% | Uploads blocked; download and delete still work |
-| `subscription-started` | Verified activation | Plan, amount, currency, next date, invoice link |
-| `payment-receipt` | Invoice paid | Amount, period, provider payment id |
-| `payment-failed` | Payment failed | What to do, grace period stated |
-| `subscription-cancelled` | Cancelled | Access until date, no data loss |
-| `subscription-expiring` | Day 0/7/30/60/83 of recovery | Exact date, what happens then, how to restore |
-| `subscription-expired` | Recovery ended | Now Free, files kept, how to upgrade |
-| `account-deleted` | Deletion completed | Confirmation, retention exceptions |
-| `data-export-ready` | Export job done | Time-limited link |
-| `support-received` | Contact form accepted | Reference id and the 48-hour commitment |
-| `support-reply` | Support response | Threaded reply |
-
-### 4.1 Billing email rules
+### 4.2 Billing email rules
 
 - Receipts and dunning are transactional, not marketing. No unsubscribe link, and no
   promotional content mixed in.
@@ -214,13 +196,7 @@ Three specific cases that would otherwise vanish:
 
 ---
 
-## 9. What is not implemented yet
+## 9. Deployment prerequisites (outside code)
 
-Stated plainly so no completion report overclaims:
-
-- Only the contact-form send exists. **No other template is wired.**
-- No verified production domain.
-- No bounce or complaint webhook from Resend.
-- `email_log` and the retry job are designed, not built.
-
-The audit records these as outstanding rather than describing them as complete.
+- Verify the sending domain (`orindle.com`) in Resend and set `RESEND_FROM_ADDRESS` to a verified sender address before production launch.
+- Optional: connect a Resend bounce/complaint webhook for automated suppression-list tracking.

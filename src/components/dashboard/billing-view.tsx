@@ -6,43 +6,73 @@ import { useRouter } from "next/navigation";
 import { Check, CreditCard, FileText, Lock, Minus, Receipt } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/dialog";
-import { PLANS, formatPrice, resolvePrice, type Plan } from "@/config/pricing";
+import {
+  ANNUAL_DISCOUNT_PCT,
+  CURRENCIES,
+  HIGHLIGHTED_PLAN,
+  PLANS,
+  currencyMeta,
+  formatPrice,
+  isSupportedCurrency,
+  resolveAnnualTotal,
+  resolvePrice,
+  type BillingPeriod,
+  type CurrencyCode,
+  type Plan,
+} from "@/config/pricing";
 import { formatBytes, formatDate } from "@/lib/drive/format";
 import type { Subscription } from "@/lib/drive/types";
 import { cn } from "@/lib/utils";
 import { startCheckout } from "@/lib/billing/checkout";
 import { api } from "@/lib/drive/client";
 
+export interface InvoiceRow {
+  id: string;
+  paymentId: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  paidAt: string;
+}
+
+function formatMinorAmount(amountMinor: number, currencyCode: string): string {
+  const code = isSupportedCurrency(currencyCode) ? currencyCode : "INR";
+  return formatPrice(amountMinor / 100, code);
+}
+
 /**
  * Billing.
  *
- * The subscription record is real but empty (status "none"). Nothing here
- * simulates a payment: the checkout button opens an explanation that the
- * payment provider isn't connected, because a simulated success is the one
- * thing that would make this screen actively dangerous.
- *
- * `checkout()` opens Razorpay's overlay with an order the server created, then
- * sends the payment id and signature back for verification. It resolves to success
- * only when the server has confirmed the signature AND activated the plan, so the
- * success toast cannot appear for a payment that did not happen.
+ * Supports all 8 published currencies and both monthly and annual (20% off)
+ * billing. `checkout()` opens Razorpay's overlay with an order created server-
+ * side from `public.plan_prices` and resolves only after signature verification
+ * activates the subscription.
  */
-
-const CURRENCY = "INR" as const;
-/**
- * Monthly only. No annual price has been approved, and inventing a discounted
- * yearly figure to fill the toggle would be the exact thing the price list forbids.
- */
-const PERIOD = "monthly" as const;
-
-export function BillingView({ subscription }: { subscription: Subscription }) {
+export function BillingView({
+  subscription,
+  invoices = [],
+}: {
+  subscription: Subscription;
+  invoices?: InvoiceRow[];
+}) {
   const { toast } = useToast();
   const router = useRouter();
-  /**
-   * Cancel at the end of the period.
-   *
-   * The server returns the updated subscription, and the toast quotes the date from
-   * it rather than the date this component expected. Access does not end here.
-   */
+
+  const initialCurrency: CurrencyCode = isSupportedCurrency(subscription.currency)
+    ? subscription.currency
+    : "INR";
+  const [currency, setCurrency] = React.useState<CurrencyCode>(initialCurrency);
+  const [period, setPeriod] = React.useState<BillingPeriod>(
+    subscription.interval === "year" ? "yearly" : "monthly",
+  );
+  const [busyPlan, setBusyPlan] = React.useState<string | null>(null);
+  const [pendingDowngrade, setPendingDowngrade] = React.useState<Plan | null>(null);
+  const [cancelOpen, setCancelOpen] = React.useState(false);
+
+  const current = PLANS.find((plan) => plan.id === subscription.planId) ?? PLANS[0];
+  const isActive = subscription.status === "active";
+  const selectedCurrency = currencyMeta(currency);
+
   const cancelSubscription = async () => {
     const result = await api.post<{ status: string; currentPeriodEnd: string | null }>(
       "/api/billing/cancel",
@@ -64,13 +94,6 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
     router.refresh();
   };
 
-  /**
-   * Switch to a smaller plan, effective at period end.
-   *
-   * The server schedules it; nothing changes immediately. The note it returns is
-   * shown verbatim so the explanation of what happens to files cannot drift from
-   * what the server actually does.
-   */
   const switchPlan = async (plan: Plan) => {
     const result = await api.post<{ effectiveAt: string; note: string }>(
       "/api/billing/change-plan",
@@ -90,27 +113,19 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
     router.refresh();
   };
 
-  const [busyPlan, setBusyPlan] = React.useState<string | null>(null);
-  const [pendingDowngrade, setPendingDowngrade] = React.useState<Plan | null>(null);
-  const [cancelOpen, setCancelOpen] = React.useState(false);
-
-  const current = PLANS.find((plan) => plan.id === subscription.planId) ?? PLANS[0];
-  const isActive = subscription.status === "active";
-
   const checkout = async (plan: Plan) => {
     setBusyPlan(plan.id);
 
     const outcome = await startCheckout({
       planId: plan.id,
       planName: plan.name,
-      period: PERIOD,
-      currency: CURRENCY,
+      period,
+      currency,
     });
 
     setBusyPlan(null);
 
     if (outcome.ok) {
-      // Only reached once the server verified the signature and activated the plan.
       toast({
         tone: "success",
         title: `${plan.name} is active`,
@@ -121,13 +136,14 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
     }
 
     if (outcome.code === "cancelled") {
-      // Closing the overlay is not a failure, so it does not get an error tone.
       toast({ tone: "info", title: "Checkout closed", description: outcome.message });
       return;
     }
 
     toast({ tone: "error", title: "Payment wasn't completed", description: outcome.message });
   };
+
+  const currentMonthlyPrice = resolvePrice(current, currency, "monthly");
 
   return (
     <div className="space-y-4">
@@ -150,14 +166,20 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
                       : "bg-[var(--brand-surface-muted)] text-text-muted",
                   )}
                 >
-                  {isActive ? "Active" : "No paid plan"}
+                  {isActive
+                    ? subscription.cancelAtPeriodEnd
+                      ? "Cancelling at period end"
+                      : "Active"
+                    : "No paid plan"}
                 </span>
               </div>
               <p className="mt-0.5 text-[11.5px] text-text-muted">
                 {formatBytes(current.storageBytes)} of storage ·{" "}
-                {resolvePrice(current, CURRENCY, "monthly") === null
-                  ? "Price being finalised"
-                  : `${formatPrice(resolvePrice(current, CURRENCY, "monthly")!, CURRENCY)}/month`}
+                {currentMonthlyPrice === null
+                  ? "—"
+                  : current.id === "free"
+                    ? `${formatPrice(0, currency)}/month`
+                    : `${formatPrice(currentMonthlyPrice, currency)}/month`}
               </p>
             </div>
             <Link
@@ -183,15 +205,17 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
               value={subscription.renewsAutomatically ? "Yes" : "Not applicable"}
               muted={!subscription.renewsAutomatically}
             />
-            <Row label="Billing currency" value={`INR (₹)`} />
             <Row
-              label="Payment method"
-              value="None on file"
-              muted
+              label="Selected currency"
+              value={`${selectedCurrency.code} (${selectedCurrency.symbol.trim()})`}
+            />
+            <Row
+              label="Billing cycle"
+              value={subscription.interval === "year" ? "Annual" : "Monthly"}
             />
           </dl>
 
-          {isActive && (
+          {isActive && !subscription.cancelAtPeriodEnd && (
             <button
               type="button"
               onClick={() => setCancelOpen(true)}
@@ -205,15 +229,71 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
 
       {/* Plans */}
       <section className="overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-white">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--brand-border-soft)] px-4 py-3">
-          <h2 className="text-[13px] font-bold tracking-[-0.02em] text-ink">Plans</h2>
-          <p className="text-[10.5px] text-text-subtle">Monthly billing · INR</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--brand-border-soft)] px-4 py-3">
+          <div>
+            <h2 className="text-[13px] font-bold tracking-[-0.02em] text-ink">Plans</h2>
+            <p className="text-[10.5px] text-text-subtle">
+              Choose a currency and monthly or annual billing
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label="Billing period"
+              className="inline-flex items-center rounded-lg border border-[var(--brand-border-strong)] bg-[var(--brand-canvas)] p-0.5 text-[11px]"
+            >
+              <button
+                type="button"
+                aria-pressed={period === "monthly"}
+                onClick={() => setPeriod("monthly")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 font-semibold transition-colors",
+                  period === "monthly" ? "bg-white text-ink shadow-xs" : "text-text-muted hover:text-ink",
+                )}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                aria-pressed={period === "yearly"}
+                onClick={() => setPeriod("yearly")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-semibold transition-colors",
+                  period === "yearly" ? "bg-white text-ink shadow-xs" : "text-text-muted hover:text-ink",
+                )}
+              >
+                Yearly
+                <span className="rounded bg-primary-soft px-1 py-0.5 text-[9.5px] font-bold text-primary">
+                  -{ANNUAL_DISCOUNT_PCT}%
+                </span>
+              </button>
+            </div>
+
+            <label className="sr-only" htmlFor="billing-currency">
+              Currency
+            </label>
+            <select
+              id="billing-currency"
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+              className="h-8 rounded-lg border border-[var(--brand-border-strong)] bg-white px-2 text-[11.5px] font-semibold text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code} ({c.symbol.trim()})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <ul className="divide-y divide-[var(--brand-border-soft)]">
           {PLANS.map((plan) => {
             const isCurrent = plan.id === subscription.planId;
-            const amount = resolvePrice(plan, CURRENCY, "monthly");
+            const isPopular = plan.id === HIGHLIGHTED_PLAN;
+            const amount = resolvePrice(plan, currency, period);
+            const annualTotal = resolveAnnualTotal(plan, currency);
             const isDowngrade = PLANS.indexOf(plan) < PLANS.indexOf(current);
             return (
               <li
@@ -233,8 +313,13 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
                   {plan.name[0]}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
+                  <p className="flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold text-ink">
                     {plan.name}
+                    {isPopular && !isCurrent && (
+                      <span className="rounded-full bg-primary-soft px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-primary">
+                        Popular
+                      </span>
+                    )}
                     {isCurrent && (
                       <span className="flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-primary">
                         <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden="true" />
@@ -242,10 +327,15 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
                       </span>
                     )}
                   </p>
-                  <p className="text-[10.5px] text-text-subtle">{formatBytes(plan.storageBytes)}</p>
+                  <p className="text-[10.5px] text-text-subtle">
+                    {formatBytes(plan.storageBytes)}
+                    {period === "yearly" && plan.id !== "free" && annualTotal !== null && (
+                      <> · Billed {formatPrice(annualTotal, currency)}/year</>
+                    )}
+                  </p>
                 </div>
                 <p className="tabular-nums text-[12px] font-semibold text-text">
-                  {amount === null ? "—" : `${formatPrice(amount, CURRENCY)}`}
+                  {amount === null ? "—" : formatPrice(amount, currency)}
                   <span className="text-[10.5px] font-normal text-text-subtle">/mo</span>
                 </p>
                 <button
@@ -274,31 +364,69 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
       </section>
 
       {/* Payment history */}
-      <section className="rounded-2xl border border-[var(--brand-border)] bg-white">
+      <section className="overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-white">
         <div className="flex items-center justify-between gap-2 border-b border-[var(--brand-border-soft)] px-4 py-3">
           <h2 className="text-[13px] font-bold tracking-[-0.02em] text-ink">Payment history</h2>
           <Receipt className="h-3.5 w-3.5 text-text-subtle" strokeWidth={2} aria-hidden="true" />
         </div>
-        <div className="px-4 py-7 text-center">
-          <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--brand-surface-muted)] text-text-subtle">
-            <FileText className="h-4 w-4" strokeWidth={1.9} aria-hidden="true" />
-          </span>
-          <p className="mt-2.5 text-[12.5px] font-semibold text-ink">No invoices yet</p>
-          <p className="mx-auto mt-1 max-w-[340px] text-[11.5px] leading-relaxed text-text-muted">
-            Receipts appear here after your first payment. Orindle doesn&apos;t generate placeholder
-            invoices.
-          </p>
-        </div>
+        {invoices.length === 0 ? (
+          <div className="px-4 py-7 text-center">
+            <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--brand-surface-muted)] text-text-subtle">
+              <FileText className="h-4 w-4" strokeWidth={1.9} aria-hidden="true" />
+            </span>
+            <p className="mt-2.5 text-[12.5px] font-semibold text-ink">No payment receipts yet</p>
+            <p className="mx-auto mt-1 max-w-[340px] text-[11.5px] leading-relaxed text-text-muted">
+              Receipts appear here after your first payment. Orindle doesn&apos;t generate placeholder
+              invoices.
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-[var(--brand-border-soft)]">
+            {invoices.map((inv) => (
+              <li key={inv.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-semibold text-ink">
+                    {formatMinorAmount(inv.amountMinor, inv.currency)}
+                    <span className="ml-1.5 text-[11px] font-normal text-text-subtle">
+                      {inv.currency}
+                    </span>
+                  </p>
+                  <p className="text-[10.5px] text-text-subtle">
+                    {formatDate(inv.paidAt)} · Ref {inv.paymentId}
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]",
+                    inv.status === "paid"
+                      ? "bg-[#EAF9F1] text-[#1B8A57]"
+                      : inv.status === "refunded"
+                        ? "bg-[#FFF5E5] text-[#A16207]"
+                        : "bg-[var(--brand-surface-muted)] text-text-muted",
+                  )}
+                >
+                  {inv.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <p className="flex items-center gap-1.5 border-t border-[var(--brand-border-soft)] px-4 py-2.5 text-[10.5px] text-text-subtle">
           <Lock className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden="true" />
-          Card details are never stored on Orindle servers.
+          Payments are processed by Razorpay. Card details are never stored on Orindle servers.
         </p>
       </section>
 
       <p className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-text-subtle">
         <CreditCard className="mt-px h-3 w-3 shrink-0" strokeWidth={2} aria-hidden="true" />
-        Prices are in Indian Rupees. GST is included where applicable. Refund terms are not
-        published yet — contact support before upgrading if you need them in writing.
+        <span>
+          Available in 8 currencies with monthly or annual (20% off) billing. GST / downloadable tax
+          invoices are not currently enabled. See our{" "}
+          <Link href="/terms" className="underline hover:text-ink">
+            Terms of Service
+          </Link>{" "}
+          for renewal, cancellation, and refund details.
+        </span>
       </p>
 
       <ConfirmDialog
@@ -312,9 +440,9 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
         confirmLabel="Cancel subscription"
         destructive
       >
-        Your plan would stay active until the end of the current billing period, then drop to Free.
-        Files over the Free limit stay readable but you couldn&apos;t upload more until you free space
-        or re-subscribe.
+        Your plan stays active until the end of the current billing period, then drops to Free (10
+        GB). Your files stay readable and downloadable; new uploads pause if you are above 10 GB
+        until you free space or re-subscribe.
       </ConfirmDialog>
 
       <ConfirmDialog
@@ -330,7 +458,7 @@ export function BillingView({ subscription }: { subscription: Subscription }) {
         destructive
       >
         A smaller plan has less space. If you&apos;re over the new limit you keep your files, but
-        you can&apos;t upload more or empty Trash without freeing space first.
+        you can&apos;t upload more until you free space or upgrade again.
       </ConfirmDialog>
     </div>
   );

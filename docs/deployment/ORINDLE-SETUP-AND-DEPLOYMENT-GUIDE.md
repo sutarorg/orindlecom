@@ -46,7 +46,7 @@ Before clicking any dashboards, understand what each external service does insid
 | Service | Role in Orindle | Required for Launch? |
 | --- | --- | --- |
 | **GitHub** | Hosts source code and triggers automatic Vercel Preview & Production deployments. | **Yes** |
-| **Supabase** | PostgreSQL database (18 migrations, RLS across all tables), user authentication (email/password, Google OAuth, TOTP MFA), rate limiting, and audit logs. | **Yes** |
+| **Supabase** | PostgreSQL database (19 migrations, RLS across all tables), user authentication (email/password, Google OAuth, TOTP MFA), rate limiting, and audit logs. | **Yes** |
 | **Google Cloud (Google Auth Platform)** | Provides OAuth 2.0 Client ID & Secret for **Continue with Google** sign-in. | **Optional** (button stays hidden until enabled) |
 | **Cloudflare R2** | S3-compatible private file storage using short-lived presigned upload/download URLs (`u/<userId>/...`, `o/<orgId>/...`). | **Yes** (for file storage) |
 | **Cloudflare Turnstile** | Bot protection on `/signup` with server-side single-use token verification. | **Recommended** (requires CSP update before enabling — see §4.5) |
@@ -450,6 +450,7 @@ Orindle has **18 SQL migrations** in `supabase/migrations/`:
 0016_turnstile_tokens.sql
 0017_platform_admin.sql
 0018_admin_aggregates.sql
+0019_approved_pricing_and_business.sql
 ```
 
 > **CRITICAL Hosted Supabase Caveats (Inspect Before Running!):**
@@ -467,7 +468,7 @@ npx supabase login
 # 2. Link this local checkout to your target project (replace <project-ref>)
 npx supabase link --project-ref <project-ref>
 
-# 3. Preview and push all 18 migrations in order
+# 3. Preview and push all 19 migrations in order
 npx supabase db push --remote
 ```
 
@@ -476,8 +477,8 @@ npx supabase db push --remote
 1. Open your project in `https://supabase.com/dashboard`.
 2. Left sidebar → click **SQL Editor** → **+ New query**.
 3. Open `supabase/migrations/0001_extensions_and_helpers.sql` locally, copy the entire file, paste it into the SQL Editor, and click **Run** (`Ctrl+Enter` / `Cmd+Enter`).
-4. Repeat **one file at a time in exact numerical order** from `0001` through `0018`.
-5. After `0018` completes, run this verification query in SQL Editor:
+4. Repeat **one file at a time in exact numerical order** from `0001` through `0019`.
+5. After `0019` completes, run this verification query in SQL Editor:
 
 ```sql
 -- 1. Confirm all 6 plans and 12 approved monthly prices exist (INR & USD only)
@@ -810,7 +811,7 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 > **STOP — Understand Razorpay Mode & Approvals Before Going Live:**
 > - **Test Mode** works immediately without KYC and uses `rzp_test_...` keys. No real money moves.
 > - **Live Mode** uses `rzp_live_...` keys and is unlocked **only after Razorpay approves your business KYC** (typically 24–48 hours, requiring live website pages for Terms, Privacy Policy, Refund/Cancellation, Contact, and Pricing).
-> - **Recurring (`RAZORPAY_RECURRING_ENABLED`)** and **International (`RAZORPAY_INTERNATIONAL_ENABLED`)** are separate merchant-account approvals inside Razorpay. Orindle defaults both to `false` and **refuses** matching checkouts rather than letting Razorpay reject them.
+> - **Recurring (`RAZORPAY_RECURRING_ENABLED`)** and **International (`RAZORPAY_INTERNATIONAL_ENABLED`)** are approved for Orindle and default to `true` (`!== "false"`). Either can be set to `false` as an emergency kill-switch to refuse matching checkouts before Razorpay is called.
 
 #### Step A — Generate Test Mode API Keys (Local & Preview)
 
@@ -1111,7 +1112,7 @@ Orindle uses a strict, zero-hardcoded-credentials administrator architecture bac
 ### Step-by-Step: Creating the First Orindle Platform Owner
 
 **Prerequisites:**
-- All 18 migrations (`0001`–`0018`) applied to your target Supabase database (§4.2 Step C).
+- All 19 migrations (`0001`–`0019`) applied to your target Supabase database (§4.2 Step C).
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` configured on the deployment.
 
 #### Step 1 — Create a Normal Account Through Orindle's Sign-Up Flow
@@ -1293,8 +1294,8 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 TRASH_RETENTION_DAYS=30
 RECOVERY_WINDOW_DAYS=90
 MALWARE_SCAN_ENABLED=false
-RAZORPAY_INTERNATIONAL_ENABLED=false
-RAZORPAY_RECURRING_ENABLED=false
+RAZORPAY_INTERNATIONAL_ENABLED=true
+RAZORPAY_RECURRING_ENABLED=true
 ```
 
 ---
@@ -1314,7 +1315,7 @@ Create your **Development/Staging** accounts and resources (never Production yet
 
 ### Phase 3 — Apply All 18 Supabase Migrations to `orindle-dev`
 
-1. Run migrations `0001` through `0018` in exact order on `orindle-dev` (§4.2 Step C).
+1. Run migrations `0001` through `0019` in exact order on `orindle-dev` (§4.2 Step C).
 2. Run the SQL verification query from §4.2 Step C to verify all 6 plans, 12 approved prices, RLS enabled on every `public` table, and all 8 `admin_*` functions.
 
 ---
@@ -1470,7 +1471,7 @@ Push a non-`main` branch (or trigger a Preview deployment in Vercel), then test 
 
 ### Phase 11 — Provision & Cut Over All Production External Configurations
 
-1. **Create `orindle-prod` Supabase project** (§4.2 Step A–B) and apply all 18 migrations (`0001`–`0018`) in order (§4.2 Step C).
+1. **Create `orindle-prod` Supabase project** (§4.2 Step A–B) and apply all 19 migrations (`0001`–`0019`) in order (§4.2 Step C).
 2. **Supabase (`orindle-prod`) Auth:**
    - **URL Configuration:** Site URL = `https://orindle.com`; Redirect URLs = **ONLY** `https://orindle.com/auth/callback` (no `localhost`, no `*.vercel.app`).
    - **Email & Custom SMTP:** Enable **Confirm email**, configure **Custom SMTP** with Resend verified domain (`smtp.resend.com`, port `465`, user `resend`, dedicated `orindle-prod-supabase-smtp` API key).
@@ -1561,8 +1562,8 @@ Then confirm manually:
 ### 7.1 Completed Configuration (Verified in Codebase Today — 16 Nov 2026)
 
 - [x] Next.js `16.4.6` + React `19.3.1` application routes, auth screens, personal dashboard, business UI shells, and `/admin` console implemented in repository.
-- [x] 18 forward-only SQL migrations (`0001`–`0018`) written with Row Level Security across all `public` tables, approved INR/USD monthly pricing seed, anti-abuse tables, and `platform_admins` schema + last-owner deferred constraint trigger.
-- [x] `.env.example` documents all 38 configurable environment variables with zero embedded secrets, `MALWARE_SCAN_ENABLED=false`, `RAZORPAY_RECURRING_ENABLED=false`, and `RAZORPAY_INTERNATIONAL_ENABLED=false`.
+- [x] 19 forward-only SQL migrations (`0001`–`0019`) written with Row Level Security across all `public` tables, approved 8-currency monthly & annual pricing seed (`96` `plan_prices` rows), Business Workspace schema + atomic ownership-transfer RPC, anti-abuse tables, and `platform_admins` schema + last-owner deferred constraint trigger.
+- [x] `.env.example` documents all configurable environment variables with zero embedded secrets, `MALWARE_SCAN_ENABLED=false`, `RAZORPAY_RECURRING_ENABLED=true`, and `RAZORPAY_INTERNATIONAL_ENABLED=true`.
 - [x] `vercel.json` schedules all 9 `/api/cron/*` routes.
 - [x] `next.config.ts` configures CSP, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, and `Permissions-Policy`.
 - [x] `src/app/robots.ts` and `src/app/sitemap.ts` (26 indexable URLs) implemented.
@@ -1571,8 +1572,8 @@ Then confirm manually:
 ### 7.2 Pending External Configuration & Human Decisions
 
 - [ ] **GitHub:** Secret Scanning & Push Protection enabled; `main` branch ruleset configured.
-- [ ] **Supabase (`orindle-dev`):** Project created, 18 migrations applied, Auth URLs configured, Google OAuth enabled, Dev owner bootstrapped.
-- [ ] **Supabase (`orindle-prod`):** Project created, 18 migrations applied, Auth URLs locked to `https://orindle.com/auth/callback`, Custom SMTP configured via Resend, Prod owner bootstrapped.
+- [ ] **Supabase (`orindle-dev`):** Project created, 19 migrations applied, Auth URLs configured, Google OAuth enabled, Dev owner bootstrapped.
+- [ ] **Supabase (`orindle-prod`):** Project created, 19 migrations applied, Auth URLs locked to `https://orindle.com/auth/callback`, Custom SMTP configured via Resend, Prod owner bootstrapped.
 - [ ] **Google Cloud Console:** Google Auth Platform configured (Branding, Data Access = `openid email profile` only, Dev & Prod Clients created, App Published for production).
 - [ ] **Cloudflare R2:** `orindle-dev` & `orindle-prod` private buckets created, environment-specific CORS JSON saved, bucket-scoped Object Read & Write API tokens generated.
 - [ ] **Cloudflare Turnstile (optional):** CSP updated in `next.config.ts` to allow `https://challenges.cloudflare.com`, Dev & Prod widgets created.

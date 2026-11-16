@@ -1,6 +1,6 @@
 # Blog Editorial Plan
 
-**Published:** 16 November 2026 · **Articles:** 10 · **Total words:** 11,247
+**Published:** 16 November 2026 · **Articles:** 10 · **Total words:** 11,264
 
 ---
 

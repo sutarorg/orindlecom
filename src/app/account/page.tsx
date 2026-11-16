@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { ArrowRight, Building2, CreditCard, FolderOpen, LogOut, Settings } from "lucide-react";
 import { Wordmark } from "@/components/brand/logo";
 import { signOutAction } from "@/app/(auth)/actions";
 import { getAuthService } from "@/lib/auth/service";
@@ -16,15 +16,33 @@ export const metadata: Metadata = pageMetadata({
 
 export const dynamic = "force-dynamic";
 
-/**
- * Account landing page.
- *
- * This exists so the auth flows have somewhere real to arrive: a successful
- * sign-in, an OAuth callback and a confirmed email all land here. It is a
- * placeholder for the product shell (PROMPT 3), not a dashboard — it shows the
- * confirmed identity and nothing else, and does not pretend to have a file
- * library behind it.
- */
+const SHORTCUTS = [
+  {
+    href: "/dashboard",
+    icon: FolderOpen,
+    title: "Personal Drive",
+    detail: "Upload, preview, organize, and share your files.",
+  },
+  {
+    href: "/dashboard/business",
+    icon: Building2,
+    title: "Business Workspace",
+    detail: "Create or manage your team's shared folders and members.",
+  },
+  {
+    href: "/dashboard/billing",
+    icon: CreditCard,
+    title: "Billing & Plans",
+    detail: "Compare storage tiers across 8 currencies and view receipts.",
+  },
+  {
+    href: "/dashboard/settings",
+    icon: Settings,
+    title: "Account Settings",
+    detail: "Manage display name, email, password, 2FA, and data export.",
+  },
+] as const;
+
 export default async function AccountPage() {
   const session = await getAuthService().getCurrentSession();
 
@@ -52,7 +70,7 @@ export default async function AccountPage() {
       </header>
 
       <main id="main" className="container-or py-10">
-        <div className="mx-auto max-w-[560px] rounded-[20px] border border-[var(--brand-border)] bg-white p-6 shadow-[var(--brand-shadow-md)] sm:p-8">
+        <div className="mx-auto max-w-[600px] rounded-[20px] border border-[var(--brand-border)] bg-white p-6 shadow-[var(--brand-shadow-md)] sm:p-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">Signed in</p>
           <h1 className="mt-2.5 text-[22px] font-extrabold leading-tight tracking-[-0.035em] text-ink">
             {session.user.fullName ? `Hello, ${session.user.fullName.split(" ")[0]}.` : "You're signed in."}
@@ -68,10 +86,28 @@ export default async function AccountPage() {
             </div>
           </dl>
 
-          <p className="mt-6 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-canvas)] px-3.5 py-3 text-[12px] leading-relaxed text-text-muted">
-            The file library itself isn&apos;t built yet — this page confirms your identity and
-            nothing more. Nothing you upload is stored here.
-          </p>
+          <div className="mt-6 grid gap-2.5 sm:grid-cols-2">
+            {SHORTCUTS.map(({ href, icon: Icon, title, detail }) => (
+              <Link
+                key={href}
+                href={href}
+                className="group flex items-start gap-3 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-canvas)] p-3.5 transition-colors hover:border-primary/40 hover:bg-white"
+              >
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
+                  <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1 text-[13px] font-semibold text-ink group-hover:text-primary">
+                    {title}
+                    <ArrowRight className="h-3 w-3 opacity-60" aria-hidden="true" />
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-text-muted">
+                    {detail}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
         </div>
       </main>
     </div>

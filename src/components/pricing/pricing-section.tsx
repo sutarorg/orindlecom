@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import {
-  CURRENCIES,
   DEFAULT_CURRENCY,
+  HIGHLIGHTED_PLAN,
   PLANS,
   currencyMeta,
   type BillingPeriod,
@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
 /**
  * Pricing block.
  *
- * Matches the reference's composition: centred heading, subhead, a small
- * segmented Monthly/Yearly pill, then all six plans in a single row with Plus
- * highlighted in place (3rd position). No 2 TB tier, no invented annual prices.
+ * Six storage tiers (10 GB Free through 5 TB Max) with Premium (1 TB)
+ * highlighted as Most Popular, monthly and annual (20% off) billing, and all
+ * eight supported currencies.
  */
 export function PricingSection({
   initialCurrency = DEFAULT_CURRENCY,
@@ -39,8 +39,6 @@ export function PricingSection({
     setCurrency(next);
     document.cookie = `orindle_currency=${next}; path=/; max-age=31536000; samesite=lax`;
   };
-
-  const yearlyUnapproved = CURRENCIES.length > 0 && PLANS.every((p) => p.yearly === null);
 
   return (
     <section
@@ -62,16 +60,6 @@ export function PricingSection({
           )}
         </div>
 
-        {billing === "yearly" && yearlyUnapproved && (
-          <p
-            role="status"
-            className="mx-auto mt-3 max-w-[440px] text-center text-[11.5px] leading-relaxed text-text-muted"
-          >
-            Annual pricing is not announced yet, so the monthly rate is shown. You will always
-            see the exact amount before any payment is taken.
-          </p>
-        )}
-
         <CurrencyNotice currency={currency} />
 
         <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:mt-10 xl:grid-cols-6 xl:gap-3.5">
@@ -81,7 +69,7 @@ export function PricingSection({
                 plan={plan}
                 billing={billing}
                 currency={currency}
-                highlighted={plan.id === "plus"}
+                highlighted={plan.id === HIGHLIGHTED_PLAN}
                 className="w-full"
               />
             </li>
@@ -90,8 +78,8 @@ export function PricingSection({
 
         <p className="mt-5 text-center text-[11.5px] leading-relaxed text-text-subtle">
           Storage is shared across every device you sign in on. Prices shown in{" "}
-          {currencyMeta(currency).code} for {currencyMeta(currency).region}. No credit card
-          required to start.
+          {currencyMeta(currency).code} for {currencyMeta(currency).region}. Save 20% with annual
+          billing. No credit card required to start.
         </p>
       </div>
     </section>

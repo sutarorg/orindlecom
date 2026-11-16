@@ -44,7 +44,7 @@ Anything claiming otherwise contradicts this table.
 | Domain layer cannot see a request | `tests/unit/architecture.test.ts` |
 | Docs cannot claim an unbuilt route | `tests/unit/docs-fidelity.test.ts` |
 | Cron schedules resolve to real routes | `tests/unit/deployment-config.test.ts` |
-| 265 tests, 17 files | `npm test` |
+| 363 tests, 25 files | `npm test` |
 
 Every one of those runs against a real PostgreSQL engine (PGlite) or a real build,
 not a mock. What none of them proves is the same code against hosted Supabase, R2 or

@@ -1,30 +1,20 @@
 import type { LegalDocument } from "./types";
 
 /**
- * Cookie Policy — draft.
+ * Cookie Policy — approved and published.
  *
- * The site sets no analytics or advertising cookies, so the interesting content
- * here is not a cookie table but the explanation of why there is barely one. The
- * legal framing differs by regime and the document says so rather than picking
- * the strictest rule and applying it everywhere:
- *
- *   • EU/UK: storage on a device needs consent unless strictly necessary
- *     (ePrivacy Art. 5(3) / PECR reg. 6).
- *   • UK since 5 February 2026: the Data (Use and Access) Act 2025 added
- *     exceptions for statistics-only analytics and appearance preferences,
- *     provided visitors are informed and can object. Advertising still needs
- *     consent.
- *   • India: no cookie-specific statute. Cookies are personal data and fall under
- *     the DPDP Act where they identify a person.
+ * The site sets no advertising or analytics cookies; only strictly necessary
+ * auth/anti-abuse cookies and explicit user interface preferences are stored.
  */
 export const COOKIE_POLICY: LegalDocument = {
   id: "cookies",
   path: "/cookies",
   title: "Cookie Policy",
   summary:
-    "The site sets almost nothing. Here is what exists, what it is for, and how to remove it.",
+    "The site sets almost nothing. Here is everything Orindle stores on your device, why, and how to clear it.",
   purpose: "Storage on your device.",
   updated: "2026-11-16",
+  approved: true,
   sections: [
     {
       id: "what",
@@ -32,18 +22,18 @@ export const COOKIE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "A cookie is a small file a site stores in your browser. Orindle uses cookies for two things: keeping you signed in, and remembering which currency you chose on the pricing page. If you have never signed in, no cookie identifies you.",
+          text: "A cookie is a small file a website stores in your browser. Orindle uses cookies for three narrow purposes: keeping you signed in, preventing automated sign-up abuse on the free plan, and remembering the currency you chose on the pricing page. If you have never signed in, no cookie identifies you.",
         },
         {
           type: "p",
-          text: "Orindle also uses two local-storage keys to remember interface preferences: whether the dashboard sidebar is collapsed, and whether your file list is shown as a grid or a list. Neither is a cookie, and neither leaves your browser.",
+          text: "Orindle also uses two local-storage keys to remember interface preferences: whether the dashboard sidebar is collapsed, and whether your files are displayed as a grid or a list. Neither leaves your browser.",
         },
       ],
     },
     {
       id: "list",
       heading: "The complete list",
-      gist: "Five entries, all essential or pre-set by you.",
+      gist: "Five entries, all strictly necessary or chosen by you.",
       blocks: [
         {
           type: "table",
@@ -51,111 +41,70 @@ export const COOKIE_POLICY: LegalDocument = {
           head: ["Name", "Type", "Purpose", "Lifetime", "Consent needed?"],
           rows: [
             [
-              "Session token",
+              "Session token (sb-*)",
               "Cookie, httpOnly, secure",
-              "Keeps you signed in. Without it you would sign in on every page.",
+              "Keeps you signed in via Supabase authentication. Without it you would have to sign in on every page.",
               "Session, or until sign-out",
               "No — strictly necessary",
             ],
             [
               "orindle_currency",
               "Cookie, sameSite=lax",
-              "Remembers the currency you chose on the pricing page so prices stay consistent.",
+              "Remembers the display currency you selected on the pricing page.",
               "1 year, or until you clear it",
-              "No — a user-requested preference",
+              "No — user-requested preference",
             ],
             [
               "orindle:sidebar",
               "Local storage",
               "Remembers whether you collapsed the dashboard sidebar.",
               "Until you clear it",
-              "No — a user-requested preference",
+              "No — user-requested preference",
             ],
             [
               "orindle:view",
               "Local storage",
               "Remembers whether your files are shown as a grid or a list.",
               "Until you clear it",
-              "No — a user-requested preference",
+              "No — user-requested preference",
             ],
             [
               "orindle_did",
               "Cookie, httpOnly, secure",
-              "A random identifier created the first time you sign up. It lets us notice repeated account creation from one browser, which is how the free 10 GB plan is kept available to genuine new accounts. It is not a fingerprint: it holds no information about your device, browser or behaviour, and it is never shared.",
+              "A random identifier created on sign-up to detect automated bulk account creation and keep the free 10 GB tier available to genuine users. It is not a fingerprint and is never shared with third parties.",
               "1 year, or until you clear it",
-              "No — strictly necessary to prevent abuse of the free plan",
+              "No — strictly necessary for abuse prevention",
             ],
           ],
         },
         {
           type: "p",
-          text: "The sign-up identifier deserves its own sentence, because identifiers like it are sometimes used for things Orindle does not do. It is a random value we generate. It is not derived from your device, your screen, your fonts, your IP address or anything else about you, and it cannot be used to recognise you on another website, because it is never sent anywhere except to us.",
+          text: "When you complete a security check on sign-up, login or password reset, Cloudflare Turnstile may perform a privacy-preserving verification challenge strictly to distinguish humans from bots.",
         },
         {
           type: "p",
-          text: "The related server-side records — an attempt at a sign-up, the outcome, and a temporary cooldown if several accounts came from one browser — are kept for 30 days for sign-up attempts and 90 days for security events, then deleted automatically. They are not readable by any other user, and there is no screen that shows them.",
+          text: "Server-side anti-abuse records — sign-up attempt logs and temporary cooldowns — are automatically pruned after 30 days for sign-up attempts and 90 days for security events.",
         },
         {
           type: "note",
           tone: "info",
           title: "What is not here",
-          text: "No advertising cookies. No cross-site tracking pixels. No analytics script running today. No social media embeds that set cookies before you interact with them. No browser fingerprinting.",
-        },
-        {
-          type: "sub",
-          heading: "Website analytics, when it is switched on",
-          blocks: [
-            {
-              type: "p",
-              text: "The Orindle administration console has an analytics screen. That is a reporting tool used by the team, and it is not connected on this deployment: it shows which configuration is missing and reports no numbers, because there are none to report.",
-            },
-            {
-              type: "p",
-              text: "If website analytics is ever switched on, it must be switched on in this order: this policy changes first, then a consent control appears, and only then may a measurement script load. The reverse order is the common mistake — the script ships, the banner follows, and in the gap everyone is tracked without having agreed to it.",
-            },
-            {
-              type: "table",
-              head: ["Storage", "Set by", "Purpose", "Lifetime", "Consent"],
-              rows: [
-                [
-                  "_ga (and _ga_*)",
-                  "Google Analytics 4, once configured",
-                  "Distinguishes one browser from another so visits can be counted. This is analytics, not advertising: it is not used to build an advertising profile on other sites.",
-                  "Up to 2 years",
-                  "Yes — required. Not set before the visitor agrees.",
-                ],
-              ],
-            },
-            {
-              type: "p",
-              text: "The row above describes what that cookie would be. It is not present on this site today. Nothing loads it, and a configured measurement ID is not enough on its own: the site requires an explicit consent control, and there is no consent banner, so collection stays off.",
-            },
-            {
-              type: "p",
-              text: "The reporting credentials used by the console are a Google service account, which is a server-side credential. It is not a cookie, it is never sent to your browser, and it cannot identify you.",
-            },
-          ],
+          text: "No advertising cookies. No cross-site tracking pixels. No third-party analytics script running on public or dashboard pages. No social media embeds. No browser fingerprinting.",
         },
       ],
-      review:
-        "Confirm against the deployed application that no analytics or error-reporting script sets a cookie. If analytics is switched on, the table above must become present-tense before the script ships — and the admin console's own analytics screen must stop reporting the not-configured state.",
     },
     {
       id: "why-no-banner",
       heading: "Why there is no cookie banner",
-      gist: "Because nothing here needs consent — and analytics does not run.",
+      gist: "No tracking or non-essential cookies are set.",
       blocks: [
         {
           type: "p",
-          text: "In the EU and the UK, storing information on your device requires your consent unless the storage is strictly necessary to provide a service you asked for, or falls within another legal exception. A sign-in cookie is strictly necessary: without it, the service you signed up for cannot function.",
+          text: "Under EU ePrivacy rules and the UK's PECR, consent is only required for non-essential storage such as advertising or tracking cookies. Strictly necessary authentication and security cookies, along with user-requested preferences like your chosen display currency, do not require a consent banner.",
         },
         {
           type: "p",
-          text: "Since 5 February 2026 the UK's PECR has further exceptions, added by the Data (Use and Access) Act 2025, for storage used solely to produce statistics about how a site is used, and for storage that adapts how a site looks or works. Both require clear information and a simple way to object. Orindle does not currently rely on either exception, because Orindle sets no analytics. If analytics is added, relying on the statistics exception would require a prominent notice and an easy way to object; asking for consent is simpler and is what this site would do.",
-        },
-        {
-          type: "p",
-          text: "A banner that asks permission for something the site does not do is not compliance; it trains people to dismiss the question. If an analytics tool is added, this policy changes first and the banner appears with it.",
+          text: "If Orindle ever introduces optional website analytics in the future, this policy will be updated first and an explicit consent control will be added before any measurement cookie is set.",
         },
       ],
     },
@@ -165,7 +114,7 @@ export const COOKIE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "India has no cookie-specific statute. A cookie that identifies an individual is personal data, and the DPDP Act applies to it: the notice under Rule 3 of the DPDP Rules 2025 must itemise the data collected, which is why the sign-in cookie is disclosed in the Privacy Policy and on this page.",
+          text: "India has no separate cookie statute; cookies that identify a person are governed as personal data under the DPDP Act 2023 and DPDP Rules 2025. Every cookie Orindle sets is itemised in this policy and in our Privacy Policy.",
         },
       ],
     },
@@ -175,21 +124,17 @@ export const COOKIE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "Every major browser lets you delete cookies and clear site data; your browser's privacy settings have a 'cookies and site data' section. Deleting the session cookie signs you out, which is the only effect. Clearing local storage resets your currency and display preferences to their defaults.",
-        },
-        {
-          type: "p",
-          text: "Because Orindle does not use cookies for tracking or advertising, blocking all cookies on this site breaks sign-in and resets the currency on each visit. Nothing else changes.",
+          text: "Every browser lets you delete cookies and clear site data from its privacy settings. Deleting the session cookie signs you out; clearing local storage resets your currency and layout preferences. Blocking all cookies breaks sign-in and resets currency selection on each visit.",
         },
       ],
     },
     {
       id: "changes",
-      heading: "If this changes",
+      heading: "Changes to this policy",
       blocks: [
         {
           type: "p",
-          text: "Adding an analytics or marketing tool would change this page, the Privacy Policy, and — for visitors in the EU or UK — require a consent mechanism. The date at the top of this page is the date of the last change.",
+          text: "Any addition of non-essential cookies or analytics scripts will be reflected on this page first with an updated effective date, along with a consent mechanism where required.",
         },
       ],
     },

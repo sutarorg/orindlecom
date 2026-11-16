@@ -3,24 +3,27 @@
  *
  * Three invariants, and every function here exists to hold one of them:
  *
- *   1. **The amount comes from the database.** The client sends a plan id; the
- *      server resolves the price from an `approved` row. There is no code path
- *      where a client-supplied figure reaches Razorpay.
+ *   1. **The amount comes from the database.** The client sends a plan id,
+ *      currency and period; the server resolves the price from an `approved`
+ *      row. There is no code path where a client-supplied figure reaches
+ *      Razorpay.
  *   2. **Nothing activates without a verified signature.** Both the browser
  *      callback and the webhook are HMAC-verified, compared in constant time.
- *   3. **Everything is idempotent.** Razorpay retries; a duplicate delivery must
- *      produce one subscription and one invoice, never two charges.
+ *   3. **Everything is idempotent.** Razorpay retries; a duplicate delivery
+ *      must produce one subscription and one invoice, never two charges.
  *
- * What this file deliberately refuses to do: invent a yearly price, invent a
- * currency that has no approved price, or assume the merchant account supports
- * international or recurring payments. Those are capabilities of an account, not
- * of a codebase.
+ * International payments across all eight approved currencies (INR, USD, GBP,
+ * EUR, AED, SGD, AUD, CAD) and both monthly and annual (20% off) periods are
+ * approved for Orindle. Both capability switches remain configurable via
+ * environment variables (`RAZORPAY_INTERNATIONAL_ENABLED`,
+ * `RAZORPAY_RECURRING_ENABLED`) as kill-switches (`"false"` disables).
  */
 
 import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { AppError } from "@/domain/auth/errors";
+import { isSupportedCurrency, type CurrencyCode } from "@/config/pricing";
 import { getServiceClient } from "@/lib/supabase/service";
 
 const KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ?? "";
@@ -31,16 +34,12 @@ const API = "https://api.razorpay.com/v1";
 /**
  * Merchant-account capabilities.
  *
- * Both default to false, because neither is confirmed for this account. While
- * they are false the server REFUSES an international or recurring order rather
- * than creating one Razorpay will reject — and the UI says subscriptions aren't
- * available yet instead of failing at payment.
- *
- * See docs/backend/payment-lifecycle.md §9. These are dashboard facts, not code.
+ * Razorpay international and recurring payments are approved for Orindle;
+ * both default to enabled unless explicitly turned off with `"false"`.
  */
 export const BILLING_CAPABILITIES = {
-  international: process.env.RAZORPAY_INTERNATIONAL_ENABLED === "true",
-  recurring: process.env.RAZORPAY_RECURRING_ENABLED === "true",
+  international: process.env.RAZORPAY_INTERNATIONAL_ENABLED !== "false",
+  recurring: process.env.RAZORPAY_RECURRING_ENABLED !== "false",
 } as const;
 
 export function isBillingConfigured(): boolean {
@@ -57,7 +56,7 @@ function authHeader(): string {
 
 export interface ResolvedPrice {
   planId: string;
-  currency: "INR" | "USD";
+  currency: CurrencyCode;
   period: "monthly" | "yearly";
   /** Minor units, from the database. */
   amountMinor: number;
@@ -66,8 +65,8 @@ export interface ResolvedPrice {
 /**
  * The only place an amount is decided.
  *
- * A zero-row result is the honest answer for "annual isn't announced" or "we
- * don't sell in that currency", and the message says which.
+ * Resolves an approved price row from `public.plan_prices` for any of the
+ * eight approved currencies on monthly or yearly billing.
  */
 export async function resolveApprovedPrice(
   planId: string,
@@ -78,13 +77,21 @@ export async function resolveApprovedPrice(
     throw new AppError("not_configured", "Payments aren't connected on this deployment yet.");
   }
 
+  const normalizedCurrency = currency.trim().toUpperCase();
+  if (!isSupportedCurrency(normalizedCurrency)) {
+    throw new AppError(
+      "unsupported",
+      "That currency isn't supported. Choose one of our eight published currencies.",
+    );
+  }
+
   const supabase = getServiceClient();
 
   const { data, error } = await supabase
     .from("plan_prices")
     .select("plan_id, currency, period, amount_minor")
     .eq("plan_id", planId)
-    .eq("currency", currency)
+    .eq("currency", normalizedCurrency)
     // Only an approved row may be charged.
     .eq("approved", true)
     .eq("period", period)
@@ -94,9 +101,7 @@ export async function resolveApprovedPrice(
   if (!data) {
     throw new AppError(
       "unsupported",
-      period === "yearly"
-        ? "Annual pricing isn't available yet. Monthly plans are, and nothing was charged."
-        : "That plan isn't available in your currency yet. Nothing was charged.",
+      "That plan isn't available in the selected currency or billing period. Nothing was charged.",
     );
   }
 
@@ -110,23 +115,26 @@ export async function resolveApprovedPrice(
     throw new AppError("unsupported", "That plan isn't available right now. Nothing was charged.");
   }
 
-  // Capability gates, checked before an order exists rather than after it fails.
-  if (currency !== "INR" && !BILLING_CAPABILITIES.international) {
+  // Runtime kill-switches: checked before an order exists.
+  const internationalEnabled = process.env.RAZORPAY_INTERNATIONAL_ENABLED !== "false";
+  const recurringEnabled = process.env.RAZORPAY_RECURRING_ENABLED !== "false";
+
+  if (normalizedCurrency !== "INR" && !internationalEnabled) {
     throw new AppError(
       "unsupported",
-      "Payments in this currency aren't switched on yet. Nothing was charged.",
+      "Payments in this currency are temporarily paused. Nothing was charged.",
     );
   }
-  if (!BILLING_CAPABILITIES.recurring) {
+  if (!recurringEnabled) {
     throw new AppError(
       "unsupported",
-      "Recurring subscriptions aren't available yet. Nothing was charged.",
+      "Subscription checkout is temporarily paused. Nothing was charged.",
     );
   }
 
   return {
     planId: data.plan_id as string,
-    currency: data.currency as "INR" | "USD",
+    currency: normalizedCurrency,
     period: data.period as "monthly" | "yearly",
     amountMinor: Number(data.amount_minor),
   };
@@ -165,9 +173,7 @@ export interface CreatedOrder {
  * `userId` goes into the order notes because the webhook arrives with no session
  * at all. The notes are the only trustworthy statement of who the money is for,
  * and they were written by this server at order time rather than supplied by the
- * browser. Without them the webhook has nothing to activate against — it would
- * have to guess from the receipt or the email, and guessing is how a payment
- * credits the wrong account.
+ * browser.
  */
 export async function createOrder(
   price: ResolvedPrice,
@@ -175,8 +181,6 @@ export async function createOrder(
   userId: string,
 ): Promise<CreatedOrder> {
   if (!userId) {
-    // Refuse before calling Razorpay rather than creating an order nobody can
-    // attribute afterwards.
     throw new AppError("unknown", "We couldn't start checkout. Nothing was charged.");
   }
 
@@ -190,7 +194,7 @@ export async function createOrder(
       amount: price.amountMinor,
       currency: price.currency,
       receipt,
-      notes: { planId: price.planId, period: price.period, userId },
+      notes: { planId: price.planId, period: price.period, currency: price.currency, userId },
     }),
     signal: AbortSignal.timeout(15_000),
   });
@@ -214,11 +218,6 @@ export async function createOrder(
 
 /**
  * Fetch an order from Razorpay.
- *
- * Used by the verification endpoint to recover the order's notes. Those notes were
- * written by this server when the order was created, and reading them back from
- * Razorpay means verification does not depend on our own database write having
- * succeeded — the provider's copy is the authoritative one.
  */
 export async function fetchOrder(orderId: string): Promise<{
   orderId: string;
@@ -254,13 +253,6 @@ export async function fetchOrder(orderId: string): Promise<{
 /*  Signature verification                                             */
 /* ------------------------------------------------------------------ */
 
-/**
- * Verify the browser callback.
- *
- * Razorpay signs `${orderId}|${paymentId}` with the key secret. Compared in
- * constant time: a string comparison leaks timing, and a signature is exactly the
- * thing worth timing.
- */
 export function verifyPaymentSignature({
   orderId,
   paymentId,
@@ -279,13 +271,6 @@ export function verifyPaymentSignature({
   return constantTimeEqual(expected, signature);
 }
 
-/**
- * Verify a webhook.
- *
- * The raw request body must be used — a re-serialised object will not match,
- * because JSON key order and whitespace are part of the bytes that were signed.
- * Callers must pass the untouched buffer.
- */
 export function verifyWebhookSignature(rawBody: string, signature: string): boolean {
   if (!WEBHOOK_SECRET) return false;
 
@@ -329,7 +314,6 @@ export interface ActivationInput {
 export async function activateSubscription(input: ActivationInput): Promise<void> {
   const supabase = getServiceClient();
 
-  // 1. Invoice first. If it already exists this is a replay: stop, do nothing.
   const { data: existing } = await supabase
     .from("invoices")
     .select("id")
@@ -338,9 +322,6 @@ export async function activateSubscription(input: ActivationInput): Promise<void
 
   if (existing) return;
 
-  // 2. Upsert the subscription. An expired or cancelled row is reused and
-  //    reactivated rather than duplicated, so a returning customer keeps one
-  //    record and its history.
   const { data: current } = await supabase
     .from("subscriptions")
     .select("id, recovery_ends_at")
@@ -357,23 +338,8 @@ export async function activateSubscription(input: ActivationInput): Promise<void
     provider_subscription_id: input.subscriptionId ?? null,
     current_period_start: new Date().toISOString(),
     current_period_end: input.periodEnd,
-    /*
-     * The server-verified billing period, not the client's claim.
-     *
-     * `input.period` is derived from the plan price row that produced the order, so
-     * it is what the customer is actually being charged for. Persisting it is what
-     * makes MRR computable: a yearly plan contributes amount_minor / 12 to monthly
-     * recurring revenue, and without this column every yearly subscriber would be
-     * either overstated by 12x or silently excluded.
-     *
-     * Rows created before this column existed stay NULL. They are counted and shown
-     * as "excluded from MRR" rather than guessed at — inferring a period from the
-     * gap between period_start and period_end would be inventing billing data.
-     */
     billing_period: input.period,
     cancel_at_period_end: false,
-    // Reactivation clears the recovery clock: nothing was ever lost, so there is
-    // no window left to be in.
     expired_at: null,
     recovery_ends_at: null,
   };
@@ -406,7 +372,12 @@ export async function activateSubscription(input: ActivationInput): Promise<void
     subject_type: "subscription",
     subject_id: subscriptionId ?? null,
     kind: "subscription.activated",
-    metadata: { planId: input.planId, amountMinor: input.amountMinor, currency: input.currency },
+    metadata: {
+      planId: input.planId,
+      period: input.period,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+    },
   });
 }
 

@@ -65,7 +65,7 @@ export const PAGE_SEO = {
     path: "/pricing",
     title: "Cloud Storage Plans & Pricing",
     description:
-      "Compare Orindle cloud storage plans from 10 GB free to 10 TB. Explore affordable monthly storage options for personal files and business needs.",
+      "Compare Orindle cloud storage plans from 10 GB free to 5 TB. Explore affordable monthly and annual storage options across 8 currencies for personal and business use.",
     primaryKeyword: "cloud storage pricing",
     secondaryKeywords: [
       "cloud storage plans",
@@ -75,7 +75,7 @@ export const PAGE_SEO = {
       "100 GB cloud storage",
       "500 GB cloud storage",
       "1 TB cloud storage",
-      "10 TB cloud storage",
+      "5 TB cloud storage",
     ],
     metaKeywords: [
       "cloud storage pricing",
@@ -86,7 +86,7 @@ export const PAGE_SEO = {
       "100GB cloud storage",
       "500GB cloud storage",
       "1TB cloud storage",
-      "10TB cloud storage",
+      "5TB cloud storage",
     ],
     h1: "Room for every kind of digital life.",
   },

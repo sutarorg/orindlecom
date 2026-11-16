@@ -129,13 +129,13 @@ describe("MRR", () => {
          from public.admin_mrr() group by currency order by currency`,
     );
 
-    // INR: 19900 + 19900 (two Plus) + 34900 (Premium, cancelling but still paid) = 74700
-    // USD: 149 (Basic)
+    // INR: 54900 + 54900 (two Plus) + 109900 (Premium, cancelling but still paid) = 219700
+    // USD: 109 (Basic)
     const inr = rows.find((r) => r.currency === "INR");
     const usd = rows.find((r) => r.currency === "USD");
 
-    expect(Number(inr?.monthly_minor)).toBe(74_700);
-    expect(Number(usd?.monthly_minor)).toBe(149);
+    expect(Number(inr?.monthly_minor)).toBe(219_700);
+    expect(Number(usd?.monthly_minor)).toBe(109);
     // Two currencies, two figures. There is no combined total anywhere in the
     // system, which is the property this asserts.
     expect(rows).toHaveLength(2);
@@ -147,7 +147,7 @@ describe("MRR", () => {
     const rows = await t.asService<{ monthly_minor: string }>(
       `select monthly_minor from public.admin_mrr() where currency = 'INR' and monthly_minor > 0`,
     );
-    expect(Number(rows[0].monthly_minor)).toBe(74_700);
+    expect(Number(rows[0].monthly_minor)).toBe(219_700);
   });
 
   it("excludes an unknown billing period and reports how many", async () => {
@@ -156,7 +156,7 @@ describe("MRR", () => {
     );
     // Exactly one INR subscription has a null billing period. It is counted here
     // and contributes nothing to monthly_minor above — the total is incomplete and
-    // the console says so rather than presenting 74700 as the whole story.
+    // the console says so rather than presenting 219700 as the whole story.
     expect(Number(rows[0].unknown_period)).toBe(1);
   });
 
@@ -166,12 +166,7 @@ describe("MRR", () => {
       const userId = await fresh.createUser("annual@example.com");
       await fresh.verifyUser(userId);
 
-      // An annual price is not approved in this product, so insert one directly to
-      // prove the arithmetic rather than waiting for a product decision.
-      await fresh.asService(
-        `insert into public.plan_prices (plan_id, currency, period, amount_minor, approved)
-         values ('max', 'INR', 'yearly', 2398800, true)`,
-      );
+      // Uses the approved yearly Max INR price seeded by 0019 (₹53,748/yr = 5374800 paise).
       await fresh.asService(
         `insert into public.subscriptions
            (owner_id, plan_id, currency, status, billing_period, current_period_end)
@@ -182,9 +177,8 @@ describe("MRR", () => {
       const rows = await fresh.asService<{ monthly_minor: string }>(
         `select monthly_minor from public.admin_mrr() where currency = 'INR'`,
       );
-      // 2398800 paise per year / 12 = 199900 paise per month, in integers.
-      // Written as a literal so a change to the formula fails loudly.
-      expect(Number(rows[0].monthly_minor)).toBe(199_900);
+      // 5374800 paise per year / 12 = 447900 paise per month (₹4,479/mo), in integers.
+      expect(Number(rows[0].monthly_minor)).toBe(447_900);
     } finally {
       await fresh.close();
     }

@@ -12,10 +12,6 @@
  *   missing  → nothing is sent; callers report `not_configured`
  *   sandbox  → the provider will only deliver to the account owner
  *   ready    → a verified domain, normal delivery
- *
- * "We sent it" is false in the sandbox state for every recipient except the owner,
- * so the product must not claim delivery there. `getEmailState()` exists so the
- * UI and the health endpoint can say which state the deployment is in.
  */
 
 import "server-only";
@@ -30,9 +26,35 @@ export type EmailState = "missing" | "sandbox" | "ready";
 
 export function getEmailState(): EmailState {
   if (!API_KEY) return "missing";
-  // The sandbox sender only delivers to the account owner.
   return FROM.includes("resend.dev") ? "sandbox" : "ready";
 }
+
+export const EMAIL_TEMPLATES = [
+  "welcome",
+  "verify-email",
+  "reset-password",
+  "password-changed",
+  "email-changed",
+  "org-invite",
+  "invite-accepted",
+  "role-changed",
+  "member-removed",
+  "storage-warning-80",
+  "storage-full",
+  "subscription-started",
+  "payment-receipt",
+  "payment-failed",
+  "subscription-cancelled",
+  "subscription-expiring",
+  "subscription-expired",
+  "account-deletion-requested",
+  "account-deleted",
+  "data-export-ready",
+  "support-received",
+  "support-reply",
+] as const;
+
+export type EmailTemplateName = (typeof EMAIL_TEMPLATES)[number] | `subscription-expiring-${number}`;
 
 export interface SendResult {
   ok: true;
@@ -64,8 +86,8 @@ export const SUPPORT_INBOX = SITE.supportEmail;
  * Send one email.
  *
  * Templates are a closed set resolved by `renderTemplate`; a caller cannot
- * inject arbitrary HTML into an email body, which matters because invite and
- * role-change mails include text another user typed.
+ * inject arbitrary HTML into an email body, which matters because invite,
+ * role-change and support mails include text another user typed.
  */
 export async function sendEmail(input: SendInput): Promise<SendResult | SendFailure> {
   if (!API_KEY) {
@@ -77,7 +99,6 @@ export async function sendEmail(input: SendInput): Promise<SendResult | SendFail
     : renderTemplate(input.template, input.data ?? {});
 
   if (!rendered) {
-    // An unknown template is a programming error, not a delivery problem.
     return { ok: false, error: `Unknown email template: ${input.template}`, retryable: false };
   }
 
@@ -94,10 +115,8 @@ export async function sendEmail(input: SendInput): Promise<SendResult | SendFail
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
-        // Replies should reach a person, not a no-reply sink.
         reply_to: [SUPPORT_INBOX],
       }),
-      // A hanging provider must not hang the request that triggered it.
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -106,7 +125,6 @@ export async function sendEmail(input: SendInput): Promise<SendResult | SendFail
       return {
         ok: false,
         error: `Resend ${response.status}: ${body.slice(0, 300)}`,
-        // 429 and 5xx are worth retrying; 4xx generally is not.
         retryable: response.status === 429 || response.status >= 500,
       };
     }
@@ -129,10 +147,9 @@ export async function sendEmail(input: SendInput): Promise<SendResult | SendFail
 /* ------------------------------------------------------------------ */
 /*  Templates                                                          */
 /*                                                                     */
-/*  Branded in the Orindle visual language: the same blue, the same    */
-/*  wordmark treatment, the same plain-speaking tone. An email that    */
-/*  looks like a different product erodes trust exactly when trust is  */
-/*  being asked for. No tracking pixels, ever.                          */
+/*  Branded in the Orindle visual language. Every template produces    */
+/*  both escaped HTML and a plain-text alternative. No tracking        */
+/*  pixels, ever.                                                      */
 /* ------------------------------------------------------------------ */
 
 const BRAND = {
@@ -144,7 +161,18 @@ const BRAND = {
   radius: "14px",
 };
 
-function layout({ heading, body, action }: { heading: string; body: string; action?: string }): string {
+function layout({
+  heading,
+  body,
+  action,
+  actionLabel = "Continue",
+}: {
+  heading: string;
+  body: string;
+  action?: string;
+  actionLabel?: string;
+}): string {
+  const safeAction = action ? esc(action) : "";
   return `<!doctype html>
 <html lang="en">
   <body style="margin:0;padding:24px;background:${BRAND.canvas};font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
@@ -161,15 +189,15 @@ function layout({ heading, body, action }: { heading: string; body: string; acti
         <div style="font-size:14.5px;line-height:1.6;color:${BRAND.muted};">${body}</div>
       </td></tr>
       ${
-        action
+        safeAction
           ? `<tr><td style="padding:22px 28px 0;">
-        <a href="${action}" style="display:inline-block;padding:12px 20px;border-radius:10px;background:${BRAND.primary};color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">Continue</a>
+        <a href="${safeAction}" style="display:inline-block;padding:12px 20px;border-radius:10px;background:${BRAND.primary};color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">${esc(actionLabel)}</a>
       </td></tr>`
           : ""
       }
       <tr><td style="padding:26px 28px 24px;">
         <div style="border-top:1px solid ${BRAND.border};padding-top:14px;font-size:12px;line-height:1.6;color:${BRAND.muted};">
-          Sent by Orindle. Questions go to
+          Sent by Orindle (orindle.com). Questions go to
           <a href="mailto:${SUPPORT_INBOX}" style="color:${BRAND.primary};text-decoration:none;">${SUPPORT_INBOX}</a>.
         </div>
       </td></tr>
@@ -184,19 +212,35 @@ function esc(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-interface Rendered {
+export interface RenderedEmail {
   subject: string;
   html: string;
   text: string;
 }
 
-export function renderTemplate(template: string, data: Record<string, string>): Rendered | null {
+export function renderTemplate(template: string, data: Record<string, string>): RenderedEmail | null {
   const name = data.name ? esc(data.name) : "there";
+  const rawName = data.name || "there";
 
   switch (template) {
+    case "welcome":
+      return {
+        subject: "Welcome to Orindle — your 10 GB is ready",
+        html: layout({
+          heading: "Welcome to Orindle",
+          body: `<p style="margin:0 0 10px;">Hi ${name}, your Orindle account is confirmed and ready to use.</p>
+                 <p style="margin:0 0 10px;">You start with <strong>10 GB of free cloud storage</strong> — no credit card required, no per-file upload cap beyond your storage allowance, and 30-day Trash recovery.</p>
+                 <p style="margin:0;">Upload your first files, share folders with colleagues, or turn on two-factor authentication any time from Settings.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard`,
+          actionLabel: "Open your dashboard",
+        }),
+        text: `Hi ${rawName}, welcome to Orindle. Your account is confirmed with 10 GB of free storage. Open your dashboard: ${data.url ?? `${SITE.url}/dashboard`}`,
+      };
+
     case "verify-email":
       return {
         subject: "Confirm your Orindle email",
@@ -205,6 +249,7 @@ export function renderTemplate(template: string, data: Record<string, string>): 
           body: `<p style="margin:0 0 10px;">Hi ${name}, confirm this address to finish setting up your Orindle account.</p>
                  <p style="margin:0;">The link expires in 24 hours. If you didn't sign up, ignore this email — nothing happens.</p>`,
           action: data.url,
+          actionLabel: "Confirm email",
         }),
         text: `Confirm your Orindle email: ${data.url ?? ""}\n\nIf you didn't sign up, ignore this email.`,
       };
@@ -217,6 +262,7 @@ export function renderTemplate(template: string, data: Record<string, string>): 
           body: `<p style="margin:0 0 10px;">Hi ${name}, use the link below to choose a new password. It expires in 30 minutes.</p>
                  <p style="margin:0;">If you didn't ask for this, you can ignore it — your password hasn't changed.</p>`,
           action: data.url,
+          actionLabel: "Reset password",
         }),
         text: `Reset your Orindle password (expires in 30 minutes): ${data.url ?? ""}`,
       };
@@ -232,16 +278,28 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         text: `Your Orindle password was changed. If this wasn't you, contact ${SUPPORT_INBOX}.`,
       };
 
+    case "email-changed":
+      return {
+        subject: "Your Orindle email address change",
+        html: layout({
+          heading: "Your email address is changing",
+          body: `<p style="margin:0 0 10px;">Hi ${name}, a request was made to change the email on your Orindle account${data.oldEmail ? ` from <strong>${esc(data.oldEmail)}</strong>` : ""}${data.newEmail ? ` to <strong>${esc(data.newEmail)}</strong>` : ""}.</p>
+                 <p style="margin:0;">If you made this change, confirm the link sent to the new address. If you didn't request this, sign in immediately, change your password, and reply to this email.</p>`,
+        }),
+        text: `Hi ${rawName}, a request was made to change your Orindle email${data.oldEmail ? ` from ${data.oldEmail}` : ""}${data.newEmail ? ` to ${data.newEmail}` : ""}. If this wasn't you, secure your account immediately and contact ${SUPPORT_INBOX}.`,
+      };
+
     case "org-invite":
       return {
         subject: `${data.inviter ?? "Someone"} invited you to ${data.organization ?? "an organization"} on Orindle`,
         html: layout({
           heading: `Join ${esc(data.organization ?? "the team")}`,
-          body: `<p style="margin:0 0 10px;">${esc(data.inviter ?? "An administrator")} invited you to join <strong>${esc(data.organization ?? "their organization")}</strong> as ${esc(data.role ?? "a member")}.</p>
+          body: `<p style="margin:0 0 10px;">${esc(data.inviter ?? "An administrator")} invited you to join <strong>${esc(data.organization ?? "their organization")}</strong> as <strong>${esc(data.role ?? "a member")}</strong>.</p>
                  <p style="margin:0;">This invitation expires in 7 days.</p>`,
           action: data.url,
+          actionLabel: "Accept invitation",
         }),
-        text: `${data.inviter ?? "An administrator"} invited you to ${data.organization ?? "an organization"}: ${data.url ?? ""}`,
+        text: `${data.inviter ?? "An administrator"} invited you to join ${data.organization ?? "an organization"} as ${data.role ?? "a member"}: ${data.url ?? ""}\n\nThis invitation expires in 7 days.`,
       };
 
     case "invite-accepted":
@@ -251,33 +309,60 @@ export function renderTemplate(template: string, data: Record<string, string>): 
           heading: "Your invitation was accepted",
           body: `<p style="margin:0;">${name} has joined <strong>${esc(data.organization ?? "your organization")}</strong>.</p>`,
         }),
-        text: `${data.name ?? "Someone"} accepted your invitation to ${data.organization ?? "your organization"}.`,
+        text: `${rawName} accepted your invitation to ${data.organization ?? "your organization"}.`,
+      };
+
+    case "role-changed":
+      return {
+        subject: `Your role in ${data.organization ?? "your organization"} was updated`,
+        html: layout({
+          heading: "Your organization role changed",
+          body: `<p style="margin:0 0 10px;">Hi ${name}, ${esc(data.actor ?? "an administrator")} changed your role in <strong>${esc(data.organization ?? "your organization")}</strong>${data.previousRole && data.newRole ? ` from <strong>${esc(data.previousRole)}</strong> to <strong>${esc(data.newRole)}</strong>` : data.newRole ? ` to <strong>${esc(data.newRole)}</strong>` : ""}.</p>
+                 <p style="margin:0;">The change takes effect immediately on your next action.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/business`,
+          actionLabel: "Open workspace",
+        }),
+        text: `Hi ${rawName}, ${data.actor ?? "an administrator"} changed your role in ${data.organization ?? "your organization"}${data.previousRole && data.newRole ? ` from ${data.previousRole} to ${data.newRole}` : data.newRole ? ` to ${data.newRole}` : ""}.`,
+      };
+
+    case "member-removed":
+      return {
+        subject: `You were removed from ${data.organization ?? "an organization"} on Orindle`,
+        html: layout({
+          heading: "Your organization access ended",
+          body: `<p style="margin:0 0 10px;">Hi ${name}, your access to <strong>${esc(data.organization ?? "the organization")}</strong> and its shared folders has been removed.</p>
+                 <p style="margin:0;">Your personal Orindle account and personal files are completely untouched.</p>`,
+        }),
+        text: `Hi ${rawName}, your access to ${data.organization ?? "the organization"} and its shared folders has ended. Your personal Orindle account and personal files remain untouched.`,
       };
 
     case "storage-warning-80":
       return {
-        subject: "You've used 80% of your storage",
+        subject: "You've used 80% of your Orindle storage",
         html: layout({
           heading: "You're at 80% of your storage",
           body: `<p style="margin:0 0 10px;">You're using <strong>${esc(data.used ?? "")}</strong> of <strong>${esc(data.total ?? "")}</strong>.</p>
-                 <p style="margin:0;">Your files stay exactly as they are. Uploads are only refused once you pass the allowance — downloading and deleting keep working.</p>`,
-          action: data.url,
+                 <p style="margin:0;">Your files stay exactly as they are. Uploads are only paused once you reach 100% — downloading and deleting always keep working.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/storage`,
+          actionLabel: "Manage storage",
         }),
-        text: `You're using ${data.used ?? ""} of ${data.total ?? ""}. ${data.url ?? ""}`,
+        text: `You're using ${data.used ?? ""} of ${data.total ?? ""} on Orindle. ${data.url ?? `${SITE.url}/dashboard/storage`}`,
+      };
+
+    case "storage-full":
+      return {
+        subject: "Your Orindle storage is full",
+        html: layout({
+          heading: "Your storage is full",
+          body: `<p style="margin:0 0 10px;">You've reached 100% of your storage allowance (<strong>${esc(data.used ?? "")}</strong> of <strong>${esc(data.total ?? "")}</strong>).</p>
+                 <p style="margin:0 0 10px;">New uploads are paused until you free space or upgrade your plan. Nothing has been deleted — you can still preview, download, and delete files or empty Trash at any time.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/billing`,
+          actionLabel: "Upgrade or manage storage",
+        }),
+        text: `Your Orindle storage is full (${data.used ?? ""} of ${data.total ?? ""}). New uploads are paused; downloading and deleting still work. ${data.url ?? `${SITE.url}/dashboard/billing`}`,
       };
 
     case "support-reply": {
-      /*
-       * An operator reply to a customer.
-       *
-       * The body is escaped twice over, deliberately: `esc()` neutralises HTML
-       * metacharacters and the newlines become <br> *after* escaping, so a reply
-       * containing `<script>` renders as text rather than executing, and one
-       * containing a newline still renders as paragraphs.
-       *
-       * The reference is included so a customer replying to this mail lands in a
-       * thread the operator can find by number.
-       */
       const paragraphs = (data.body ?? "")
         .split(/\r?\n/)
         .map((line) => esc(line))
@@ -291,11 +376,8 @@ export function renderTemplate(template: string, data: Record<string, string>): 
                  <p style="margin:0 0 12px;">${paragraphs}</p>
                  <p style="margin:0;">Reply to this email and it reaches the same inbox. Your reference is <strong>${esc(data.reference ?? "")}</strong>.</p>`,
         }),
-        // The plain-text part carries the same content, unescaped, because it is
-        // text and not markup. A multipart alternative is what stops a reply that
-        // quotes a URL from being mangled in a text-only client.
         text: [
-          `Hi ${data.name ?? "there"},`,
+          `Hi ${rawName},`,
           "",
           data.body ?? "",
           "",
@@ -311,10 +393,30 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         html: layout({
           heading: `You're on ${esc(data.plan ?? "a new plan")}`,
           body: `<p style="margin:0 0 10px;">Payment of <strong>${esc(data.amount ?? "")}</strong> was confirmed.</p>
-                 <p style="margin:0;">Your next renewal is ${esc(data.renewsOn ?? "monthly")}. You can change or cancel any time from Billing.</p>`,
-          action: data.url,
+                 <p style="margin:0;">Your next renewal is <strong>${esc(data.renewsOn ?? "at the end of your billing period")}</strong>. You can view receipts, change plans, or cancel any time from Billing.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/billing`,
+          actionLabel: "View billing",
         }),
-        text: `Your ${data.plan ?? ""} plan is active. ${data.amount ?? ""}. ${data.url ?? ""}`,
+        text: `Your ${data.plan ?? ""} plan is active. Payment confirmed: ${data.amount ?? ""}. Next renewal: ${data.renewsOn ?? "at period end"}. ${data.url ?? `${SITE.url}/dashboard/billing`}`,
+      };
+
+    case "payment-receipt":
+      return {
+        subject: `Payment receipt — ${data.amount ?? "Orindle"}`,
+        html: layout({
+          heading: "Payment receipt",
+          body: `<p style="margin:0 0 10px;">Hi ${name}, we received your payment for Orindle.</p>
+                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;border:1px solid ${BRAND.border};border-radius:10px;">
+                   <tr><td style="padding:10px 14px;border-bottom:1px solid ${BRAND.border};font-size:13px;color:${BRAND.muted};">Plan</td><td style="padding:10px 14px;border-bottom:1px solid ${BRAND.border};font-size:13px;font-weight:700;color:${BRAND.ink};text-align:right;">${esc(data.plan ?? "Orindle")} (${esc(data.period ?? "monthly")})</td></tr>
+                   <tr><td style="padding:10px 14px;border-bottom:1px solid ${BRAND.border};font-size:13px;color:${BRAND.muted};">Amount paid</td><td style="padding:10px 14px;border-bottom:1px solid ${BRAND.border};font-size:13px;font-weight:700;color:${BRAND.ink};text-align:right;">${esc(data.amount ?? "")}${data.currency ? ` ${esc(data.currency)}` : ""}</td></tr>
+                   <tr><td style="padding:10px 14px;border-bottom:1px solid ${BRAND.border};font-size:13px;color:${BRAND.muted};">Payment reference</td><td style="padding:10px 14px;border-bottom:1px solid ${BRAND.border};font-size:13px;color:${BRAND.ink};text-align:right;">${esc(data.paymentId ?? "—")}</td></tr>
+                   <tr><td style="padding:10px 14px;font-size:13px;color:${BRAND.muted};">Date</td><td style="padding:10px 14px;font-size:13px;color:${BRAND.ink};text-align:right;">${esc(data.paidAt ?? "")}</td></tr>
+                 </table>
+                 <p style="margin:0;font-size:12.5px;">GST / downloadable tax invoices are not currently enabled. Keep this receipt for your records.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/billing`,
+          actionLabel: "View payment history",
+        }),
+        text: `Payment receipt from Orindle\nPlan: ${data.plan ?? "Orindle"} (${data.period ?? "monthly"})\nAmount paid: ${data.amount ?? ""} ${data.currency ?? ""}\nPayment reference: ${data.paymentId ?? "—"}\nDate: ${data.paidAt ?? ""}\n\nView billing: ${data.url ?? `${SITE.url}/dashboard/billing`}`,
       };
 
     case "payment-failed":
@@ -323,10 +425,11 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         html: layout({
           heading: "A payment didn't go through",
           body: `<p style="margin:0 0 10px;">We couldn't charge your payment method for your ${esc(data.plan ?? "plan")}.</p>
-                 <p style="margin:0;">Nothing has been deleted, and your files stay available to download. Update your payment details to keep your plan active.</p>`,
-          action: data.url,
+                 <p style="margin:0;">Nothing has been deleted, and your files stay available to download. Update your payment details in Billing to keep your plan active.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/billing`,
+          actionLabel: "Open billing",
         }),
-        text: `A payment for your ${data.plan ?? "plan"} didn't go through. Nothing was deleted. ${data.url ?? ""}`,
+        text: `A payment for your ${data.plan ?? "plan"} didn't go through. Nothing was deleted. ${data.url ?? `${SITE.url}/dashboard/billing`}`,
       };
 
     case "subscription-cancelled":
@@ -335,9 +438,35 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         html: layout({
           heading: "Subscription cancelled",
           body: `<p style="margin:0 0 10px;">Your plan stays active until <strong>${esc(data.endsOn ?? "the end of the period you paid for")}</strong>.</p>
-                 <p style="margin:0;">After that your account moves to Free. Your files are kept, and you can download everything.</p>`,
+                 <p style="margin:0;">After that your account moves to Free (10 GB). Your files are kept, and you can download everything.</p>`,
         }),
-        text: `Your subscription is cancelled. Active until ${data.endsOn ?? "the end of the paid period"}.`,
+        text: `Your subscription is cancelled. Active until ${data.endsOn ?? "the end of the paid period"}. After that your account moves to Free and your files stay kept.`,
+      };
+
+    case "subscription-expiring":
+      return {
+        subject: `Your Orindle files are kept — recovery window ends on ${data.date ?? "soon"}`,
+        html: layout({
+          heading: "Your paid plan has ended",
+          body: `<p style="margin:0 0 10px;">Your account is on the Free plan now. <strong>Every file is still here</strong>, and you can download all of them.</p>
+                 <p style="margin:0;">You have until <strong>${esc(data.date ?? "the end of your recovery period")}</strong> to restore your plan. Even after that date, nothing is deleted.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/billing`,
+          actionLabel: "Restore plan",
+        }),
+        text: `Your Orindle account is on Free. All files are kept. Restore your plan before ${data.date ?? "the end of your recovery period"}: ${data.url ?? `${SITE.url}/dashboard/billing`}`,
+      };
+
+    case "subscription-expired":
+      return {
+        subject: "Your Orindle account is now on the Free plan",
+        html: layout({
+          heading: "Your recovery window has ended",
+          body: `<p style="margin:0 0 10px;">Hi ${name}, your recovery window has finished and your account is now on the <strong>Free (10 GB)</strong> plan.</p>
+                 <p style="margin:0 0 10px;"><strong>No files have been deleted.</strong> Everything you stored remains downloadable. If your usage is above 10 GB, new uploads pause until you free space or upgrade again.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/billing`,
+          actionLabel: "View plans",
+        }),
+        text: `Hi ${rawName}, your recovery window has ended and your account is now on the Free (10 GB) plan. No files were deleted; everything remains downloadable. Upgrade any time: ${data.url ?? `${SITE.url}/dashboard/billing`}`,
       };
 
     case "support-received":
@@ -346,9 +475,9 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         html: layout({
           heading: "We've got your message",
           body: `<p style="margin:0 0 10px;">Thanks for writing in. Your reference is <strong>${esc(data.reference ?? "")}</strong>.</p>
-                 <p style="margin:0;">We acknowledge every message within 48 hours and aim to resolve it within a month. Reply to this email to add anything.</p>`,
+                 <p style="margin:0;">We acknowledge every message within 48 hours and aim to resolve it within one month. Reply to this email to add anything.</p>`,
         }),
-        text: `We've got your message. Reference ${data.reference ?? ""}. We reply within 48 hours.`,
+        text: `We've got your message. Reference ${data.reference ?? ""}. We acknowledge within 48 hours and resolve within one month.`,
       };
 
     case "account-deletion-requested":
@@ -356,13 +485,11 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         subject: "Your Orindle account is scheduled for deletion",
         html: layout({
           heading: "Your account is scheduled for deletion",
-          // The two facts that matter: nothing has happened yet, and there is a way
-          // back. Stated before anything else.
-          body: `<p style="margin:0 0 10px;">Nothing has been deleted yet. Your account is now read-only and will be permanently deleted on <strong>${esc(data.purgeOn ?? "the date shown in your settings")}</strong>.</p>
-                 <p style="margin:0 0 10px;">Signing in before that date cancels the deletion and puts everything back to normal.</p>
+          body: `<p style="margin:0 0 10px;">Nothing has been deleted yet. Your account is now read-only and will be permanently deleted on <strong>${esc(data.purgeOn ?? "the date shown in your settings")}</strong> (after the 7-day grace period).</p>
+                 <p style="margin:0 0 10px;">Signing in before that date cancels the deletion automatically and puts everything back to normal.</p>
                  <p style="margin:0;">If you didn't ask for this, sign in now and change your password, then reply to this email.</p>`,
         }),
-        text: `Your Orindle account is scheduled for deletion on ${data.purgeOn ?? "the date in your settings"}. Nothing has been deleted yet, and signing in before then cancels it. If you didn't ask for this, sign in now and change your password.`,
+        text: `Your Orindle account is scheduled for deletion on ${data.purgeOn ?? "the date in your settings"} (7-day grace period). Nothing has been deleted yet, and signing in before then cancels it.`,
       };
 
     case "account-deleted":
@@ -370,25 +497,38 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         subject: "Your Orindle account has been deleted",
         html: layout({
           heading: "Your account is deleted",
-          body: `<p style="margin:0 0 10px;">Your Orindle account and files have been deleted.</p>
-                 <p style="margin:0;">Billing records are kept for as long as tax law requires. Nothing else is retained.</p>`,
+          body: `<p style="margin:0 0 10px;">Your Orindle account and files have been permanently deleted.</p>
+                 <p style="margin:0;">Billing records are kept only for as long as accounting and tax law requires. Nothing else is retained.</p>`,
         }),
-        text: "Your Orindle account and files have been deleted. Billing records are kept as tax law requires.",
+        text: "Your Orindle account and files have been permanently deleted. Billing records are kept only as accounting and tax law requires.",
+      };
+
+    case "data-export-ready":
+      return {
+        subject: "Your Orindle data export is ready",
+        html: layout({
+          heading: "Your data export is ready",
+          body: `<p style="margin:0 0 10px;">Hi ${name}, your Orindle account data export has been generated.</p>
+                 <p style="margin:0;">${data.expiresAt ? `This link is available until <strong>${esc(data.expiresAt)}</strong>.` : "You can download a fresh copy any time from Dashboard → Settings."} If you didn't request this export, change your password right away.</p>`,
+          action: data.url ?? `${SITE.url}/dashboard/settings`,
+          actionLabel: "Download export",
+        }),
+        text: `Hi ${rawName}, your Orindle data export is ready.${data.expiresAt ? ` Expires: ${data.expiresAt}.` : ""} Download: ${data.url ?? `${SITE.url}/dashboard/settings`}`,
       };
 
     default:
-      // Expiry warnings are one template with the day baked into the name.
       if (template.startsWith("subscription-expiring-")) {
         const day = template.replace("subscription-expiring-", "");
         return {
           subject: `Your Orindle files are kept — here's what changes on ${data.date ?? "soon"}`,
           html: layout({
-            heading: `Your plan ended ${day} days ago`,
+            heading: `Your plan ended ${esc(day)} days ago`,
             body: `<p style="margin:0 0 10px;">Your account is on the Free plan now. <strong>Every file is still here</strong>, and you can download all of them.</p>
                  <p style="margin:0;">You have until <strong>${esc(data.date ?? "the end of your recovery period")}</strong> to restore your plan. After that the account stays on Free and nothing is deleted.</p>`,
-            action: data.url,
+            action: data.url ?? `${SITE.url}/dashboard/billing`,
+            actionLabel: "Restore plan",
           }),
-          text: `Your account is on Free. All files are kept. Restore your plan before ${data.date ?? "the end of the recovery period"}.`,
+          text: `Your account is on Free. All files are kept. Restore your plan before ${data.date ?? "the end of the recovery period"}: ${data.url ?? `${SITE.url}/dashboard/billing`}`,
         };
       }
       return null;

@@ -2,16 +2,18 @@
  * The upload pipeline.
  *
  * Thirteen ordered steps, numbered here exactly as they are in
- * docs/backend/storage-architecture.md §3. The numbers appear in the audit log so
- * a stuck upload can be traced to where it stopped.
+ * docs/backend/storage-architecture.md §3.
  *
- * The two guarantees this file exists to provide:
- *
- *   1. A file is never listed, downloaded or shared until it has been verified to
- *      exist at the expected size. `complete` is the only function that can make
- *      a file available, and it verifies before it commits.
- *   2. Parallel uploads cannot exceed the plan. The quota decision happens inside
- *      the database, in reserve_storage(), which locks the usage row first.
+ * Two invariants this file enforces:
+ *   1. A file is never listed, downloaded or shared until it has been verified
+ *      to exist at the expected size. `completeUpload` verifies via HeadObject
+ *      before making a file available.
+ *   2. Parallel uploads cannot exceed the plan. The quota decision happens
+ *      inside the database, in `reserve_storage()`, which locks the usage row
+ *      first. There is no artificial per-file size limit — only the account's
+ *      available storage quota applies, and multipart part sizing scales
+ *      automatically so even multi-terabyte files fit within S3/R2's 10,000-part
+ *      envelope.
  */
 
 import "server-only";
@@ -20,7 +22,7 @@ import { AppError, USER_MESSAGES } from "@/domain/auth/errors";
 import type { Actor } from "@/domain/auth/actor";
 import { createSupabaseServerClient } from "@/lib/auth/supabase/server";
 import { planById } from "@/config/pricing";
-import { UPLOAD_LIMITS } from "@/lib/drive/types";
+import { UPLOAD_LIMITS, type FileCategory } from "@/lib/drive/types";
 import {
   buildStorageKey,
   completeMultipart,
@@ -34,10 +36,84 @@ import {
 
 /** Files at or above this size use multipart. Protocol constant, not display. */
 const MULTIPART_THRESHOLD = UPLOAD_LIMITS.multipartThreshold;
-const MAX_SIZE = UPLOAD_LIMITS.maxFileSize;
-const PART_SIZE = 8 * 1024 * 1024; // 8 MiB: comfortably above R2's 5 MiB minimum
+const MIN_PART_SIZE = 8 * 1024 * 1024; // 8 MiB: comfortably above R2's 5 MiB minimum
+const MAX_MULTIPART_PARTS = 10_000; // S3/R2 protocol limit
+const MIB = 1024 * 1024;
 const SESSION_TTL_MINUTES = 60;
 const MULTIPART_SESSION_TTL_HOURS = 24;
+
+/**
+ * Compute an R2-compliant part size for a multipart upload of any size.
+ *
+ * Keeps ordinary files at 8 MiB for smooth progress reporting while scaling up
+ * cleanly for very large files so the part count never exceeds 10,000.
+ */
+export function computeMultipartPartSize(fileSizeBytes: number): number {
+  const minNeeded = Math.ceil(fileSizeBytes / MAX_MULTIPART_PARTS);
+  if (minNeeded <= MIN_PART_SIZE) return MIN_PART_SIZE;
+  // Round up to the nearest MiB boundary for tidy buffer slices.
+  return Math.ceil(minNeeded / MIB) * MIB;
+}
+
+/** Infer a stable display category from MIME type and filename extension. */
+export function inferFileCategory(mimeType: string, name: string): FileCategory {
+  const mime = mimeType.toLowerCase();
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")).toLowerCase() : "";
+
+  if (mime.startsWith("image/") || [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".heic", ".avif"].includes(ext)) {
+    return "image";
+  }
+  if (mime.startsWith("video/") || [".mp4", ".mov", ".webm", ".mkv", ".avi"].includes(ext)) {
+    return "video";
+  }
+  if (mime.startsWith("audio/") || [".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"].includes(ext)) {
+    return "audio";
+  }
+  if (mime === "application/pdf" || ext === ".pdf") {
+    return "pdf";
+  }
+  if (
+    mime.includes("spreadsheet") ||
+    mime.includes("excel") ||
+    [".xls", ".xlsx", ".csv", ".ods", ".numbers"].includes(ext)
+  ) {
+    return "spreadsheet";
+  }
+  if (
+    mime.includes("presentation") ||
+    mime.includes("powerpoint") ||
+    [".ppt", ".pptx", ".key", ".odp"].includes(ext)
+  ) {
+    return "presentation";
+  }
+  if (
+    mime.includes("word") ||
+    mime.includes("document") ||
+    [".doc", ".docx", ".odt", ".rtf", ".pages"].includes(ext)
+  ) {
+    return "document";
+  }
+  if (
+    mime.includes("zip") ||
+    mime.includes("tar") ||
+    mime.includes("gzip") ||
+    mime.includes("compressed") ||
+    [".zip", ".tar", ".gz", ".7z", ".rar", ".bz2"].includes(ext)
+  ) {
+    return "archive";
+  }
+  if (
+    [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".css", ".html", ".json", ".sql", ".yaml", ".yml", ".toml", ".sh"].includes(
+      ext,
+    )
+  ) {
+    return "code";
+  }
+  if (mime.startsWith("text/") || [".txt", ".md", ".log"].includes(ext)) {
+    return "text";
+  }
+  return "other";
+}
 
 export interface PrepareUploadInput {
   name: string;
@@ -76,12 +152,6 @@ export async function prepareUpload(
   if (!Number.isFinite(input.size) || input.size <= 0) {
     throw new AppError("validation_failed", "That file is empty.");
   }
-  if (input.size > MAX_SIZE) {
-    throw new AppError(
-      "unsupported",
-      `Files are limited to ${MAX_SIZE / 1000 ** 3} GB. Upload this one in parts, or contact us if you need more.`,
-    );
-  }
 
   const lower = input.name.toLowerCase();
   const blocked = UPLOAD_LIMITS.blockedExtensions.find((ext) => lower.endsWith(ext));
@@ -95,8 +165,7 @@ export async function prepareUpload(
   const supabase = await createSupabaseServerClient();
 
   // ── Step 2: authorise against the target folder ────────────────────────────
-  // A folder the actor cannot see returns `forbidden` rather than `not_found`,
-  // because the response should not reveal whether the folder exists.
+  let organizationId: string | null = null;
   if (input.parentId) {
     const { data: folder, error } = await supabase
       .from("folders")
@@ -107,18 +176,20 @@ export async function prepareUpload(
 
     if (error) throw new AppError("unknown", USER_MESSAGES.unknown);
     if (!folder) throw new AppError("not_found", USER_MESSAGES.notFound);
-    if (folder.owner_id !== actor.userId) {
+    if (folder.owner_id !== actor.userId && !folder.organization_id) {
       throw new AppError("forbidden", USER_MESSAGES.forbidden);
     }
+    organizationId = (folder.organization_id as string | null) ?? null;
   }
 
   const storageKey = buildStorageKey({ userId: actor.userId });
   const fileId = crypto.randomUUID();
   const taskId = crypto.randomUUID();
   const multipart = input.size >= MULTIPART_THRESHOLD;
+  const category = inferFileCategory(input.mimeType, input.name);
 
   // ── Step 5: transactional reservation ──────────────────────────────────────
-  // This is the line that stops two tabs from both taking the last 9 GB.
+  // Locks the usage row so parallel uploads cannot exceed the account's quota.
   const { error: reserveError } = await supabase.rpc("reserve_storage", {
     p_owner: actor.userId,
     p_bytes: input.size,
@@ -129,15 +200,10 @@ export async function prepareUpload(
     const message = reserveError.message ?? "";
 
     if (message.includes("quota_exceeded")) {
-      // A refusal is information, and a *repeated* refusal is a signal. Recording
-      // it here means the escalation happens without anyone reading a log.
       await recordQuotaRefusal(actor.userId);
       throw new AppError("quota_exceeded", USER_MESSAGES.quota);
     }
 
-    // The two anti-abuse refusals added in 0014. Both are temporary by
-    // construction — a restriction always carries an expiry — and the message
-    // says so, because "try again later" is actionable while "forbidden" is not.
     if (message.includes("abuse_restricted")) {
       const restriction = await activeUploadRestriction(actor.userId);
       const until = restriction.expiresAt
@@ -165,26 +231,47 @@ export async function prepareUpload(
   }
 
   try {
-    // ── Step 6: upload session ───────────────────────────────────────────────
+    // ── Step 6: pending file row + upload session ────────────────────────────
+    // The pending file row is created for BOTH single-part and multipart
+    // uploads. RLS hides `status = 'pending'` from every read path until
+    // `completeUpload` verifies the object in R2 and flips status to available.
+    const { error: fileError } = await supabase.from("files").insert({
+      id: fileId,
+      owner_id: actor.userId,
+      organization_id: organizationId,
+      folder_id: input.parentId,
+      name: input.name,
+      size_bytes: 0, // set from the verified object at step 12
+      mime_type: input.mimeType,
+      category,
+      storage_key: storageKey,
+      checksum_sha256: input.checksumSha256 ?? null,
+      status: "pending",
+    });
+    if (fileError) throw fileError;
+
+    const expiresAt = new Date(
+      Date.now() + (multipart ? MULTIPART_SESSION_TTL_HOURS * 3600_000 : SESSION_TTL_MINUTES * 60_000),
+    ).toISOString();
+
     const { error: sessionError } = await supabase.from("upload_sessions").insert({
       id: taskId,
       owner_id: actor.userId,
-      file_id: null,
+      file_id: fileId,
       storage_key: storageKey,
       multipart,
       declared_size: input.size,
       status: "initiated",
-      expires_at: new Date(
-        Date.now() + (multipart ? MULTIPART_SESSION_TTL_HOURS * 3600_000 : SESSION_TTL_MINUTES * 60_000),
-      ).toISOString(),
+      expires_at: expiresAt,
     });
 
     if (sessionError) throw sessionError;
 
     // ── Step 7: short-lived presigned URL(s) ─────────────────────────────────
     if (multipart) {
+      const partSize = computeMultipartPartSize(input.size);
       const r2UploadId = await createMultipart(storageKey, input.mimeType);
-      const partCount = Math.ceil(input.size / PART_SIZE);
+      const partCount = Math.ceil(input.size / partSize);
       const partUrls = await Promise.all(
         Array.from({ length: partCount }, async (_, index) => ({
           partNumber: index + 1,
@@ -203,39 +290,23 @@ export async function prepareUpload(
         multipart: true,
         uploadId: r2UploadId,
         partUrls,
-        partSize: PART_SIZE,
-        expiresAt: new Date(Date.now() + MULTIPART_SESSION_TTL_HOURS * 3600_000).toISOString(),
+        partSize,
+        expiresAt,
       };
     }
 
     const uploadUrl = await presignPut(storageKey, input.mimeType);
-
-    // The pending file row is created now so the session has something to
-    // attach to, but it is `pending` and RLS hides it from every read path.
-    const { error: fileError } = await supabase.from("files").insert({
-      id: fileId,
-      owner_id: actor.userId,
-      folder_id: input.parentId,
-      name: input.name,
-      size_bytes: 0, // set from the verified object at step 12
-      mime_type: input.mimeType,
-      storage_key: storageKey,
-      checksum_sha256: input.checksumSha256 ?? null,
-      status: "pending",
-    });
-    if (fileError) throw fileError;
 
     return {
       taskId,
       fileId,
       multipart: false,
       uploadUrl,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MINUTES * 60_000).toISOString(),
+      expiresAt,
     };
   } catch (error) {
-    // If anything after the reservation fails, release it immediately. Waiting
-    // for the sweeper would hold the customer's quota for up to 15 minutes for
-    // an error we already know about.
+    // Release reservation immediately and remove any unconfirmed pending row.
+    await supabase.from("files").delete().eq("id", fileId).eq("owner_id", actor.userId);
     await supabase.rpc("release_reservation", { p_reservation: await findReservation(supabase, taskId) });
     throw error instanceof AppError ? error : new AppError("unknown", USER_MESSAGES.unknown);
   }
@@ -313,8 +384,6 @@ export async function completeUpload(
   }
 
   if (head.size !== Number(session.declared_size)) {
-    // A size mismatch means either a truncated upload or a client lying about
-    // what it sent. Either way the file must not become available.
     await deleteObject(session.storage_key).catch(() => {});
     await failUpload(supabase, session, "size-mismatch");
     throw new AppError(
@@ -324,16 +393,9 @@ export async function completeUpload(
   }
 
   // ── Step 11: security-scan hook ───────────────────────────────────────────
-  // No scanner is configured. The hook exists so that enabling one is a change
-  // to this function and nothing else. Until then the file becomes available
-  // because its *storage integrity* is verified — which is a different claim
-  // from "it is safe", and the product does not make that second claim.
-  //
-  // When a scanner is enabled, this is where status stays 'quarantined' until a
-  // verdict arrives.
   const scanEnabled = process.env.MALWARE_SCAN_ENABLED === "true";
 
-  // ── Step 12: commit metadata and accounting, in one transaction-ish sequence
+  // ── Step 12: commit metadata and accounting ───────────────────────────────
   const reservationId = await findReservation(supabase, taskId);
 
   const { data: file, error: fileError } = await supabase
@@ -341,7 +403,6 @@ export async function completeUpload(
     .update({
       size_bytes: head.size,
       status: scanEnabled ? "quarantined" : "available",
-      ...(scanEnabled ? {} : {}),
     })
     .eq("storage_key", session.storage_key)
     .eq("owner_id", actor.userId)
@@ -359,18 +420,10 @@ export async function completeUpload(
       p_reservation: reservationId,
       p_actual_bytes: head.size,
     });
-    // The object is real and available; a failed accounting commit leaves a
-    // reservation that the sweeper will release. That is a reconciliation
-    // problem, not a data-loss one, and it is logged rather than hidden.
     if (commitError) console.error("[upload] commit_reservation failed", { taskId });
   }
 
-  // ── Step 13: release anything left over ───────────────────────────────────
-  if (scanEnabled && reservationId) {
-    // The reservation stays held while the file is quarantined: the bytes are
-    // occupying the bucket and must count against quota.
-  }
-
+  // ── Step 13: mark upload session confirmed ────────────────────────────────
   await supabase
     .from("upload_sessions")
     .update({ status: "confirmed" })
@@ -378,10 +431,11 @@ export async function completeUpload(
 
   await supabase.from("activity_events").insert({
     actor_id: actor.userId,
+    organization_id: file.organization_id ?? null,
     subject_type: "file",
     subject_id: file.id,
     kind: "file.uploaded",
-    metadata: { size: head.size, multipart: session.multipart },
+    metadata: { size: head.size, multipart: session.multipart, name: file.name },
   });
 
   return file;
@@ -417,7 +471,6 @@ export async function cancelUpload(actor: Actor, taskId: string) {
 
   if (!session) throw new AppError("not_found", USER_MESSAGES.notFound);
 
-  // A pending file row (if any) is deleted, and R2 may hold partial bytes.
   await supabase.from("files").delete().eq("storage_key", session.storage_key).eq("owner_id", actor.userId);
   if (session.multipart && session.r2_upload_id) {
     const { abortMultipart } = await import("@/lib/r2/client");
@@ -428,13 +481,6 @@ export async function cancelUpload(actor: Actor, taskId: string) {
   return null;
 }
 
-/**
- * Record a quota refusal so repeated attempts escalate.
- *
- * Reads the client address from the *session's* request via the cookie-bound
- * client rather than accepting one as an argument, because a caller-supplied IP
- * would be a spoofable input into an enforcement decision.
- */
 async function recordQuotaRefusal(userId: string): Promise<void> {
   try {
     const { recordQuotaViolation } = await import("@/lib/security/quota-guard");

@@ -140,7 +140,7 @@ export const bestFreeCloudStorage: BlogArticle = {
     },
     {
       type: "p",
-      text: "The arithmetic is usually less dramatic than people expect. Orindle's paid plans start at 100 GB and are published monthly in INR and USD with no annual lock-in — [the full list is on the pricing page](/pricing). If you are unsure which size you need, [our guide to how much storage you need](/blog/how-much-cloud-storage-do-you-need) works through the estimates for photos, documents and video.",
+      text: "The arithmetic is usually less dramatic than people expect. Orindle's paid plans start at 100 GB and are published across eight currencies with monthly billing or 20% off annually — [the full list is on the pricing page](/pricing). If you are unsure which size you need, [our guide to how much storage you need](/blog/how-much-cloud-storage-do-you-need) works through the estimates for photos, documents and video.",
     },
     { type: "h2", id: "recommendations", text: "Which free plan to pick" },
     {

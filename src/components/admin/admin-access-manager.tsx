@@ -198,3 +198,122 @@ export function AdminAccessManager({
     </div>
   );
 }
+
+/**
+ * Owner-only form to grant platform administrator access to an existing,
+ * verified Orindle account by email address.
+ */
+export function GrantAdminForm() {
+  const router = useRouter();
+  const [email, setEmail] = React.useState("");
+  const [role, setRole] = React.useState<"admin" | "owner">("admin");
+  const [busy, setBusy] = React.useState(false);
+  const [message, setMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const emailId = React.useId();
+  const roleId = React.useId();
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const cleaned = email.trim().toLowerCase();
+    if (!cleaned || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned)) {
+      setMessage({ tone: "error", text: "Enter a valid account email address." });
+      return;
+    }
+
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/admins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleaned, role }),
+      });
+      const body = (await response.json().catch(() => null)) as
+        | { ok: true }
+        | { ok: false; message: string }
+        | null;
+
+      if (!response.ok || !body || !body.ok) {
+        setMessage({
+          tone: "error",
+          text: body && "message" in body ? body.message : "Could not grant platform access.",
+        });
+        return;
+      }
+
+      setEmail("");
+      setRole("admin");
+      setMessage({
+        tone: "ok",
+        text: `Granted platform ${role} access to ${cleaned} and recorded in the audit log.`,
+      });
+      router.refresh();
+    } catch {
+      setMessage({ tone: "error", text: "The request failed. Nothing changed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      noValidate
+      className="mt-3 rounded-xl border border-[var(--brand-border)] bg-white p-3.5"
+    >
+      <p className="text-[12px] font-bold text-ink">Grant platform access</p>
+      <p className="mt-0.5 text-[11px] text-text-muted">
+        Add an existing, verified Orindle account as a platform administrator or owner.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <div className="min-w-[220px] flex-1">
+          <label htmlFor={emailId} className="mb-1 block text-[10.5px] font-semibold text-ink">
+            Account email
+          </label>
+          <input
+            id={emailId}
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="teammate@example.com"
+            className="h-8 w-full rounded-lg border border-[var(--brand-border-strong)] bg-white px-2.5 text-[12px] text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+        <div className="w-[130px]">
+          <label htmlFor={roleId} className="mb-1 block text-[10.5px] font-semibold text-ink">
+            Role
+          </label>
+          <select
+            id={roleId}
+            value={role}
+            onChange={(event) => setRole(event.target.value as "admin" | "owner")}
+            className="h-8 w-full rounded-lg border border-[var(--brand-border-strong)] bg-white px-2 text-[12px] text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="admin">Admin</option>
+            <option value="owner">Owner</option>
+          </select>
+        </div>
+        <button
+          type="submit"
+          disabled={busy}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[11.5px] font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+        >
+          <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+          {busy ? "Granting…" : "Grant access"}
+        </button>
+      </div>
+      {message && (
+        <p
+          role="status"
+          aria-live="polite"
+          className={cn(
+            "mt-2 text-[11px] font-medium",
+            message.tone === "ok" ? "text-[#1B7F4B]" : "text-[#C93B2B]",
+          )}
+        >
+          {message.text}
+        </p>
+      )}
+    </form>
+  );
+}

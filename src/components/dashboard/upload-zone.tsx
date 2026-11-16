@@ -79,7 +79,7 @@ export function UploadZone({ compact = false }: { compact?: boolean }) {
           </span>
           {!compact && (
             <span className="mt-1 block text-[11.5px] text-text-muted">
-              Images, documents, video and more. Up to 5 GB per file.
+              Images, documents, video and more. No per-file limit — bounded only by your storage allowance.
             </span>
           )}
         </span>

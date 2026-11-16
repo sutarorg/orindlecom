@@ -688,6 +688,28 @@ export async function getPlatformAdminEmail(
   return match?.email ? String(match.email) : null;
 }
 
+/**
+ * Look up an existing account by exact email address (case-insensitive) for
+ * platform-admin grants. Requires a confirmed email so an unverified mailbox
+ * can never be granted platform privileges.
+ */
+export async function findVerifiedUserByEmail(
+  { db }: AdminContext,
+  email: string,
+): Promise<{ userId: string; email: string; verified: boolean } | null> {
+  const target = email.trim().toLowerCase();
+  const { data } = await db.rpc("admin_user_directory", { p_search: target, p_limit: 20, p_offset: 0 });
+  const match = ((data ?? []) as Array<Record<string, unknown>>).find(
+    (row) => row.email && String(row.email).toLowerCase() === target,
+  );
+  if (!match) return null;
+  return {
+    userId: String(match.user_id),
+    email: String(match.email),
+    verified: Boolean(match.email_confirmed_at),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Operational counters and the price catalogue                       */
 /* ------------------------------------------------------------------ */

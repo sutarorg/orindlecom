@@ -5,12 +5,6 @@ export const SITE = {
     "Orindle is cloud storage for people who want their files to simply be there. Store, access and share your files from anywhere. Start with 10 GB free — no credit card required.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://orindle.com",
   supportEmail: "tejassutar.business@gmail.com",
-  /** Social links are only rendered where a genuine account exists. */
-  social: {
-    x: "https://x.com/orindle",
-    instagram: "https://instagram.com/orindle",
-    linkedin: "https://linkedin.com/company/orindle",
-  },
 } as const;
 
 export const PRIMARY_NAV = [

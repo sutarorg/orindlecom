@@ -20,32 +20,49 @@ import { AppError } from "@/domain/auth/errors";
 import { readJson, requireString, requireUuid } from "@/lib/api";
 import { writeAudit } from "@/lib/admin/audit";
 import { adminOk, adminRoute } from "@/lib/admin/route-helpers";
-import { listPlatformAdmins } from "@/lib/admin/service";
-import { getPlatformAdminEmail } from "@/lib/admin/service";
+import { findVerifiedUserByEmail, getPlatformAdminEmail, listPlatformAdmins } from "@/lib/admin/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ROLES = ["owner", "admin"] as const;
 
-/** POST — grant or re-role. */
+/** POST — grant or re-role. Accepts either `userId` or `email`. */
 export async function POST(request: Request) {
   return adminRoute(
     async (ctx) => {
       const body = await readJson(request);
-      const userId = requireUuid(body, "userId");
       const role = requireString(body, "role", { max: 10 });
 
       if (!(ROLES as readonly string[]).includes(role)) {
         throw new AppError("validation_failed", "That role isn't valid.");
       }
 
-      // The account must exist and be verified. An unverified address is not a
-      // person yet, and an operator should not be able to grant access to a
-      // mailbox nobody has proven they control.
-      const email = await getPlatformAdminEmail(ctx, userId);
-      if (!email) {
-        throw new AppError("not_found", "No account with that id exists.");
+      let userId: string;
+      let email: string | null;
+
+      if (typeof body.email === "string" && body.email.trim().length > 0 && !body.userId) {
+        const lookup = await findVerifiedUserByEmail(ctx, body.email);
+        if (!lookup) {
+          throw new AppError(
+            "not_found",
+            "No Orindle account with that email exists. The person must sign up first.",
+          );
+        }
+        if (!lookup.verified) {
+          throw new AppError(
+            "validation_failed",
+            "That account hasn't verified its email yet. Ask them to confirm their email first.",
+          );
+        }
+        userId = lookup.userId;
+        email = lookup.email;
+      } else {
+        userId = requireUuid(body, "userId");
+        email = await getPlatformAdminEmail(ctx, userId);
+        if (!email) {
+          throw new AppError("not_found", "No account with that id exists.");
+        }
       }
 
       const { data: account } = await ctx.db

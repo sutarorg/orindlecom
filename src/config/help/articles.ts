@@ -165,29 +165,29 @@ export const HELP_ARTICLES: HelpArticle[] = [
     slug: "close-your-account",
     title: "Close your account",
     category: "account",
-    summary: "What is deleted, what is kept, and how to ask.",
+    summary: "Self-service deletion, the 7-day grace window, and what is removed.",
     updated: "2026-11-16",
     related: ["change-your-password", "recover-deleted-files"],
     keywords: ["delete account", "close account", "erase", "leave"],
     body: [
       {
         type: "p",
-        text: "Account closure is currently a request rather than a button in the dashboard. That is the honest description of the product today.",
+        text: "You can request account deletion directly from Account Settings → Danger zone, or by emailing tejassutar.business@gmail.com from your registered address.",
       },
       {
         type: "steps",
         items: [
           {
             title: "Export what you want to keep",
-            text: "Download your files first. Closing an account removes them, and there is no undo.",
+            text: "Download your files and use Export account data in Settings first. Permanent erasure cannot be undone.",
           },
           {
-            title: "Cancel any subscription",
-            text: "Cancelling stops the next renewal. Closing the account does not refund the current period on its own.",
+            title: "Cancel any active subscription",
+            text: "Cancelling stops future renewals before your account is closed.",
           },
           {
-            title: "Send the request",
-            text: "Use the contact form with the subject 'Privacy or data request', writing from the account's email address so the request can be verified.",
+            title: "Schedule deletion",
+            text: "Confirm deletion in Account Settings → Danger zone. A 7-day grace period lets you cancel the request by signing back in or emailing support before permanent erasure runs.",
           },
         ],
       },
@@ -211,6 +211,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       {
         type: "list",
         items: [
+          "Enable two-factor authentication (TOTP) in Account Settings → Account security using any standard authenticator app.",
           "Use a password you have not used anywhere else. A password manager makes this free.",
           "Never share a signed-in browser session or a screen with your dashboard visible.",
           "Check Shared → Links occasionally and turn off anything you no longer need. An old public link is the most common way a file gets out.",
@@ -219,8 +220,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         type: "note",
-        tone: "warning",
-        text: "Two-factor authentication is not available yet. It is the next security feature planned, and until it ships, a strong unique password is the whole defence.",
+        tone: "info",
+        text: "If you suspect unauthorised access, change your password, revoke active sessions, and verify your 2FA authenticator in Account Settings.",
       },
     ],
   },
@@ -296,7 +297,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         type: "p",
-        text: "The new allowance applies immediately, in the same currency you were already being charged. Prices are published on the pricing page for the Indian rupee and the US dollar; other currencies are shown as unavailable rather than converted at a made-up rate.",
+        text: "The new allowance applies immediately, in your selected billing currency. Prices are published on the pricing page across 8 currencies (INR, USD, GBP, EUR, AED, SGD, AUD and CAD) with monthly billing or 20% off on annual billing.",
       },
       {
         type: "note",
@@ -504,8 +505,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         type: "note",
-        tone: "warning",
-        text: "Downloadable tax invoices with GST details are not generated yet. If you need one for a company expense, write to support and say so — a proper document needs the registered entity details, which are still being finalised.",
+        tone: "info",
+        text: "Downloadable GST tax invoices are not currently generated. Standard payment receipts are available in Dashboard → Billing and by email from Razorpay.",
       },
     ],
   },
@@ -532,8 +533,9 @@ export const HELP_ARTICLES: HelpArticle[] = [
         ],
       },
       {
-        type: "placeholder",
-        text: "Refunds are not covered here because Orindle has not published a refund policy yet. Write to support with your situation and you will get a direct answer.",
+        type: "note",
+        tone: "info",
+        text: "Subscriptions are billed in advance and non-refundable except where required by law, for verified duplicate charges, or for confirmed billing errors. Write to tejassutar.business@gmail.com if you believe you were charged in error.",
       },
     ],
   },

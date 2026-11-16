@@ -162,7 +162,7 @@ export const bestGoogleDriveAlternatives: BlogArticle = {
           name: "Orindle",
           verdict: "Six simple plans, no annual lock-in, honest about what exists",
           detail:
-            "10 GB free, then 100 GB, 500 GB, 1 TB, 5 TB and 10 TB on monthly pricing in INR and USD. Files live in Cloudflare R2 with encryption at rest, downloads are short-lived signed URLs, and sharing supports per-person grants and expiring links. It is a new service: organisation features are still being built, and this article will not pretend otherwise.",
+            "10 GB free, then 100 GB, 500 GB, 1 TB, 2 TB and 5 TB across eight currencies (INR, USD, GBP, EUR, AED, SGD, AUD, CAD) with monthly billing or 20% off annually. Files live in Cloudflare R2 with encryption at rest, downloads are short-lived signed URLs, sharing supports per-person grants and expiring links, and Business workspaces inherit the owner's plan with no per-seat fee.",
         },
         {
           name: "Self-hosted (Nextcloud, TrueNAS)",

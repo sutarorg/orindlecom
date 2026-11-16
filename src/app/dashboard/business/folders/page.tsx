@@ -24,6 +24,7 @@ export default async function BusinessFoldersPage() {
 
   return (
     <FoldersView
+      organizationId={organization?.id ?? "workspace"}
       folders={folders.ok ? folders.data : []}
       members={members.ok ? members.data : []}
       viewerRole={organization?.viewerRole ?? "member"}

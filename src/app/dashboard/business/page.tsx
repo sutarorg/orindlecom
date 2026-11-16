@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { BusinessOverview } from "@/components/business/business-overview";
+import { CreateOrganizationCard } from "@/components/business/create-organization-card";
 import { getBusinessRepository } from "@/lib/business/service";
 import { pageMetadata } from "@/lib/seo";
 
@@ -12,13 +14,6 @@ export const metadata: Metadata = pageMetadata({
 
 export const dynamic = "force-dynamic";
 
-/**
- * Business overview.
- *
- * Every figure on this page comes from the repository. On a deployment with no
- * organization service the counts are genuinely zero and the getting-started
- * path renders — which is the state a new organization sees anyway.
- */
 export default async function BusinessOverviewPage() {
   const repo = getBusinessRepository();
   const [summaryResult, membersResult, foldersResult] = await Promise.all([
@@ -31,8 +26,15 @@ export default async function BusinessOverviewPage() {
   const members = membersResult.ok ? membersResult.data : [];
   const folders = foldersResult.ok ? foldersResult.data : [];
 
-  // A failed summary is a real error, not an empty page.
   if (!summary) {
+    if (!summaryResult.ok && summaryResult.code === "not_found") {
+      return (
+        <Suspense fallback={null}>
+          <CreateOrganizationCard />
+        </Suspense>
+      );
+    }
+
     return (
       <div className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6">
         <div className="rounded-xl border border-[#F3D2CD] bg-[#FDF3F2] px-4 py-6 text-center">

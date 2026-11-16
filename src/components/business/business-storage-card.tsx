@@ -78,7 +78,8 @@ export function BusinessStorageCard({
               </span>
             </div>
             <p className="mt-0.5 text-[11.5px] text-text-muted">
-              One allowance for the whole team, not per person.
+              Inherits the organization owner&rsquo;s active plan — shared by the whole team with no
+              per-seat fee.
             </p>
           </div>
           <Link
@@ -252,7 +253,7 @@ export function BusinessStorageCard({
 
 function priceLabel(plan: (typeof PLANS)[number]) {
   const amount = resolvePrice(plan, "INR", "monthly");
-  return amount === null ? "price being finalised" : `${formatPrice(amount, "INR")}/mo`;
+  return amount === null ? "—" : `${formatPrice(amount, "INR")}/mo`;
 }
 
 function Meter({

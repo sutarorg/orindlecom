@@ -56,7 +56,7 @@ export const HOME_FAQ: FaqItem[] = [
     id: "billing-currency",
     question: "Which currency will I be charged in?",
     answer:
-      "India is billed in INR and the United States in USD. Other regions are billed in USD until their local pricing is finalised. Once you subscribe, your billing currency stays fixed — changing your display currency in the site settings never changes what an existing subscription is charged.",
+      "Orindle publishes and charges plans in 8 currencies: INR, USD, GBP, EUR, AED, SGD, AUD and CAD. Once you subscribe, your billing currency stays fixed — changing your display currency on the site never alters what an existing subscription is charged.",
     category: "Billing",
     helpSlug: "find-an-invoice",
   },
@@ -64,7 +64,7 @@ export const HOME_FAQ: FaqItem[] = [
     id: "yearly-pricing",
     question: "Is there a yearly plan?",
     answer:
-      "Annual pricing is not announced yet. The monthly and yearly switch exists so you can compare once it is, but until then every plan is priced monthly and no annual discount is applied.",
+      "Yes. Every paid plan is available on monthly or annual billing, and paying annually saves 20% compared to twelve monthly payments.",
     category: "Billing",
     helpSlug: "upgrade-a-plan",
   },
@@ -108,7 +108,7 @@ export const ALL_FAQ: FaqItem[] = [
     id: "file-size",
     question: "Is there a maximum file size?",
     answer:
-      "Files are uploaded directly to object storage rather than through the application server. Per-file limits are still being finalised and will be published before paid plans open for purchase.",
+      "No fixed per-file cap. Files upload directly from your browser to object storage (using multipart upload for large files) and are bounded only by your remaining storage quota.",
     category: "Files & sharing",
     helpSlug: "upload-your-first-file",
   },
@@ -116,14 +116,14 @@ export const ALL_FAQ: FaqItem[] = [
     id: "refunds",
     question: "What is the refund policy?",
     answer:
-      "A refund policy has not been finalised yet, so we are not going to publish terms we may not honour. Until paid plans open, everything available is free. For a specific case, contact support and you will get a direct answer.",
+      "Subscriptions are billed in advance and non-refundable except where required by applicable law, for verified duplicate charges, or for confirmed billing errors. See our Terms of Service or contact tejassutar.business@gmail.com for billing assistance.",
     category: "Billing",
   },
   {
     id: "cancel",
     question: "Can I cancel a paid plan?",
     answer:
-      "Plans are monthly with no lock-in. When you cancel, the account returns to the free 10 GB tier at the end of the current billing period rather than being cut off immediately.",
+      "Yes, with no lock-in. When you cancel, your paid allowance stays active through the end of the current billing period, after which the account returns to the free 10 GB tier without deleting any files.",
     category: "Billing",
     helpSlug: "cancel-a-subscription",
   },
@@ -147,7 +147,7 @@ export const ALL_FAQ: FaqItem[] = [
     id: "team-billing",
     question: "How is business billing handled?",
     answer:
-      "Business plans are not published yet. Rather than guess at seat pricing, the Business page describes what the organisation account does today. Contact sales for a discussion about your team.",
+      "Business workspaces inherit the organisation owner's active storage plan (from 10 GB Free up to 5 TB Max) with no separate per-seat fee. Manage your workspace plan from Dashboard → Billing.",
     category: "Business",
     helpSlug: "business-roles",
   },

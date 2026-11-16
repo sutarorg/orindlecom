@@ -6,71 +6,126 @@
  * not something that should drift silently in a constant somewhere.
  */
 import { describe, expect, it } from "vitest";
-import { PLANS, resolvePrice, formatPrice, CURRENCIES, planById } from "@/config/pricing";
+import {
+  ANNUAL_DISCOUNT_PCT,
+  CURRENCIES,
+  HIGHLIGHTED_PLAN,
+  PLANS,
+  SUPPORTED_CURRENCIES,
+  formatPrice,
+  planById,
+  resolveAnnualTotal,
+  resolvePrice,
+  type CurrencyCode,
+} from "@/config/pricing";
 
 describe("approved prices", () => {
-  const EXPECTED: Record<string, { inr: number; usd: number }> = {
-    free: { inr: 0, usd: 0 },
-    basic: { inr: 79, usd: 1.49 },
-    plus: { inr: 199, usd: 3.99 },
-    premium: { inr: 349, usd: 6.99 },
-    ultra: { inr: 999, usd: 19.99 },
-    max: { inr: 1999, usd: 39.99 },
+  const EXPECTED_MONTHLY: Record<string, Record<CurrencyCode, number>> = {
+    free: { INR: 0, USD: 0, GBP: 0, EUR: 0, AED: 0, SGD: 0, AUD: 0, CAD: 0 },
+    basic: {
+      INR: 99,
+      USD: 1.09,
+      GBP: 0.99,
+      EUR: 0.99,
+      AED: 3.99,
+      SGD: 1.49,
+      AUD: 1.59,
+      CAD: 1.59,
+    },
+    plus: {
+      INR: 549,
+      USD: 5.99,
+      GBP: 4.49,
+      EUR: 5.49,
+      AED: 21.99,
+      SGD: 7.49,
+      AUD: 8.99,
+      CAD: 8.49,
+    },
+    premium: {
+      INR: 1099,
+      USD: 11.99,
+      GBP: 8.99,
+      EUR: 10.99,
+      AED: 42.99,
+      SGD: 14.99,
+      AUD: 17.49,
+      CAD: 16.99,
+    },
+    ultra: {
+      INR: 2199,
+      USD: 23.99,
+      GBP: 17.99,
+      EUR: 21.49,
+      AED: 85.99,
+      SGD: 30.99,
+      AUD: 34.99,
+      CAD: 33.99,
+    },
+    max: {
+      INR: 5599,
+      USD: 59.99,
+      GBP: 44.99,
+      EUR: 54.99,
+      AED: 219.99,
+      SGD: 76.99,
+      AUD: 89.99,
+      CAD: 84.99,
+    },
   };
 
-  it("has exactly six plans", () => {
+  it("has exactly six plans with premium highlighted", () => {
     expect(PLANS).toHaveLength(6);
+    expect(HIGHLIGHTED_PLAN).toBe("premium");
+    expect(ANNUAL_DISCOUNT_PCT).toBe(20);
   });
 
-  for (const [id, expected] of Object.entries(EXPECTED)) {
-    it(`${id} is priced at the approved INR and USD amounts`, () => {
+  for (const [id, expectedByCurrency] of Object.entries(EXPECTED_MONTHLY)) {
+    it(`${id} is priced at the approved amounts across all 8 currencies`, () => {
       const plan = planById(id as Parameters<typeof planById>[0]);
-      expect(resolvePrice(plan, "INR", "monthly")).toBe(expected.inr);
-      expect(resolvePrice(plan, "USD", "monthly")).toBe(expected.usd);
+      for (const currency of SUPPORTED_CURRENCIES) {
+        expect(resolvePrice(plan, currency, "monthly")).toBe(expectedByCurrency[currency]);
+      }
     });
   }
 
-  it("publishes only INR and USD", () => {
+  it("publishes all 8 approved currencies", () => {
     const published = CURRENCIES.filter((c) => c.published).map((c) => c.code);
-    expect(published.sort()).toEqual(["INR", "USD"]);
+    expect(published.sort()).toEqual(["AED", "AUD", "CAD", "EUR", "GBP", "INR", "SGD", "USD"]);
   });
 
-  it("has no approved annual price anywhere", () => {
+  it("publishes approved 20%-off annual pricing for every paid plan and currency", () => {
     for (const plan of PLANS) {
-      expect(plan.yearly).toBeNull();
+      expect(plan.yearly).not.toBeNull();
+      for (const currency of SUPPORTED_CURRENCIES) {
+        const monthly = resolvePrice(plan, currency, "monthly")!;
+        const yearlyPerMo = resolvePrice(plan, currency, "yearly")!;
+        const annualTotal = resolveAnnualTotal(plan, currency)!;
+
+        if (plan.id === "free") {
+          expect(yearlyPerMo).toBe(0);
+          expect(annualTotal).toBe(0);
+        } else {
+          expect(yearlyPerMo).toBeLessThan(monthly);
+          // Method B: annual total equals exact 12x the yearly per-month display rate
+          expect(Math.round(annualTotal * 100)).toBe(Math.round(yearlyPerMo * 12 * 100));
+        }
+      }
     }
-  });
-
-  it("falls back to the monthly figure for a yearly request, rather than inventing a discount", () => {
-    const plus = planById("plus");
-    // The UI labels this honestly; the number itself must never be a made-up
-    // annual rate.
-    expect(resolvePrice(plus, "INR", "yearly")).toBe(resolvePrice(plus, "INR", "monthly"));
-  });
-
-  it("returns null for a currency with no published price", () => {
-    const plus = planById("plus");
-    expect(resolvePrice(plus, "GBP", "monthly")).toBeNull();
-    expect(resolvePrice(plus, "EUR", "monthly")).toBeNull();
-    expect(resolvePrice(plus, "AED", "monthly")).toBeNull();
-    expect(resolvePrice(plus, "SGD", "monthly")).toBeNull();
   });
 });
 
 describe("storage allowances", () => {
-  it("uses decimal bytes, so 10 GB is ten billion bytes", () => {
+  it("uses decimal bytes matching the approved 6-tier ladder up to 5 TB", () => {
     expect(planById("free").storageBytes).toBe(10_000_000_000);
     expect(planById("basic").storageBytes).toBe(100_000_000_000);
     expect(planById("plus").storageBytes).toBe(500_000_000_000);
     expect(planById("premium").storageBytes).toBe(1_000_000_000_000);
-    expect(planById("ultra").storageBytes).toBe(5_000_000_000_000);
-    expect(planById("max").storageBytes).toBe(10_000_000_000_000);
+    expect(planById("ultra").storageBytes).toBe(2_000_000_000_000);
+    expect(planById("max").storageBytes).toBe(5_000_000_000_000);
   });
 
   it("allowances increase strictly with each tier", () => {
-    // Not a fixed multiple: the approved ladder is 10, 100, 500, 1000, 5000,
-    // 10000 GB, so 500 GB -> 1 TB is a 2x step and the rest are 10x. What must
-    // hold is that no tier is smaller than the one below it.
     const order = ["free", "basic", "plus", "premium", "ultra", "max"] as const;
     for (let i = 1; i < order.length; i += 1) {
       expect(planById(order[i]).storageBytes).toBeGreaterThan(
@@ -82,19 +137,16 @@ describe("storage allowances", () => {
 
 describe("formatting", () => {
   it("formats INR with a rupee sign", () => {
-    expect(formatPrice(79, "INR")).toContain("79");
-    expect(formatPrice(79, "INR")).toContain("₹");
+    expect(formatPrice(99, "INR")).toContain("99");
+    expect(formatPrice(99, "INR")).toContain("₹");
   });
 
   it("formats USD with a dollar sign and two decimals", () => {
-    expect(formatPrice(1.49, "USD")).toContain("1.49");
-    expect(formatPrice(1.49, "USD")).toContain("$");
+    expect(formatPrice(1.09, "USD")).toContain("1.09");
+    expect(formatPrice(1.09, "USD")).toContain("$");
   });
 
   it("renders a zero price as a plain zero, not as a fraction", () => {
-    // The Free plan shows "₹0" / "$0". That is honest — it is the price. What
-    // would be wrong is "₹0.00" implying a fractional charge, or the amount being
-    // omitted so the row looks broken.
     expect(formatPrice(0, "INR")).toBe("₹0");
     expect(formatPrice(0, "USD")).toBe("$0");
   });

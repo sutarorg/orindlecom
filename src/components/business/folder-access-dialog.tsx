@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Globe, Loader2, Search, Users, X } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import { BUSINESS_NOT_CONNECTED } from "@/lib/business/repository";
+import { api } from "@/lib/drive/client";
 import {
   FOLDER_ACCESS_DESCRIPTION,
   FOLDER_ACCESS_LABEL,
@@ -15,31 +16,19 @@ import {
 import { MemberAvatar } from "./member-table";
 import { cn } from "@/lib/utils";
 
-/**
- * Folder permissions dialog.
- *
- * Two halves, because folder access has two mechanisms and conflating them is
- * how shared drives leak:
- *
- *   1. **Organization-wide** — is this folder visible to everyone, and at what
- *      level by default. One switch and one selector.
- *   2. **Per-member overrides** — specific people at a different level than the
- *      default.
- *
- * The dialog works on a draft and saves on confirm, so an admin can adjust
- * several people without each click firing a request. Pending changes are
- * counted on the save button, so it's obvious when there's something to save.
- */
 export function FolderAccessDialog({
+  organizationId = "workspace",
   folder,
   members,
   onClose,
 }: {
+  organizationId?: string;
   folder: BusinessFolder | null;
   members: Member[];
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [openToOrg, setOpenToOrg] = React.useState(true);
   const [defaultAccess, setDefaultAccess] = React.useState<FolderAccess>("viewer");
   const [grants, setGrants] = React.useState<Record<string, FolderAccess>>({});
@@ -55,17 +44,6 @@ export function FolderAccessDialog({
     setPending(false);
   }, [folder]);
 
-  /**
-   * Count real differences against the saved state, not the size of the draft.
-   * Counting draft entries reported a fresh dialog as "3 unsaved changes" on any
-   * folder that already had overrides, which taught people to ignore the counter.
-   *
-   * These two memos sit ABOVE the `if (!folder)` early return on purpose. Hooks
-   * must run in the same order on every render, and returning before them meant
-   * that closing the dialog (folder -> null) rendered two fewer hooks than opening
-   * it, which React throws on. The empty-object fallback keeps the memo safe while
-   * there is no folder.
-   */
   const original = React.useMemo(
     () =>
       folder
@@ -110,14 +88,30 @@ export function FolderAccessDialog({
       return next;
     });
 
-  const save = () => {
-    // Organisation folder access has no route yet, so nothing is saved and the
-    // dialog stays open with the changes intact. No simulated request.
+  const save = async () => {
+    setPending(true);
+    const result = await api.put(
+      `/api/organizations/${encodeURIComponent(organizationId)}/folders/${encodeURIComponent(folder.id)}/access`,
+      {
+        openToOrganization: openToOrg,
+        defaultAccess,
+        grants: Object.entries(grants).map(([memberId, access]) => ({ memberId, access })),
+      },
+    );
+    setPending(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Access wasn't changed", description: result.message });
+      return;
+    }
+
     toast({
-      tone: "error",
-      title: "Access wasn't changed",
-      description: BUSINESS_NOT_CONNECTED,
+      tone: "success",
+      title: "Folder access saved",
+      description: `Updated permissions for “${folder.name}”.`,
     });
+    onClose();
+    router.refresh();
   };
 
   return (
@@ -142,7 +136,7 @@ export function FolderAccessDialog({
             </button>
             <button
               type="button"
-              onClick={save}
+              onClick={() => void save()}
               disabled={changes === 0 || pending}
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 text-[12px] font-semibold text-white shadow-[var(--brand-shadow-primary)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
             >
@@ -153,7 +147,6 @@ export function FolderAccessDialog({
         </div>
       }
     >
-      {/* Organization-wide */}
       <section className="rounded-xl border border-[var(--brand-border)] p-3">
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
@@ -206,7 +199,6 @@ export function FolderAccessDialog({
         </div>
       </section>
 
-      {/* Per-member */}
       <section className="mt-3">
         <div className="mb-1.5 flex items-baseline justify-between gap-2">
           <h3 className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
@@ -225,7 +217,6 @@ export function FolderAccessDialog({
           </p>
         ) : (
           <>
-            {/* Search, once there are enough people to need it. */}
             {activeMembers.length > 6 && (
               <div className="relative mb-1.5">
                 <Search

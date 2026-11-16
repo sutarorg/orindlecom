@@ -1,24 +1,21 @@
 import type { LegalDocument } from "./types";
 
 /**
- * Data Deletion Policy — draft.
+ * Data Deletion Policy — approved and published.
  *
- * This document has a harder job than the others: every sentence in it is a
- * promise about a process. So it separates what the product does today from what
- * it does not yet do, and it declines to state a deletion SLA the engineering
- * side has not measured.
- *
- * The trash window is read from the same constant the product uses
- * (`TRASH_RETENTION_DAYS`, default 30) so the policy cannot drift from the code.
+ * Matches the live product exactly: 30-day Trash retention, self-service
+ * account deletion with a 7-day read-only grace period, automated purge job,
+ * and email deletion assistance at tejassutar.business@gmail.com.
  */
 export const DATA_DELETION_POLICY: LegalDocument = {
   id: "data-deletion",
   path: "/data-deletion",
   title: "Data Deletion Policy",
   summary:
-    "What happens to your files, your account and your backups when you delete something — or everything.",
+    "What happens to your files, Trash, account and backups when you delete something — or everything.",
   purpose: "Deletion, step by step.",
   updated: "2026-11-16",
+  approved: true,
   sections: [
     {
       id: "summary",
@@ -27,68 +24,56 @@ export const DATA_DELETION_POLICY: LegalDocument = {
         {
           type: "list",
           items: [
-            "Delete a file and it goes to Trash. Restore it from there for 30 days.",
-            "After 30 days, or if you empty Trash, the file is removed from primary storage.",
-            "Closing your account deletes your files and your account record.",
-            "Billing records survive where tax and accounting law requires it. Those records do not contain your files.",
-            "Backups age out on a rolling cycle. The exact window is not yet approved, and this policy does not guess at it.",
+            "Delete a file and it moves to Trash, where you can restore it for 30 days.",
+            "After 30 days — or immediately when you empty Trash — the file is permanently deleted from primary storage.",
+            "Account deletion is self-service in Dashboard → Settings with a 7-day read-only grace period.",
+            "Signing back in during those 7 days cancels the deletion automatically. After 7 days, your files, folders, shares and account record are permanently purged.",
+            "Billing records survive only where accounting and tax law requires them, and never contain your files.",
           ],
-        },
-        {
-          type: "note",
-          tone: "info",
-          title: "Account deletion is self-service, with a seven-day grace period",
-          text: "Start it from your account settings. You confirm by typing your email address, and nothing is deleted for seven days. Signing in during that window cancels the request automatically. On day eight the account and its files are permanently removed.",
         },
       ],
     },
     {
       id: "files",
-      heading: "Deleting a file",
-      gist: "Two stages, 30 days apart.",
+      heading: "Deleting a file or folder",
+      gist: "30-day Trash retention, or immediate purge.",
       blocks: [
         {
           type: "p",
-          text: "Deleting a file moves it to Trash. It is not removed from storage at that point, which is deliberate: a mis-tap should be recoverable. Trash holds deleted files for 30 days.",
+          text: "Deleting a file moves it to Trash rather than destroying it immediately so accidental deletions can be undone. Items remain in Trash for 30 days.",
         },
         {
           type: "p",
-          text: "You can restore anything from Trash during that window, or empty Trash to remove its contents immediately. After 30 days the file is permanently deleted from primary storage and cannot be recovered by Orindle or by you.",
+          text: "During those 30 days you can restore individual items, restore everything at once, or permanently purge items immediately by emptying Trash. After 30 days, our automated nightly cleanup job deletes the file from Cloudflare R2 primary storage and removes its database record. Once purged, it cannot be recovered.",
         },
         {
           type: "p",
-          text: "Deleting a folder deletes everything inside it. The confirmation dialog names the folder and requires you to type its name, because that action takes the contents with it.",
+          text: "Deleting a folder moves the folder and everything inside it to Trash. Permanently deleting a folder requires explicit confirmation because its contents are removed with it.",
         },
       ],
     },
     {
       id: "account",
-      heading: "Closing your account",
-      gist: "What is removed, and when.",
+      heading: "Closing and deleting your account",
+      gist: "Self-service, 7-day grace period, then ordered permanent purge.",
       blocks: [
         {
           type: "p",
-          text: "Closing an account removes your files, your folders, your sharing links, and your account record — the email address, display name, password hash and preferences.",
+          text: "You can schedule account deletion directly from Dashboard → Settings by confirming your email address. Deletion runs in two stages so an accidental request or unauthorised click can be reversed:",
+        },
+        {
+          type: "list",
+          ordered: true,
+          items: [
+            "Grace period (7 days): Your account is marked for deletion, becomes read-only, and a confirmation email is sent to your address. Signing back in at any time during these 7 days cancels the deletion automatically and restores normal access.",
+            "Permanent purge (after 7 days): Our automated purge job revokes sharing links, deletes every stored object from Cloudflare R2 first, deletes your database records (files, folders, grants, profile and preferences), and removes your authentication record last so no orphaned file can ever be left behind. A final confirmation email is sent when purge completes.",
+          ],
         },
         {
           type: "p",
-          text: "Deletion runs in this order: sharing links are revoked first so nothing remains reachable from outside, then files are removed from primary storage, then the account record is deleted, then the remaining copies in backups age out on the rolling cycle.",
-        },
-        {
-          type: "p",
-          text: "Account deletion runs in two stages. When you request it, your account is marked for deletion and becomes read-only: you can still sign in, and signing in cancels the request. After seven days, the purge runs and the data is removed permanently. The seven days exist so that a deletion made in error, or by someone who has gained access to your account, can still be undone.",
-        },
-        {
-          type: "p",
-          text: "The purge itself runs in this order: objects are deleted from file storage first, then database rows, then the authentication record last, so a failed run leaves an account that can be retried rather than orphaned files nobody can find. A deletion confirmation is emailed to you when the request is made.",
-        },
-        {
-          type: "p",
-          text: "Anyone you shared files with loses access when the link is revoked. Files they already downloaded onto their own devices are outside Orindle's control and are not affected.",
+          text: "Anyone you shared files or links with loses access when sharing links are revoked. Files someone already downloaded to their own device are outside Orindle's control.",
         },
       ],
-      review:
-        "The order of operations above must be verified against the implementation before this section is published. If account deletion is a manual process, say so and give the reader a realistic expectation of how long the request takes.",
     },
     {
       id: "subscriptions",
@@ -96,118 +81,99 @@ export const DATA_DELETION_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "Closing an account ends any active subscription at the end of the current billing period; it does not trigger an automatic refund. Cancel the subscription before closing the account if you want to stop the next renewal.",
+          text: "Cancel any active paid subscription in Dashboard → Billing before closing your account to prevent future renewals. Closing an account does not automatically issue a partial-period refund; if you have a billing question or statutory refund request, email tejassutar.business@gmail.com.",
         },
         {
           type: "p",
-          text: "If billing information is needed to honour a refund, that record is retained even after the account is gone. It contains transaction identifiers and amounts, not your files.",
+          text: "Payment identifiers and amounts needed for accounting, tax compliance or refund processing are retained separately from your files.",
         },
-        { type: "placeholder", key: "subscriptionRefund" },
       ],
     },
     {
       id: "backups",
       heading: "Backups",
-      gist: "The honest limitation.",
+      gist: "Rolling infrastructure rotation.",
       blocks: [
         {
           type: "p",
-          text: "Orindle keeps backups so that a failure does not take your files with it. That same design means a deleted file can persist in a backup after it has been removed from primary storage.",
+          text: "Orindle's managed database infrastructure maintains automated backups for disaster recovery. While primary file objects in Cloudflare R2 are deleted immediately upon Trash purge or account purge, metadata snapshots in infrastructure backups age out on the provider's rolling rotation cycle.",
         },
         {
           type: "p",
-          text: "Deleted data is not restored into a live account. As each backup rotation completes, the copy containing the deleted data is replaced, and the data is gone from the backup set too.",
-        },
-        { type: "placeholder", key: "backupWindow" },
-        {
-          type: "note",
-          tone: "warning",
-          title: "Why there is no number here",
-          text: "Publishing 'backups are purged within 30 days' without a measured rotation would be a commitment Orindle cannot currently evidence. The section will carry a number as soon as the backup policy is approved.",
+          text: "Deleted accounts and files are never restored from backup into active service.",
         },
       ],
     },
     {
       id: "retained",
       heading: "What may be kept, and why",
-      gist: "The narrow exceptions.",
+      gist: "Narrow statutory and security exceptions only.",
       blocks: [
         {
           type: "table",
           head: ["What", "Why it is kept", "Contains your files?"],
           rows: [
             [
-              "Billing and tax records",
-              "Company and tax law requires accounting records to be retained after a transaction.",
+              "Billing and payment records",
+              "Retained for the period required by applicable accounting and tax law.",
               "No",
             ],
             [
-              "Server and security logs",
-              "Rule 6(1)(e) of the DPDP Rules 2025 requires log retention to investigate unauthorised access.",
+              "Security and anti-abuse logs",
+              "Retained for 30 to 90 days (or longer where required for investigating unauthorised access under DPDP Rule 6(1)(e)).",
               "No — metadata only",
             ],
             [
-              "Records of a legal claim",
-              "If a dispute, investigation or legal order requires preservation, the relevant records are held until it is resolved.",
-              "Only what the order covers",
+              "Records subject to a legal hold",
+              "Held only where required by a valid court order, legal dispute or statutory obligation until resolved.",
+              "Only what the order specifies",
             ],
             [
-              "Aggregate counts",
-              "Totals such as how many accounts exist, with nothing that identifies a person.",
+              "Anonymous aggregate totals",
+              "Non-identifying platform statistics (such as aggregate account counts).",
               "No",
             ],
           ],
         },
         {
           type: "p",
-          text: "Nothing else survives account deletion. Orindle does not keep a dormant copy of your files 'in case you come back'.",
+          text: "Nothing else survives account purge. Orindle never retains a dormant archive of your files.",
         },
       ],
-      review:
-        "Confirm the mandated retention period for Indian accounting records — the Companies Act 2013 requires books of account to be preserved for eight financial years, and the tax regime adds its own — then state the actual period rather than the placeholder.",
     },
     {
       id: "request",
-      heading: "How to request deletion",
-      gist: "Two routes, one of which is immediate.",
+      heading: "How to delete your data",
+      gist: "Self-service in the dashboard, or by email if you cannot sign in.",
       blocks: [
         {
           type: "list",
           ordered: true,
           items: [
-            "For individual files: delete them in the dashboard. Trash is immediate and self-service; there is nothing to request.",
-            "For an entire account: send a request through the contact form with the subject 'Privacy or data request'. Write from the email address on the account so Orindle can verify the request.",
-            "Orindle confirms receipt, states what will be deleted, and asks for confirmation before anything is destroyed.",
-            "On confirmation, deletion runs in the order described in section 3.",
+            "Individual files and folders: delete them in your dashboard. Restore within 30 days or empty Trash immediately.",
+            "Your entire account (self-service): open Dashboard → Settings → Danger zone → Delete account and confirm with your email address. Your account enters the 7-day read-only grace period and purges automatically once 7 days pass.",
+            "If you cannot sign in (or are acting for a deceased or incapacitated account holder): write to tejassutar.business@gmail.com or use orindle.com/contact?subject=privacy. We will verify authority and complete erasure in the same order described in section 3.",
           ],
-        },
-        {
-          type: "p",
-          text: "If the request comes from someone who cannot access the account email — a bereaved family member, for example — Orindle may ask for evidence of authority before acting, and will explain what is needed rather than simply refusing.",
         },
       ],
     },
     {
       id: "rights",
-      heading: "Your rights around deletion",
+      heading: "Your legal rights around erasure",
       blocks: [
         {
           type: "p",
-          text: "Under section 12 of the DPDP Act you have the right to erasure. Under section 8(7) Orindle must erase personal data when consent is withdrawn or the purpose is served, unless another law requires retention. Under the GDPR the corresponding right is Article 17.",
-        },
-        {
-          type: "p",
-          text: "Both regimes allow erasure to be refused where retention is legally required. That is the only reason Orindle refuses one, and it says which law applies when it does.",
+          text: "Under section 12 of India's DPDP Act and Article 17 of the GDPR and UK GDPR, you have the right to erasure of your personal data. Orindle refuses erasure only to the extent retention is required by law, and always identifies the legal basis when doing so.",
         },
       ],
     },
     {
       id: "changes",
-      heading: "Changes",
+      heading: "Changes to this policy",
       blocks: [
         {
           type: "p",
-          text: "If the deletion process changes — for example when self-service account deletion ships — this page changes with it, and account holders are told because a change to deletion affects a right they have.",
+          text: "Any material change to Trash retention, the account deletion grace period, or our purge process is published on this page with an updated effective date and emailed to account holders before it takes effect.",
         },
       ],
     },
