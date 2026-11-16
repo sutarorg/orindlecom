@@ -18,6 +18,7 @@ import type { Actor } from "@/domain/auth/actor";
 import { resolveActor } from "@/domain/auth/actor";
 
 export type ApiSuccess<T> = { ok: true; data: T };
+export type ApiFailure = { ok: false; code: AppErrorCode; message: string };
 
 export function ok<T>(data: T, init?: ResponseInit): NextResponse<ApiSuccess<T>> {
   return NextResponse.json({ ok: true as const, data }, init);
@@ -222,4 +223,38 @@ export function requireNumber(
     throw new AppError("validation_failed", `That ${key} is out of range.`);
   }
   return value;
+}
+
+/**
+ * Enforce a rate limit, or return null to continue.
+ *
+ * Returns a ready-made 429 response rather than throwing, so a route can pass the
+ * result straight back. The Retry-After header is seconds until the window rolls
+ * over, which is what a well-behaved client needs to back off correctly.
+ */
+export async function enforceRateLimit(
+  bucket: string,
+  policy: { limit: number; windowSeconds: number },
+): Promise<NextResponse<ApiFailure> | null> {
+  const { consume } = await import("@/lib/rate-limit");
+  const result = await consume(bucket, policy);
+  if (result.allowed) return null;
+
+  const retryAfter = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
+
+  return NextResponse.json<ApiFailure>(
+    {
+      ok: false,
+      code: "rate_limited",
+      message: "That's a lot of requests in a short time. Please wait a moment and try again.",
+    },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(retryAfter),
+        "X-RateLimit-Limit": String(policy.limit),
+        "X-RateLimit-Remaining": "0",
+      },
+    },
+  );
 }

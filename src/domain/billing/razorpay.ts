@@ -159,7 +159,27 @@ export interface CreatedOrder {
   keyId: string;
 }
 
-export async function createOrder(price: ResolvedPrice, receipt: string): Promise<CreatedOrder> {
+/**
+ * Create a Razorpay order.
+ *
+ * `userId` goes into the order notes because the webhook arrives with no session
+ * at all. The notes are the only trustworthy statement of who the money is for,
+ * and they were written by this server at order time rather than supplied by the
+ * browser. Without them the webhook has nothing to activate against — it would
+ * have to guess from the receipt or the email, and guessing is how a payment
+ * credits the wrong account.
+ */
+export async function createOrder(
+  price: ResolvedPrice,
+  receipt: string,
+  userId: string,
+): Promise<CreatedOrder> {
+  if (!userId) {
+    // Refuse before calling Razorpay rather than creating an order nobody can
+    // attribute afterwards.
+    throw new AppError("unknown", "We couldn't start checkout. Nothing was charged.");
+  }
+
   const response = await fetch(`${API}/orders`, {
     method: "POST",
     headers: {
@@ -170,7 +190,7 @@ export async function createOrder(price: ResolvedPrice, receipt: string): Promis
       amount: price.amountMinor,
       currency: price.currency,
       receipt,
-      notes: { planId: price.planId, period: price.period },
+      notes: { planId: price.planId, period: price.period, userId },
     }),
     signal: AbortSignal.timeout(15_000),
   });
@@ -189,6 +209,44 @@ export async function createOrder(price: ResolvedPrice, receipt: string): Promis
     amountMinor: Number(order.amount ?? price.amountMinor),
     currency: order.currency ?? price.currency,
     keyId: KEY_ID,
+  };
+}
+
+/**
+ * Fetch an order from Razorpay.
+ *
+ * Used by the verification endpoint to recover the order's notes. Those notes were
+ * written by this server when the order was created, and reading them back from
+ * Razorpay means verification does not depend on our own database write having
+ * succeeded — the provider's copy is the authoritative one.
+ */
+export async function fetchOrder(orderId: string): Promise<{
+  orderId: string;
+  amountMinor: number;
+  currency: string;
+  notes: Record<string, string>;
+} | null> {
+  const response = await fetch(`${API}/orders/${encodeURIComponent(orderId)}`, {
+    headers: { Authorization: authHeader() },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) return null;
+
+  const order = (await response.json()) as {
+    id?: string;
+    amount?: number;
+    currency?: string;
+    notes?: Record<string, string>;
+  };
+
+  if (!order.id) return null;
+
+  return {
+    orderId: order.id,
+    amountMinor: Number(order.amount ?? 0),
+    currency: order.currency ?? "INR",
+    notes: order.notes ?? {},
   };
 }
 

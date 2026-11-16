@@ -3,23 +3,24 @@
  *
  * Why this endpoint has to exist: the repository contract returns a redirect URL,
  * but Razorpay's overlay flow hands the browser a payment id and signature
- * instead of redirecting. Without a verification step, an overlay payment could
- * be "completed" entirely client-side.
+ * instead of redirecting. Without a verification step an overlay payment could be
+ * "completed" entirely client-side.
  *
- * So: no path activates a plan from a client claim. Either the webhook has
- * already done it (the authoritative route), or this endpoint verifies the
- * signature itself and then activates.
+ * So: no path activates a plan from a client claim. Either the webhook has already
+ * done it (the authoritative route), or this endpoint verifies the signature and
+ * then activates.
  */
 
-import { handle, ok, readJson, requireString, withActor } from "@/lib/api";
+import { enforceRateLimit, handle, ok, readJson, requireString, withActor } from "@/lib/api";
+import { LIMITS, userBucket } from "@/lib/rate-limit";
 import { AppError } from "@/domain/auth/errors";
 import {
   activateSubscription,
+  fetchOrder,
   isBillingConfigured,
   periodEnd,
   verifyPaymentSignature,
 } from "@/domain/billing/razorpay";
-import { getServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,12 @@ export async function POST(request: Request) {
       );
     }
 
+    const limited = await enforceRateLimit(
+      userBucket("billing.verify", auth.actor.userId),
+      LIMITS.checkout,
+    );
+    if (limited) return limited;
+
     const body = await readJson(request);
     const orderId = requireString(body, "razorpayOrderId", { max: 64 });
     const paymentId = requireString(body, "razorpayPaymentId", { max: 64 });
@@ -49,42 +56,50 @@ export async function POST(request: Request) {
       );
     }
 
-    // The order's notes carry the plan and owner. They were written by us at
-    // checkout time, so they are trustworthy in a way a request body never is.
-    const supabase = getServiceClient();
-    const { data: intent } = await supabase
-      .from("activity_events")
-      .select("metadata")
-      .eq("kind", "billing.order_created")
-      .eq("actor_id", auth.actor.userId)
-      .contains("metadata", { orderId })
-      .maybeSingle();
+    // The signature proves the payment is real. It does not prove it belongs to
+    // the caller. The order's notes — written by this server at checkout time —
+    // carry the owner, and Razorpay's copy is authoritative, so the lookup does not
+    // depend on our own database write having landed.
+    const order = await fetchOrder(orderId);
+    const notes = order?.notes ?? {};
 
-    const meta = (intent?.metadata ?? {}) as {
-      planId?: string;
-      period?: "monthly" | "yearly";
-      currency?: string;
-      amountMinor?: number;
-    };
+    if (notes.userId !== auth.actor.userId) {
+      // Someone signed in as a different account than the order belongs to. The
+      // payment is real, so do not throw away the information: log it and refuse.
+      console.error("[billing] verify: order belongs to a different user", {
+        orderId,
+        paymentId,
+      });
+      throw new AppError(
+        "forbidden",
+        "That payment belongs to a different account. Nothing was changed; if you were charged, contact us.",
+      );
+    }
 
-    if (!meta.planId) {
+    if (!notes.planId) {
       throw new AppError(
         "not_found",
         "We couldn't match that payment to an order. Nothing was changed; if you were charged, contact us.",
       );
     }
 
+    const period = notes.period === "yearly" ? "yearly" : "monthly";
+    const currency = notes.currency === "USD" ? "USD" : (order?.currency ?? "INR");
+
     await activateSubscription({
       userId: auth.actor.userId,
-      planId: meta.planId,
-      currency: meta.currency ?? "INR",
-      period: meta.period ?? "monthly",
-      amountMinor: Number(meta.amountMinor ?? 0),
+      planId: notes.planId,
+      currency: currency === "USD" ? "USD" : "INR",
+      period,
+      amountMinor: order?.amountMinor ?? 0,
       paymentId,
       subscriptionId: null,
-      periodEnd: periodEnd(new Date(), meta.period ?? "monthly"),
+      periodEnd: periodEnd(new Date(), period),
     });
 
-    return ok({ active: true, planId: meta.planId });
+    // Idempotent by construction: activation keys on the unique
+    // provider_payment_id, so if the webhook already handled this payment the
+    // second call changes nothing and this still returns success.
+    return ok({ active: true, planId: notes.planId });
   });
 }

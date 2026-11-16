@@ -8,6 +8,8 @@
 import { handle, ok, readJson, requireNumber, requireString, requireUuid, withActor } from "@/lib/api";
 import { validateItemName } from "@/lib/api";
 import { prepareUpload } from "@/domain/storage/upload-service";
+import { consume, LIMITS, userBucket } from "@/lib/rate-limit";
+import { enforceRateLimit } from "@/lib/api";
 
 export const runtime = "nodejs";
 
@@ -16,6 +18,15 @@ export async function POST(request: Request) {
     // Step 1: identity, from the verified session only.
     const auth = await withActor();
     if (!auth.ok) return auth.response;
+
+    // Rate limit before doing any work. Preparing an upload takes a row lock on
+    // the usage row, so an unthrottled loop would contend on that lock for every
+    // other request from the same account.
+    const limited = await enforceRateLimit(
+      userBucket("upload.prepare", auth.actor.userId),
+      LIMITS.uploadPrepare,
+    );
+    if (limited) return limited;
 
     const body = await readJson(request);
 

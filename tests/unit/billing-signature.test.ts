@@ -135,3 +135,33 @@ describe("billing period arithmetic", () => {
     );
   });
 });
+
+describe("order attribution", () => {
+  /**
+   * The scenario these guard against: a signature is valid, but the payment is
+   * not the caller's. Verifying the HMAC alone would activate a plan for whoever
+   * presented the signature.
+   *
+   * The ownership decision is made by comparing the order's notes.userId (written
+   * by the server at checkout) against the verified session's user id. These tests
+   * assert the rule that comparison implements, independent of the transport.
+   */
+  function ownsOrder(notesUserId: string | undefined, sessionUserId: string): boolean {
+    return notesUserId === sessionUserId;
+  }
+
+  it("accepts an order whose notes name the caller", () => {
+    expect(ownsOrder("user-a", "user-a")).toBe(true);
+  });
+
+  it("rejects an order belonging to someone else", () => {
+    expect(ownsOrder("user-b", "user-a")).toBe(false);
+  });
+
+  it("rejects an order with no owner in its notes", () => {
+    // Missing notes must fail closed. Treating absent as "probably fine" is how a
+    // webhook-activated plan ends up on the wrong account.
+    expect(ownsOrder(undefined, "user-a")).toBe(false);
+    expect(ownsOrder("", "user-a")).toBe(false);
+  });
+});

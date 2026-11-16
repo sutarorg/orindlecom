@@ -7,7 +7,8 @@
  * approved price in that currency or the request is refused.
  */
 
-import { handle, ok, readJson, requireString, withActor } from "@/lib/api";
+import { enforceRateLimit, handle, ok, readJson, requireString, withActor } from "@/lib/api";
+import { LIMITS, userBucket } from "@/lib/rate-limit";
 import { AppError } from "@/domain/auth/errors";
 import { createOrder, createOrderGuard, resolveApprovedPrice, receiptRef } from "@/domain/billing/razorpay";
 import { getServiceClient } from "@/lib/supabase/service";
@@ -27,6 +28,12 @@ export async function POST(request: Request) {
       );
     }
 
+    const limited = await enforceRateLimit(
+      userBucket("billing.checkout", auth.actor.userId),
+      LIMITS.checkout,
+    );
+    if (limited) return limited;
+
     const body = await readJson(request);
     const planId = requireString(body, "planId", { max: 32 });
     const periodRaw = requireString(body, "period", { max: 8 });
@@ -43,14 +50,13 @@ export async function POST(request: Request) {
     const price = await resolveApprovedPrice(planId, currency, periodRaw);
     createOrderGuard(price);
 
-    const order = await createOrder(price, receiptRef());
+    const order = await createOrder(price, receiptRef(), auth.actor.userId);
 
     // Remember which user an order belongs to. The webhook arrives with no
     // session, so the owner has to be recorded at order time — otherwise
     // activation would have to guess, and guessing is how a payment credits the
     // wrong account.
     const supabase = getServiceClient();
-    await supabase.from("plans").select("id").eq("id", planId).maybeSingle();
     await supabase.from("activity_events").insert({
       actor_id: auth.actor.userId,
       subject_type: "order",

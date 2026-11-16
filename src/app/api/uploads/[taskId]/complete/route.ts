@@ -6,7 +6,8 @@
  * available until both agree.
  */
 
-import { handle, ok, readJson, withActor } from "@/lib/api";
+import { enforceRateLimit, handle, ok, readJson, withActor } from "@/lib/api";
+import { LIMITS, userBucket } from "@/lib/rate-limit";
 import { completeUpload } from "@/domain/storage/upload-service";
 
 export const runtime = "nodejs";
@@ -18,6 +19,12 @@ export async function POST(
   return handle(async () => {
     const auth = await withActor();
     if (!auth.ok) return auth.response;
+
+    const limited = await enforceRateLimit(
+      userBucket("upload.complete", auth.actor.userId),
+      LIMITS.uploadComplete,
+    );
+    if (limited) return limited;
 
     const { taskId } = await params;
 
