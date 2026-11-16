@@ -205,7 +205,7 @@ come from the business routes and are scoped to members.
 | --- | --- | --- | --- |
 | ✅ | `GET` | `/api/billing/subscription` | | Current plan, status, period end, recovery window |
 | ✅ | `GET` | `/api/billing/invoices` | | The actor's invoices only |
-| ✅ | `POST` | `/api/billing/checkout` | | `{ planId, period, currency }` → order + redirect/authorisation data |
+| ✅ | `POST` | `/api/billing/checkout` | | `{ planId, period }` → order + redirect/authorisation data (currency resolved server-side from location or existing subscription) |
 | ✅ | `POST` | `/api/billing/verify` | | `{ razorpayPaymentId, razorpayOrderId, razorpaySignature }` |
 | ✅ | `POST` | `/api/billing/cancel` | | Cancel at period end; never revokes access now |
 | ✅ | `POST` | `/api/billing/change-plan` | | `{ planId }` — schedule a downgrade for period end |

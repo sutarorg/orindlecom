@@ -20,7 +20,8 @@ import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/auth/supabase/server";
 import { resolveActor } from "@/domain/auth/actor";
-import { planById } from "@/config/pricing";
+import { isSupportedCurrency, planById, type CurrencyCode } from "@/config/pricing";
+import { resolveRequestCurrency } from "@/lib/geo/currency";
 import { TRASH_RETENTION } from "./types";
 import { isStorageConfigured, presignGet } from "@/lib/r2/client";
 import {
@@ -832,28 +833,42 @@ export function createSupabaseDriveRepository(): DriveRepository {
 
       const { data } = await c.supabase
         .from("subscriptions")
-        .select("plan_id, status, currency, current_period_end, cancel_at_period_end, recovery_ends_at")
+        .select("plan_id, status, currency, billing_period, current_period_end, cancel_at_period_end, recovery_ends_at")
         .eq("owner_id", c.actor.userId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       const plan = planById((data?.plan_id ?? "free") as Parameters<typeof planById>[0]);
+      const status = (data?.status ?? "none") as Subscription["status"];
+      const hasLockedPaidSub =
+        plan.id !== "free" &&
+        (status === "active" || status === "past_due") &&
+        typeof data?.currency === "string" &&
+        isSupportedCurrency(data.currency);
+
+      const currency: CurrencyCode = hasLockedPaidSub
+        ? (data!.currency as CurrencyCode)
+        : await resolveRequestCurrency();
+      const isYearly = data?.billing_period === "yearly";
+      const amount = isYearly
+        ? (plan.yearly[currency] ?? 0) * 12
+        : (plan.monthly[currency] ?? 0);
 
       return {
         ok: true,
         data: {
           planId: plan.id,
           planName: plan.name,
-          status: (data?.status ?? "none") as Subscription["status"],
-          currency: (data?.currency ?? "INR") as string,
-          amount: plan.monthly[(data?.currency ?? "INR") as "INR" | "USD"] ?? 0,
-          interval: "month" as const,
+          status,
+          currency,
+          amount: Math.round(amount * 100) / 100,
+          interval: isYearly ? ("year" as const) : ("month" as const),
           currentPeriodEnd: data?.current_period_end ?? null,
           // Only true when the provider has confirmed a date. A subscription
           // record with no period end is not a renewal promise.
           renewsAutomatically: Boolean(data?.current_period_end) &&
-            (data?.status === "active" || data?.status === "past_due"),
+            (status === "active" || status === "past_due"),
           cancelAtPeriodEnd: Boolean(data?.cancel_at_period_end),
         },
       };

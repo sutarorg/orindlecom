@@ -5,19 +5,24 @@
  * must change with it — which is the point: the numbers the product charges are
  * not something that should drift silently in a constant somewhere.
  */
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ANNUAL_DISCOUNT_PCT,
   CURRENCIES,
+  DEFAULT_CURRENCY,
   HIGHLIGHTED_PLAN,
   PLANS,
   SUPPORTED_CURRENCIES,
+  currencyForRegion,
   formatPrice,
   planById,
   resolveAnnualTotal,
   resolvePrice,
   type CurrencyCode,
 } from "@/config/pricing";
+import { extractCountryCode, resolveCurrencyFromHeaders } from "@/lib/geo/currency";
 
 describe("approved prices", () => {
   const EXPECTED_MONTHLY: Record<string, Record<CurrencyCode, number>> = {
@@ -149,5 +154,68 @@ describe("formatting", () => {
   it("renders a zero price as a plain zero, not as a fraction", () => {
     expect(formatPrice(0, "INR")).toBe("₹0");
     expect(formatPrice(0, "USD")).toBe("$0");
+  });
+});
+
+describe("location-based currency enforcement", () => {
+  it("maps every supported country/region to its exact currency", () => {
+    expect(currencyForRegion("IN")).toBe("INR");
+    expect(currencyForRegion("in")).toBe("INR");
+    expect(currencyForRegion("US")).toBe("USD");
+    expect(currencyForRegion("GB")).toBe("GBP");
+    expect(currencyForRegion("DE")).toBe("EUR");
+    expect(currencyForRegion("FR")).toBe("EUR");
+    expect(currencyForRegion("NL")).toBe("EUR");
+    expect(currencyForRegion("BG")).toBe("EUR");
+    expect(currencyForRegion("AE")).toBe("AED");
+    expect(currencyForRegion("SG")).toBe("SGD");
+    expect(currencyForRegion("AU")).toBe("AUD");
+    expect(currencyForRegion("CA")).toBe("CAD");
+  });
+
+  it("defaults to USD whenever country does not match a supported currency or is absent", () => {
+    expect(DEFAULT_CURRENCY).toBe("USD");
+    for (const country of ["JP", "BR", "ZA", "KR", "MX", "ID", "NG", "", null, undefined]) {
+      expect(currencyForRegion(country), `country=${String(country)}`).toBe("USD");
+    }
+  });
+
+  it("resolves currency strictly from trusted geolocation headers in priority order", () => {
+    expect(resolveCurrencyFromHeaders(new Headers({ "x-vercel-ip-country": "IN" }))).toBe("INR");
+    expect(resolveCurrencyFromHeaders(new Headers({ "cf-ipcountry": "GB" }))).toBe("GBP");
+    expect(
+      resolveCurrencyFromHeaders(new Headers({ "cloudfront-viewer-country": "AE" })),
+    ).toBe("AED");
+    expect(resolveCurrencyFromHeaders(new Headers({ "x-country-code": "SG" }))).toBe("SGD");
+
+    // Vercel edge header takes precedence over fallback headers
+    expect(
+      resolveCurrencyFromHeaders(
+        new Headers({ "x-vercel-ip-country": "AU", "x-country-code": "IN" }),
+      ),
+    ).toBe("AUD");
+
+    // Non-matching countries and unknown edge sentinels default to USD
+    expect(resolveCurrencyFromHeaders(new Headers({ "x-vercel-ip-country": "JP" }))).toBe("USD");
+    expect(resolveCurrencyFromHeaders(new Headers({ "cf-ipcountry": "XX" }))).toBe("USD");
+    expect(resolveCurrencyFromHeaders(new Headers({ "cf-ipcountry": "T1" }))).toBe("USD");
+    expect(extractCountryCode(new Headers({ "cf-ipcountry": "T1" }))).toBeNull();
+    expect(resolveCurrencyFromHeaders(new Headers())).toBe("USD");
+  });
+
+  it("does not allow users to override pricing currency in UI or checkout API", async () => {
+    const root = process.cwd();
+    const [pricingSection, billingView, checkoutRoute] = await Promise.all([
+      readFile(path.join(root, "src/components/pricing/pricing-section.tsx"), "utf8"),
+      readFile(path.join(root, "src/components/dashboard/billing-view.tsx"), "utf8"),
+      readFile(path.join(root, "src/app/api/billing/checkout/route.ts"), "utf8"),
+    ]);
+
+    expect(pricingSection).not.toContain("CurrencySelector");
+    expect(pricingSection).not.toContain("orindle_currency");
+    expect(billingView).not.toContain("<select");
+    expect(billingView).not.toContain("setCurrency");
+    expect(checkoutRoute).not.toContain("body.currency");
+    expect(checkoutRoute).toContain("resolveCurrencyFromHeaders");
   });
 });

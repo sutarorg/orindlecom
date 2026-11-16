@@ -56,7 +56,7 @@ export const HOME_FAQ: FaqItem[] = [
     id: "billing-currency",
     question: "Which currency will I be charged in?",
     answer:
-      "Orindle publishes and charges plans in 8 currencies: INR, USD, GBP, EUR, AED, SGD, AUD and CAD. Once you subscribe, your billing currency stays fixed — changing your display currency on the site never alters what an existing subscription is charged.",
+      "Your currency is set automatically from your location across our 8 supported currencies: INR (India), USD (United States), GBP (United Kingdom), EUR (Eurozone), AED (UAE), SGD (Singapore), AUD (Australia) and CAD (Canada). If your country does not match one of these currencies, prices default to USD. Currencies cannot be manually switched, and once you subscribe your billing currency stays fixed.",
     category: "Billing",
     helpSlug: "find-an-invoice",
   },

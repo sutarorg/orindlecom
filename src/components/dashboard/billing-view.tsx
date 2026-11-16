@@ -3,12 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, CreditCard, FileText, Lock, Minus, Receipt } from "lucide-react";
+import { Check, CreditCard, FileText, Globe, Lock, Minus, Receipt } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import {
   ANNUAL_DISCOUNT_PCT,
-  CURRENCIES,
+  DEFAULT_CURRENCY,
   HIGHLIGHTED_PLAN,
   PLANS,
   currencyMeta,
@@ -36,32 +36,34 @@ export interface InvoiceRow {
 }
 
 function formatMinorAmount(amountMinor: number, currencyCode: string): string {
-  const code = isSupportedCurrency(currencyCode) ? currencyCode : "INR";
+  const code = isSupportedCurrency(currencyCode) ? currencyCode : DEFAULT_CURRENCY;
   return formatPrice(amountMinor / 100, code);
 }
 
 /**
  * Billing.
  *
- * Supports all 8 published currencies and both monthly and annual (20% off)
- * billing. `checkout()` opens Razorpay's overlay with an order created server-
- * side from `public.plan_prices` and resolves only after signature verification
- * activates the subscription.
+ * Pricing currency is resolved authoritatively on the server from the user's
+ * location (or their existing paid subscription) and cannot be changed manually.
+ * `checkout()` opens Razorpay's overlay with an order created server-side from
+ * `public.plan_prices` and resolves only after signature verification activates
+ * the subscription.
  */
 export function BillingView({
   subscription,
+  currency: propCurrency,
   invoices = [],
 }: {
   subscription: Subscription;
+  currency?: CurrencyCode;
   invoices?: InvoiceRow[];
 }) {
   const { toast } = useToast();
   const router = useRouter();
 
-  const initialCurrency: CurrencyCode = isSupportedCurrency(subscription.currency)
-    ? subscription.currency
-    : "INR";
-  const [currency, setCurrency] = React.useState<CurrencyCode>(initialCurrency);
+  const currency: CurrencyCode =
+    propCurrency ??
+    (isSupportedCurrency(subscription.currency) ? subscription.currency : DEFAULT_CURRENCY);
   const [period, setPeriod] = React.useState<BillingPeriod>(
     subscription.interval === "year" ? "yearly" : "monthly",
   );
@@ -120,7 +122,6 @@ export function BillingView({
       planId: plan.id,
       planName: plan.name,
       period,
-      currency,
     });
 
     setBusyPlan(null);
@@ -270,21 +271,13 @@ export function BillingView({
               </button>
             </div>
 
-            <label className="sr-only" htmlFor="billing-currency">
-              Currency
-            </label>
-            <select
-              id="billing-currency"
-              value={currency}
-              onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-              className="h-8 rounded-lg border border-[var(--brand-border-strong)] bg-white px-2 text-[11.5px] font-semibold text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            <span
+              aria-label={`Billing currency: ${selectedCurrency.label} (${selectedCurrency.code})`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-canvas)] px-2.5 text-[11.5px] font-semibold text-ink"
             >
-              {CURRENCIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.code} ({c.symbol.trim()})
-                </option>
-              ))}
-            </select>
+              <Globe className="h-3.5 w-3.5 text-text-subtle" strokeWidth={2} aria-hidden="true" />
+              {selectedCurrency.code} ({selectedCurrency.symbol.trim()})
+            </span>
           </div>
         </div>
 

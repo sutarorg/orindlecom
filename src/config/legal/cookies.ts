@@ -22,7 +22,7 @@ export const COOKIE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "A cookie is a small file a website stores in your browser. Orindle uses cookies for three narrow purposes: keeping you signed in, preventing automated sign-up abuse on the free plan, and remembering the currency you chose on the pricing page. If you have never signed in, no cookie identifies you.",
+          text: "A cookie is a small file a website stores in your browser. Orindle uses cookies for two narrow purposes: keeping you signed in and preventing automated sign-up abuse on the free plan. If you have never signed in, no cookie identifies you.",
         },
         {
           type: "p",
@@ -33,7 +33,7 @@ export const COOKIE_POLICY: LegalDocument = {
     {
       id: "list",
       heading: "The complete list",
-      gist: "Five entries, all strictly necessary or chosen by you.",
+      gist: "Four entries, all strictly necessary or chosen by you.",
       blocks: [
         {
           type: "table",
@@ -46,13 +46,6 @@ export const COOKIE_POLICY: LegalDocument = {
               "Keeps you signed in via Supabase authentication. Without it you would have to sign in on every page.",
               "Session, or until sign-out",
               "No — strictly necessary",
-            ],
-            [
-              "orindle_currency",
-              "Cookie, sameSite=lax",
-              "Remembers the display currency you selected on the pricing page.",
-              "1 year, or until you clear it",
-              "No — user-requested preference",
             ],
             [
               "orindle:sidebar",
@@ -100,7 +93,7 @@ export const COOKIE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "Under EU ePrivacy rules and the UK's PECR, consent is only required for non-essential storage such as advertising or tracking cookies. Strictly necessary authentication and security cookies, along with user-requested preferences like your chosen display currency, do not require a consent banner.",
+          text: "Under EU ePrivacy rules and the UK's PECR, consent is only required for non-essential storage such as advertising or tracking cookies. Strictly necessary authentication and security cookies, along with local interface preferences like your sidebar and layout state, do not require a consent banner.",
         },
         {
           type: "p",
@@ -124,7 +117,7 @@ export const COOKIE_POLICY: LegalDocument = {
       blocks: [
         {
           type: "p",
-          text: "Every browser lets you delete cookies and clear site data from its privacy settings. Deleting the session cookie signs you out; clearing local storage resets your currency and layout preferences. Blocking all cookies breaks sign-in and resets currency selection on each visit.",
+          text: "Every browser lets you delete cookies and clear site data from its privacy settings. Deleting the session cookie signs you out; clearing local storage resets your dashboard layout preferences. Blocking all cookies breaks sign-in.",
         },
       ],
     },

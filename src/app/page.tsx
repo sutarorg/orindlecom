@@ -12,11 +12,12 @@ import { PAGE_SEO } from "@/config/seo-pages";
 import { CANONICAL_ORIGIN } from "@/config/seo";
 import { SITE } from "@/config/site";
 import { approvedMetadata } from "@/lib/seo";
+import { resolveRequestCurrency } from "@/lib/geo/currency";
 import type { Metadata } from "next";
-import { DEFAULT_CURRENCY, currencyForRegion } from "@/config/pricing";
-import { cookies } from "next/headers";
 
 export const metadata: Metadata = approvedMetadata(PAGE_SEO.home);
+
+export const dynamic = "force-dynamic";
 
 /**
  * WebSite structured data.
@@ -69,11 +70,7 @@ const ORGANIZATION_SCHEMA = {
 };
 
 export default async function HomePage() {
-  const store = await cookies();
-  const cookieCurrency = store.get("orindle_currency")?.value;
-  const currency =
-    (cookieCurrency as ReturnType<typeof currencyForRegion> | undefined) ??
-    DEFAULT_CURRENCY;
+  const currency = await resolveRequestCurrency();
 
   return (
     <>
@@ -87,7 +84,7 @@ export default async function HomePage() {
         <FeatureTrio />
         <StorageBand />
         <ProductPreview />
-        <PricingSection initialCurrency={currency} />
+        <PricingSection currency={currency} />
         <FaqSection items={HOME_FAQ} title="Questions, answered." />
         <CtaBand />
       </main>

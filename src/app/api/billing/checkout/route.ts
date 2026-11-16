@@ -1,9 +1,12 @@
 /**
  * POST /api/billing/checkout
  *
- * Takes a plan id, period (monthly | yearly) and currency (any of the 8
- * approved currencies). It does NOT take an amount: the price is resolved from
- * an `approved` row in `public.plan_prices`.
+ * Takes a plan id and period (monthly | yearly). It does NOT accept an amount
+ * OR a currency from the client: the billing currency is resolved strictly on
+ * the server from the actor's active paid subscription (if any) or from
+ * trusted edge geolocation headers (defaulting to USD when the country does
+ * not match one of our 8 supported currency regions), and the price is resolved
+ * from an `approved` row in `public.plan_prices`.
  */
 
 import { enforceRateLimit, handle, ok, readJson, requireString, withActor } from "@/lib/api";
@@ -16,7 +19,8 @@ import {
   receiptRef,
   resolveApprovedPrice,
 } from "@/domain/billing/razorpay";
-import { isSupportedCurrency } from "@/config/pricing";
+import { isSupportedCurrency, type CurrencyCode } from "@/config/pricing";
+import { resolveCurrencyFromHeaders } from "@/lib/geo/currency";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -47,21 +51,34 @@ export async function POST(request: Request) {
       throw new AppError("validation_failed", "Choose monthly or yearly.");
     }
 
-    const currencyRaw =
-      typeof body.currency === "string" ? body.currency.trim().toUpperCase() : "INR";
-    if (!isSupportedCurrency(currencyRaw)) {
-      throw new AppError(
-        "unsupported",
-        "Choose one of our eight published currencies: INR, USD, GBP, EUR, AED, SGD, AUD or CAD.",
-      );
-    }
+    // Authoritative server-side currency resolution: never trust client input.
+    // Keep an existing active/past_due paid subscriber's locked currency;
+    // otherwise resolve strictly from request geolocation headers (default USD).
+    const supabase = getServiceClient();
+    const { data: existingSub } = await supabase
+      .from("subscriptions")
+      .select("plan_id, status, currency")
+      .eq("owner_id", auth.actor.userId)
+      .in("status", ["active", "past_due"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    const price = await resolveApprovedPrice(planId, currencyRaw, periodRaw);
+    const lockedCurrency =
+      existingSub &&
+      existingSub.plan_id !== "free" &&
+      typeof existingSub.currency === "string" &&
+      isSupportedCurrency(existingSub.currency)
+        ? (existingSub.currency as CurrencyCode)
+        : null;
+
+    const currency: CurrencyCode = lockedCurrency ?? resolveCurrencyFromHeaders(request.headers);
+
+    const price = await resolveApprovedPrice(planId, currency, periodRaw);
     createOrderGuard(price);
 
     const order = await createOrder(price, receiptRef(), auth.actor.userId);
 
-    const supabase = getServiceClient();
     await supabase.from("activity_events").insert({
       actor_id: auth.actor.userId,
       subject_type: "order",
