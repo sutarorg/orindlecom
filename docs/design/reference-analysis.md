@@ -396,3 +396,17 @@ To avoid adding template furniture the reference does not contain:
 
 Any content of that sort would represent claims Orindle has not verified, which the
 project's content rules forbid.
+
+### 5.1 Rendered reference
+
+The three drawings as implemented, rasterised from the components themselves at 3×:
+
+| | |
+|---|---|
+| 01 Store | ![Store without the clutter](illustrations/feature-store.png) |
+| 02 Access | ![Access from anywhere](illustrations/feature-devices.png) |
+| 03 Share | ![Share with simplicity](illustrations/feature-share.png) |
+
+These are outputs, not sources — `src/components/marketing/feature-art.tsx` is the source,
+and `tests/unit/feature-art.test.ts` renders it and checks the geometry. If a change makes
+a drawing differ from these files, the change is what needs the explanation.
