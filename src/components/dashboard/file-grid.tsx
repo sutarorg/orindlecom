@@ -7,6 +7,7 @@ import { formatBytes, formatRelative } from "@/lib/drive/format";
 import type { DriveItem } from "@/lib/drive/types";
 import { FolderIcon } from "./file-icon";
 import { FileThumbnail } from "./file-thumbnail";
+import { assignFolderColours, type FolderColour } from "@/lib/drive/folder-colour";
 import { useDrive } from "./drive-store";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,16 @@ export function FileGrid({
   const { select, isSelected, selected, selectMode, beginSelection, view } = useDrive();
   const [focusIndex, setFocusIndex] = React.useState(0);
   const tileRefs = React.useRef<Array<HTMLDivElement | null>>([]);
+
+  /*
+   * Folder colours are assigned across the visible set, not hashed per id, so the
+   * first four folders in any listing are four different colours. See
+   * `folder-colour.ts` for the measurement behind that choice.
+   */
+  const folderColours = React.useMemo(
+    () => assignFolderColours(items.filter((item) => item.kind === "folder").map((item) => item.id)),
+    [items],
+  );
 
   // Keep the roving index inside the list as it shrinks.
   React.useEffect(() => {
@@ -145,6 +156,7 @@ export function FileGrid({
               onContext(item, anchor);
             }}
             view={view}
+            folderColour={folderColours.get(item.id)}
           />
         );
       })}
@@ -165,10 +177,12 @@ const GridTile = React.forwardRef<
     onContext: (anchor: HTMLElement) => void;
     /** Runs a row action through the manager, which owns the API calls. */
     onAction: (action: string) => void;
+    /** Assigned across the listing so neighbouring folders differ. */
+    folderColour?: FolderColour;
     view: "grid" | "list";
   }
 >(function GridTile(
-  { item, selected, anySelected, tabIndex, onFocus, onClick, onOpen, onContext, onAction },
+  { item, selected, anySelected, tabIndex, onFocus, onClick, onOpen, onContext, onAction, folderColour },
   ref,
 ) {
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -313,7 +327,7 @@ const GridTile = React.forwardRef<
       */}
       {item.kind === "folder" ? (
         <div className="flex aspect-square w-full items-center justify-center">
-          <FolderIcon size="xl" id={item.id} />
+          <FolderIcon size="xl" colour={folderColour} id={item.id} />
         </div>
       ) : (
         <FileThumbnail item={item} />

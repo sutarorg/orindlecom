@@ -21,7 +21,7 @@ import "server-only";
  *   - a token that does not resolve returns "not found", never "expired", because a
  *     distinct expired message would confirm that a guessed token was once real.
  */
-import { getServiceClient } from "@/lib/supabase/service";
+import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
 import { isStorageConfigured, presignGet } from "@/lib/r2/client";
 
 export interface PublicLinkItem {
@@ -65,6 +65,15 @@ type ResolveRow = {
  */
 export async function resolvePublicLink(token: string): Promise<PublicLinkItem | null> {
   if (!token || token.length < 8 || token.length > 200) return null;
+
+  /*
+   * A deployment without the service role cannot resolve any link, and that is not
+   * an exception the visitor should see — it is the same answer as any other
+   * unresolvable token, because the page has nothing to show either way. Throwing
+   * here produced a 500 for every public link on an unconfigured environment, which
+   * is both a worse experience and a needless disclosure that a secret is missing.
+   */
+  if (!isServiceConfigured()) return null;
 
   const supabase = getServiceClient();
   const { data, error } = await supabase.rpc("resolve_share_link", { p_token: token });
@@ -128,7 +137,7 @@ export async function publicFileUrl(
   disposition: "inline" | "attachment",
   contentTypeHint: string | null,
 ): Promise<{ url: string; expiresIn: number; filename: string; safe: boolean } | null> {
-  if (!isStorageConfigured()) return null;
+  if (!isStorageConfigured() || !isServiceConfigured()) return null;
 
   const supabase = getServiceClient();
   const { data } = await supabase
@@ -169,7 +178,7 @@ export async function publicDocumentText(
   category: string,
   maxBytes = 8 * 1024 * 1024,
 ): Promise<string | null> {
-  if (!isStorageConfigured()) return null;
+  if (!isStorageConfigured() || !isServiceConfigured()) return null;
 
   const supabase = getServiceClient();
   const { data } = await supabase

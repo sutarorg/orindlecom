@@ -15,6 +15,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { FOLDER_COLOURS, assignFolderColours } from "@/lib/drive/folder-colour";
 
 const ROOT = process.cwd();
 const read = (relative: string) => readFileSync(path.join(ROOT, relative), "utf8");
@@ -120,5 +121,50 @@ describe("every-format upload", () => {
     const service = read("src/domain/storage/upload-service.ts");
     // Size is still validated: it is the one input that can actually cause harm.
     expect(service).toMatch(/input\.size <= 0/);
+  });
+});
+
+describe("folder colours", () => {
+  it("gives neighbouring folders different colours", () => {
+    // The property the colour exists for. A hash-based assignment could not hold it:
+    // with four colours, two random folders collide a quarter of the time.
+    const ids = Array.from({ length: 12 }, (_, index) => `folder-${index}`);
+    const assigned = assignFolderColours(ids);
+    const sequence = ids.map((id) => assigned.get(id)!.to);
+
+    for (let index = 1; index < sequence.length; index += 1) {
+      expect(sequence[index], `folders ${index - 1} and ${index} share a colour`).not.toBe(
+        sequence[index - 1],
+      );
+    }
+  });
+
+  it("spreads an eight-folder listing evenly, not onto two colours", () => {
+    const ids = Array.from({ length: 8 }, (_, index) => `f${index}`);
+    const assigned = assignFolderColours(ids);
+    const used = new Set([...assigned.values()].map((colour) => colour.to));
+    expect(used.size).toBe(FOLDER_COLOURS.length);
+  });
+
+  it("uses the marketing hero palette and nothing else", () => {
+    // The four pairs are the folder art on the landing page; a fifth colour invented
+    // here would be a folder that does not exist anywhere else in the product.
+    expect(FOLDER_COLOURS.map((colour) => colour.to)).toEqual([
+      "#3B7DE8",
+      "#38BD8B",
+      "#FB8F3D",
+      "#8B5CF6",
+    ]);
+  });
+
+  it("is stable for the same listing", () => {
+    const ids = ["a", "b", "c", "d"];
+    const first = [...assignFolderColours(ids).values()].map((colour) => colour.to);
+    const second = [...assignFolderColours(ids).values()].map((colour) => colour.to);
+    expect(second).toEqual(first);
+  });
+
+  it("handles an empty listing without a first element", () => {
+    expect(assignFolderColours([]).size).toBe(0);
   });
 });
