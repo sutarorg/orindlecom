@@ -24,7 +24,7 @@ const SHORTCUTS = [
     detail: "Upload, preview, organize, and share your files.",
   },
   {
-    href: "/dashboard/business",
+    href: "/business",
     icon: Building2,
     title: "Business Workspace",
     detail: "Create or manage your team's shared folders and members.",

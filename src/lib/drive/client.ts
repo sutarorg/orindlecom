@@ -45,11 +45,39 @@ async function request<T>(
       | { ok?: boolean; data?: T; code?: string; message?: string }
       | null;
 
+    /*
+     * A non-JSON body means something upstream returned a page rather than an
+     * envelope: a 500 from the platform, a 405, a proxy error, or an HTML auth
+     * redirect. Previously this collapsed into one message with the status thrown
+     * away, which made "unexpected response" impossible to act on — the status is
+     * the single most useful fact in that situation, so it is named in the message
+     * and logged.
+     *
+     * The 401/403 case gets its own sentence because it is the one a person can
+     * fix: the session expired and signing in again is the actual remedy.
+     */
     if (!payload) {
+      console.error("[api] non-JSON response", {
+        path,
+        method: init?.method ?? "GET",
+        status: response.status,
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        return {
+          ok: false,
+          code: "unauthenticated",
+          message: "Your session ended. Sign in again to continue.",
+        };
+      }
+
       return {
         ok: false,
-        code: "unknown",
-        message: "The server sent an unexpected response. Nothing was changed.",
+        code: "unexpected_response",
+        message:
+          response.status >= 500
+            ? `The server hit an error (${response.status}). Nothing was changed — please try again.`
+            : `The server returned an unexpected response (${response.status}). Nothing was changed.`,
       };
     }
 

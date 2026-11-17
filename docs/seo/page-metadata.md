@@ -85,7 +85,7 @@ everything else in this document.
 > storage safety states explicitly that the at-rest encryption is provider-managed and
 > that this is not end-to-end encryption.
 
-## 5. Business — `/business`
+## 5. Teams (business) — `/teams`
 
 | Field | Value |
 | --- | --- |
@@ -95,7 +95,7 @@ everything else in this document.
 | **Secondary keywords** | cloud storage for business · team file storage · business file sharing · cloud storage for teams · company file storage · shared business folders · online business storage |
 | **Meta keywords** | business cloud storage, cloud storage for business, team file storage, business file sharing, cloud storage for teams, company file storage, shared business folders |
 | **H1** | A simpler space for your team's files. |
-| **Canonical** | https://orindle.com/business |
+| **Canonical** | https://orindle.com/teams |
 | **Index/follow** | index, follow |
 
 > **Honesty constraint, honoured.** Organisation schema, roles and row-level

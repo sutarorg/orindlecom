@@ -8,7 +8,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Team storage",
   description: "Your organization's storage allowance and usage.",
-  path: "/dashboard/business/storage",
+  path: "/business/storage",
   noIndex: true,
 });
 

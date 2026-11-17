@@ -40,7 +40,7 @@ export function BusinessStorageCard({
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[12.5px] font-bold tracking-[-0.02em] text-ink">Team storage</h2>
           <Link
-            href="/dashboard/business/storage"
+            href="/business/storage"
             className="inline-flex min-h-6 items-center gap-1 rounded text-[11px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Manage

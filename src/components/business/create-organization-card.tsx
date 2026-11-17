@@ -9,7 +9,7 @@ import { api } from "@/lib/drive/client";
 /**
  * First-run organization setup card + invitation acceptor.
  *
- * Shown on `/dashboard/business` when the signed-in user does not yet belong
+ * Shown on `/business` when the signed-in user does not yet belong
  * to any organization, or when arriving via `?invite=<token>`.
  */
 export function CreateOrganizationCard() {
@@ -45,7 +45,7 @@ export function CreateOrganizationCard() {
       title: `Joined ${result.data.organization.name}`,
       description: "You now have access to the team's shared folders.",
     });
-    router.replace("/dashboard/business");
+    router.replace("/business");
     router.refresh();
   };
 

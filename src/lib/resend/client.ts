@@ -319,7 +319,7 @@ export function renderTemplate(template: string, data: Record<string, string>): 
           heading: "Your organization role changed",
           body: `<p style="margin:0 0 10px;">Hi ${name}, ${esc(data.actor ?? "an administrator")} changed your role in <strong>${esc(data.organization ?? "your organization")}</strong>${data.previousRole && data.newRole ? ` from <strong>${esc(data.previousRole)}</strong> to <strong>${esc(data.newRole)}</strong>` : data.newRole ? ` to <strong>${esc(data.newRole)}</strong>` : ""}.</p>
                  <p style="margin:0;">The change takes effect immediately on your next action.</p>`,
-          action: data.url ?? `${SITE.url}/dashboard/business`,
+          action: data.url ?? `${SITE.url}/business`,
           actionLabel: "Open workspace",
         }),
         text: `Hi ${rawName}, ${data.actor ?? "an administrator"} changed your role in ${data.organization ?? "your organization"}${data.previousRole && data.newRole ? ` from ${data.previousRole} to ${data.newRole}` : data.newRole ? ` to ${data.newRole}` : ""}.`,

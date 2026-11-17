@@ -206,10 +206,7 @@ export function BillingView({
               value={subscription.renewsAutomatically ? "Yes" : "Not applicable"}
               muted={!subscription.renewsAutomatically}
             />
-            <Row
-              label="Selected currency"
-              value={`${selectedCurrency.code} (${selectedCurrency.symbol.trim()})`}
-            />
+            <Row label="Selected currency" value={selectedCurrency.symbol.trim()} />
             <Row
               label="Billing cycle"
               value={subscription.interval === "year" ? "Annual" : "Monthly"}
@@ -272,11 +269,13 @@ export function BillingView({
             </div>
 
             <span
+              role="img"
               aria-label={`Billing currency: ${selectedCurrency.label} (${selectedCurrency.code})`}
+              title={`Billing currency: ${selectedCurrency.label} (${selectedCurrency.code})`}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-canvas)] px-2.5 text-[11.5px] font-semibold text-ink"
             >
               <Globe className="h-3.5 w-3.5 text-text-subtle" strokeWidth={2} aria-hidden="true" />
-              {selectedCurrency.code} ({selectedCurrency.symbol.trim()})
+              {selectedCurrency.symbol.trim()}
             </span>
           </div>
         </div>

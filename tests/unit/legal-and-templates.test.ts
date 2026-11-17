@@ -44,7 +44,7 @@ describe("transactional email templates", () => {
       role: "admin",
       previousRole: "member",
       newRole: "admin",
-      url: "https://orindle.com/dashboard/business?invite=abc123",
+      url: "https://orindle.com/business?invite=abc123",
       oldEmail: "old@example.com",
       newEmail: "new@example.com",
       plan: "Premium",

@@ -29,7 +29,8 @@ Every indexable URL, its canonical, and the rule that generates it.
 | `/pricing` | `https://orindle.com/pricing` | ✓ | ✓ |
 | `/features` | `https://orindle.com/features` | ✓ | ✓ |
 | `/security` | `https://orindle.com/security` | ✓ | ✓ |
-| `/business` | `https://orindle.com/business` | ✓ | ✓ |
+| `/teams` | `https://orindle.com/teams` | ✓ | ✓ |
+| `/business` | signed-in team workspace — `noindex` | — | — |
 | `/about` | `https://orindle.com/about` | ✓ | ✓ |
 | `/contact` | `https://orindle.com/contact` | ✓ | ✓ |
 | `/faq` | `https://orindle.com/faq` | ✓ | ✓ |

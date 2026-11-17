@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { getDriveRepository } from "@/lib/drive/service";
 import { formatBytes } from "@/lib/drive/format";
 import { getViewer } from "@/lib/drive/viewer";
@@ -26,8 +27,20 @@ export const dynamic = "force-dynamic";
  * would be quietly wrong on every screen.
  */
 export default async function BusinessLayout({ children }: { children: React.ReactNode }) {
-  const [viewer, orgs, businessStorage, personalUsage] = await Promise.all([
-    getViewer(),
+  const viewer = await getViewer();
+
+  /*
+   * The workspace sits at `/business`, not under `/dashboard`, so it no longer
+   * inherits any auth gate from being beneath that prefix. Middleware redirects an
+   * anonymous visitor, but that check only runs when Supabase env is present, and a
+   * gate that can silently not run is not a gate. This is the authoritative one, and
+   * it runs before any data is fetched.
+   */
+  if (!viewer.authenticated) {
+    redirect("/login?next=/business");
+  }
+
+  const [orgs, businessStorage, personalUsage] = await Promise.all([
     getBusinessRepository().organizations(),
     getBusinessRepository().storage("workspace"),
     getDriveRepository().usage(),

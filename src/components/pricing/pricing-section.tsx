@@ -5,7 +5,6 @@ import {
   DEFAULT_CURRENCY,
   HIGHLIGHTED_PLAN,
   PLANS,
-  currencyMeta,
   type BillingPeriod,
   type CurrencyCode,
 } from "@/config/pricing";
@@ -75,9 +74,8 @@ export function PricingSection({
         </ul>
 
         <p className="mt-5 text-center text-[11.5px] leading-relaxed text-text-subtle">
-          Storage is shared across every device you sign in on. Prices are shown automatically in{" "}
-          {currencyMeta(currency).code} based on your location ({currencyMeta(currency).region}).
-          Save 20% with annual billing. No credit card required to start.
+          Storage is shared across every device you sign in on. Prices are shown automatically for
+          your location. Save 20% with annual billing. No credit card required to start.
         </p>
       </div>
     </section>

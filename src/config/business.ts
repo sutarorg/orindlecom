@@ -50,21 +50,21 @@ export const BUSINESS_NAV_GROUPS: Array<{ label: string; items: BusinessNavEntry
       {
         key: "business",
         label: "Overview",
-        href: "/dashboard/business",
+        href: "/business",
         icon: "building",
         description: "Your team and its storage at a glance",
       },
       {
         key: "members",
         label: "Members",
-        href: "/dashboard/business/members",
+        href: "/business/members",
         icon: "users",
         description: "People on the team and their invitations",
       },
       {
         key: "folders",
         label: "Shared folders",
-        href: "/dashboard/business/folders",
+        href: "/business/folders",
         icon: "folder",
         description: "Folders the team can reach",
       },
@@ -76,14 +76,14 @@ export const BUSINESS_NAV_GROUPS: Array<{ label: string; items: BusinessNavEntry
       {
         key: "permissions",
         label: "Roles & permissions",
-        href: "/dashboard/business/permissions",
+        href: "/business/permissions",
         icon: "shield",
         description: "What each role can do",
       },
       {
         key: "activity",
         label: "Activity",
-        href: "/dashboard/business/activity",
+        href: "/business/activity",
         icon: "activity",
         description: "What's changed and who changed it",
       },
@@ -95,14 +95,14 @@ export const BUSINESS_NAV_GROUPS: Array<{ label: string; items: BusinessNavEntry
       {
         key: "storage",
         label: "Storage",
-        href: "/dashboard/business/storage",
+        href: "/business/storage",
         icon: "database",
         description: "Team capacity and usage",
       },
       {
         key: "settings",
         label: "Settings",
-        href: "/dashboard/business/settings",
+        href: "/business/settings",
         icon: "settings",
         description: "Organization profile and defaults",
       },
@@ -117,17 +117,17 @@ export const ALL_BUSINESS_NAV: BusinessNavEntry[] = BUSINESS_NAV_GROUPS.flatMap(
 /**
  * Which business route a pathname belongs to.
  *
- * `/dashboard/business` is an exact match, or it would claim every child route.
+ * `/business` is an exact match, or it would claim every child route.
  */
 export function businessEntryFor(pathname: string): BusinessNavEntry | undefined {
   return ALL_BUSINESS_NAV.find((entry) =>
-    entry.href === "/dashboard/business"
-      ? pathname === "/dashboard/business"
+    entry.href === "/business"
+      ? pathname === "/business"
       : pathname === entry.href || pathname.startsWith(`${entry.href}/`),
   );
 }
 
 /** True when the path is anywhere inside the business workspace. */
 export function isBusinessPath(pathname: string): boolean {
-  return pathname === "/dashboard/business" || pathname.startsWith("/dashboard/business/");
+  return pathname === "/business" || pathname.startsWith("/business/");
 }

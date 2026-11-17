@@ -609,7 +609,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         type: "link",
-        href: "/dashboard/business/permissions",
+        href: "/business/permissions",
         label: "See the full capability table",
         text: "Every permission, checked against each role, inside the workspace.",
       },

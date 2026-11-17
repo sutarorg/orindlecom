@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Shared folders",
   description: "Folders your team can reach.",
-  path: "/dashboard/business/folders",
+  path: "/business/folders",
   noIndex: true,
 });
 

@@ -148,7 +148,14 @@ export function TwoFactorPanel({ authenticated }: { authenticated: boolean }) {
               className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
             >
               <ShieldCheck className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
-              Enable two-factor authentication
+              {/*
+                Short label, long accessible name. The card heading already says
+                "Two-factor authentication", so repeating it in the button made the
+                primary action the longest text in the row; sighted readers get the
+                verb, screen readers still get the full sentence.
+              */}
+              <span aria-hidden="true">Enable now</span>
+              <span className="sr-only">Enable two-factor authentication</span>
             </button>
           )
         }

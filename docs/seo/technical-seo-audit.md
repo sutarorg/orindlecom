@@ -96,7 +96,7 @@ in the test and in the code that reads it.
 
 ### Public (indexable, in sitemap) — 26 URLs
 
-`/`, `/pricing`, `/features`, `/security`, `/business`, `/about`, `/contact`, `/faq`,
+`/`, `/pricing`, `/features`, `/security`, `/teams`, `/about`, `/contact`, `/faq`,
 `/help`, `/legal`, `/privacy`, `/terms`, `/cookies`, `/acceptable-use`, `/data-deletion`,
 `/blog`, plus the ten `/blog/{slug}` articles.
 

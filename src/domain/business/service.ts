@@ -718,7 +718,7 @@ export async function inviteMember(
     savedId = String(data.id);
   }
 
-  const inviteUrl = `${SITE.url}/dashboard/business?invite=${encodeURIComponent(token)}`;
+  const inviteUrl = `${SITE.url}/business?invite=${encodeURIComponent(token)}`;
   await sendEmail({
     to: email,
     template: "org-invite",
@@ -778,7 +778,7 @@ export async function resendInvitation(
 
   if (error) throw new AppError("unknown", "We couldn't resend that invitation.");
 
-  const inviteUrl = `${SITE.url}/dashboard/business?invite=${encodeURIComponent(token)}`;
+  const inviteUrl = `${SITE.url}/business?invite=${encodeURIComponent(token)}`;
   await sendEmail({
     to: String(row.email),
     template: "org-invite",

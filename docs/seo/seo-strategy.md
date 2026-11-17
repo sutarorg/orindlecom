@@ -61,7 +61,7 @@ Three tiers, mapped to route types:
 | Tier | Examples | Routes | Volume | Difficulty |
 | --- | --- | --- | --- | --- |
 | Head | cloud storage | `/` | Very high | Very high — incumbents |
-| Mid | cloud storage pricing, business cloud storage, cloud storage security | `/pricing`, `/business`, `/security` | High | High |
+| Mid | cloud storage pricing, business cloud storage, cloud storage security | `/pricing`, `/teams`, `/security` | High | High |
 | Long tail | how much cloud storage do I need, move files from Google Drive, is cloud storage safe | Articles | Moderate | Low–moderate |
 | Brand | Orindle, Orindle cloud storage, contact Orindle | All brand pages | Low | Very low |
 
@@ -160,8 +160,9 @@ what happened. Predictions are not tracked because they are not results.
 
 1. **Verify the domain in Search Console** and submit the sitemap. Until this
    happens, none of the rest can be measured. The guide is written and waiting.
-2. **Publish the business workspace routes.** The `/business` page currently ranks
-   for a product that is partly built. Either finish it or narrow the page's claims.
+2. **Publish the business workspace routes.** `/teams` currently ranks for a product
+   that is partly built. Either finish it or narrow the page's claims. (The workspace
+   itself is now at `/business` and is `noindex` — it is not a marketing surface.)
 3. **Add articles 11–20** in the same pattern, targeting the next ten long-tail
    queries. Candidates: cloud storage for photographers, how to share a folder with
    a client, cloud storage for video editing, what happens when cloud storage is

@@ -8,7 +8,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Organization settings",
   description: "Your organization profile, team defaults and governance.",
-  path: "/dashboard/business/settings",
+  path: "/business/settings",
   noIndex: true,
 });
 
