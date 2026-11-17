@@ -31,15 +31,21 @@ export interface FolderColour {
   from: string;
   /** Deeper stop, bottom-right. */
   to: string;
-  /** Readable ink at this hue, for a label or an active state. */
-  ink: string;
 }
 
+/*
+ * Exactly two stops each, and nothing else.
+ *
+ * An earlier version also carried a matching `ink` colour for tinting labels on
+ * that hue. Nothing ever used it — the icon is a gradient with no text on it — and
+ * an exported field nobody reads is a promise that it will be maintained. If a
+ * label later needs to sit on one of these, the ink belongs where the label is.
+ */
 export const FOLDER_COLOURS: readonly FolderColour[] = [
-  { from: "#7FB2FA", to: "#3B7DE8", ink: "#2A62B8" },
-  { from: "#8CE3BE", to: "#38BD8B", ink: "#2A8F68" },
-  { from: "#FFC078", to: "#FB8F3D", ink: "#B5651E" },
-  { from: "#BCA6FD", to: "#8B5CF6", ink: "#6D3FCE" },
+  { from: "#7FB2FA", to: "#3B7DE8" },
+  { from: "#8CE3BE", to: "#38BD8B" },
+  { from: "#FFC078", to: "#FB8F3D" },
+  { from: "#BCA6FD", to: "#8B5CF6" },
 ] as const;
 
 /** A single folder's colour when there is no list to coordinate with. */

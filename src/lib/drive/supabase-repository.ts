@@ -168,7 +168,19 @@ async function listTrash(supabase: Client): Promise<DriveResult<{ items: DriveIt
       openedAt: null,
       starred: Boolean(row.starred),
       trashed: true,
-      purgeAt: null,
+      /*
+       * The purge deadline, from the row's own deletion time.
+       *
+       * `list_trash` is the only place `deleted_at` is readable, so it is the only
+       * place this can be computed. It used to be a hard-coded null, which meant the
+       * bin's countdown fell back to the retention constant for every row — an item
+       * deleted a fortnight ago reported a full window. The deadline is the deletion
+       * time plus the retention period, evaluated per row, so changing the policy
+       * later does not retroactively move an existing deadline.
+       */
+      purgeAt: row.deleted_at
+        ? new Date(new Date(row.deleted_at).getTime() + TRASH_RETENTION.days * 86_400_000).toISOString()
+        : null,
       childCount: 0,
       shared: false,
       owned: true,

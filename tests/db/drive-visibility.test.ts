@@ -360,3 +360,27 @@ describe("email verifications", () => {
     ).rejects.toThrow(/permission denied/i);
   });
 });
+
+describe("trash retention", () => {
+  it("carries the deletion time out, so a countdown can be honest", async () => {
+    // The bin used to report a full retention window for everything, because the
+    // deadline was a hard-coded null. It is derived from this timestamp now, so the
+    // timestamp has to come out of the function.
+    await db.asUser(
+      owner,
+      "update public.files set deleted_at = now() - interval '20 days' where id = $1",
+      [ownerFile],
+    );
+
+    const rows = await db.asUser<{ deleted_at: string }>(
+      owner,
+      "select deleted_at from public.list_trash() where id = $1",
+      [ownerFile],
+    );
+
+    expect(rows).toHaveLength(1);
+    const daysAgo = (Date.now() - new Date(rows[0].deleted_at).getTime()) / 86_400_000;
+    expect(daysAgo).toBeGreaterThan(19);
+    expect(daysAgo).toBeLessThan(21);
+  });
+});
