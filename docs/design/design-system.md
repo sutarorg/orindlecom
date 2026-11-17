@@ -259,6 +259,16 @@ All in-code illustrations follow: soft pastel circle behind, white panel at radi
 with `--shadow-lg`, 1px hairline, one accent hue per illustration, and a single
 decorative tile breaking the panel's silhouette. Illustrations never carry real user data.
 
+Drawn as inline SVG with a fixed `viewBox`, never as a stack of divs. Two reasons, both
+learned by building them the other way first: text laid out with CSS inside a scaled
+panel overflows it at some widths, and a layout that is merely scaled down into a smaller
+device's frame is clipped rather than adapted. An SVG gives exact alignment at every
+slot size, and each device screen can be laid out for its own proportions.
+
+Every figure an illustration shows must derive from one constant, so the drawing cannot
+contradict itself — the storage illustration's donut arc, its centre label, its legend and
+its usage bar all read from the same 24%.
+
 ---
 
 ## 9. Motion

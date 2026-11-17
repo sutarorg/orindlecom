@@ -99,6 +99,10 @@ Three columns. Each column: `StepBadge` (22px circle, `01/02/03`, per-column tin
 to the bottom so the section crops it, matching the reference).
 
 Illustrations are separate components: `StorePanelArt`, `DevicesArt`, `ShareCardArt`.
+Each renders one inline `<svg viewBox="0 0 290 200" preserveAspectRatio="xMidYMax meet">`
+that fills the slot, so the slot's height changes the scale and never the composition.
+They are `aria-hidden` and carry no text alternative: everything they say is said by the
+`h3` and `p` beside them.
 
 ### `StorageBand`
 

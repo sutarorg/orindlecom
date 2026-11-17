@@ -13,9 +13,12 @@
  * handler does not break the test for no reason.
  */
 import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FOLDER_COLOURS, assignFolderColours } from "@/lib/drive/folder-colour";
+import { ShareCardArt } from "@/components/marketing/feature-art";
 
 const ROOT = process.cwd();
 const read = (relative: string) => readFileSync(path.join(ROOT, relative), "utf8");
@@ -311,5 +314,44 @@ describe("the tile's thumbnail is a downscaled image, not the original", () => {
     expect(route).toMatch(/max-age=31536000, immutable/);
     // Visibility is decided by the repository read, not by the request.
     expect(route).toMatch(/const meta = await repo\.get\(id\);\s*\n\s*if \(!meta\.ok\)/);
+  });
+});
+
+describe("the feature illustrations", () => {
+  const art = read("src/components/marketing/feature-art.tsx");
+
+  it("are single SVG compositions, not stacked divs", () => {
+    // Each drawing is one <svg> with its own viewBox, so the slot's height changes the
+    // scale and never the layout. A div build reflows — and the first div build had
+    // text overflowing its own panel at the tablet width.
+    const svgs = art.match(/<svg/g) ?? [];
+    expect(svgs.length).toBeGreaterThanOrEqual(3);
+    expect(art).toMatch(/viewBox="0 0 290 200"/);
+    expect(art).toMatch(/preserveAspectRatio="xMidYMax meet"/);
+  });
+
+  it("derive every figure from one constant, so the drawing cannot contradict itself", () => {
+    // The donut's arc, its label and the usage bar all read from `usedFraction`.
+    expect(art).toMatch(/const usedFraction = 0\.24/);
+    expect(art).toMatch(/circumference \* usedFraction/);
+    expect(art).toMatch(/CONTENT_W \* usedFraction/);
+    // And the bar's segments are the legend's own colours, in order.
+    expect(art).toMatch(/const shares = \[0\.5, 0\.3, 0\.2\]/);
+  });
+
+  it("do not advertise the retired edit permission", () => {
+    // "Can edit" was removed from the product in migration 0025. An illustration that
+    // offered it would be the same lie as a settings screen that did.
+    // Assert on the rendered text, not the source: the comment explaining the removal
+    // names the retired level, and a source grep cannot tell a comment from a label.
+    const rendered = renderToStaticMarkup(createElement(ShareCardArt));
+    expect(rendered).not.toMatch(/Can edit/);
+    expect(rendered).toMatch(/Can view/);
+  });
+
+  it("are decorative and correctly hidden from assistive tech", () => {
+    for (const match of art.matchAll(/<svg[\s\S]{0,600}?>/g)) {
+      expect(match[0]).toMatch(/aria-hidden="true"/);
+    }
   });
 });
