@@ -153,14 +153,14 @@ export async function prepareUpload(
     throw new AppError("validation_failed", "That file is empty.");
   }
 
-  const lower = input.name.toLowerCase();
-  const blocked = UPLOAD_LIMITS.blockedExtensions.find((ext) => lower.endsWith(ext));
-  if (blocked) {
-    throw new AppError(
-      "unsupported",
-      "Orindle doesn't accept executable files like this one.",
-    );
-  }
+  /*
+   * No extension check. Uploading every format is the product decision (see
+   * `UPLOAD_LIMITS`): the previous blocklist rejected legitimate build artefacts
+   * while stopping nothing — an executable renamed or zipped passes it, and the
+   * server never runs an uploaded byte. What remains validated here is what can
+   * actually cause harm: size (quota, below), the target folder's ownership, and
+   * the name. Downloads are always served as attachments, never executed.
+   */
 
   const supabase = await createSupabaseServerClient();
 

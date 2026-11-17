@@ -70,6 +70,8 @@ interface FolderRow {
   name: string;
   path: string;
   depth: number;
+  /** Added in 0024; folders were unstarrable before it. */
+  starred?: boolean;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -113,7 +115,7 @@ function folderToItem(row: FolderRow): DriveItem {
     createdAt: row.created_at,
     modifiedAt: row.updated_at,
     openedAt: null,
-    starred: false,
+    starred: Boolean(row.starred),
     trashed: row.deleted_at !== null,
     purgeAt: null,
     childCount: 0,
@@ -121,6 +123,112 @@ function folderToItem(row: FolderRow): DriveItem {
     owned: true,
     ownerName: null,
   };
+}
+
+/**
+ * The bin.
+ *
+ * `list_trash()` is the only read path that can return a trashed row, because the
+ * ordinary policy (correctly) hides them: a trashed row is not a readable row, it
+ * is a restorable one. The function establishes the caller from `auth.uid()`, so it
+ * returns only this owner's deletions.
+ */
+async function listTrash(supabase: Client): Promise<DriveResult<{ items: DriveItem[]; total: number }>> {
+  const { data, error } = await supabase.rpc("list_trash");
+  if (error) return toDriveError(error);
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    kind: string;
+    name: string;
+    size_bytes: number | null;
+    mime_type: string | null;
+    category: string | null;
+    folder_id: string | null;
+    parent_id: string | null;
+    starred: boolean;
+    deleted_at: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  const items = rows.map((row): DriveItem => {
+    const isFolder = row.kind === "folder";
+    return {
+      id: row.id,
+      kind: isFolder ? "folder" : "file",
+      name: row.name,
+      size: isFolder ? null : Number(row.size_bytes ?? 0),
+      mimeType: row.mime_type,
+      category: (row.category as FileCategory) ?? "other",
+      parentId: isFolder ? row.parent_id : row.folder_id,
+      path: [],
+      createdAt: row.created_at,
+      modifiedAt: row.updated_at,
+      openedAt: null,
+      starred: Boolean(row.starred),
+      trashed: true,
+      purgeAt: null,
+      childCount: 0,
+      shared: false,
+      owned: true,
+      ownerName: null,
+    };
+  });
+
+  return { ok: true, data: { items, total: items.length } };
+}
+
+/**
+ * What is shared with me, and what I have shared out.
+ *
+ * One function rather than two queries, because "shared" on this page is a single
+ * list with an `owned` flag — the two halves are the same question asked in
+ * opposite directions.
+ */
+async function listShared(supabase: Client): Promise<DriveResult<{ items: DriveItem[]; total: number }>> {
+  const { data, error } = await supabase.rpc("list_shared");
+  if (error) return toDriveError(error);
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    kind: string;
+    name: string;
+    size_bytes: number | null;
+    mime_type: string | null;
+    category: string | null;
+    starred: boolean;
+    owned: boolean;
+    owner_name: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  const items = rows.map((row): DriveItem => {
+    const isFolder = row.kind === "folder";
+    return {
+      id: row.id,
+      kind: isFolder ? "folder" : "file",
+      name: row.name,
+      size: isFolder ? null : Number(row.size_bytes ?? 0),
+      mimeType: row.mime_type,
+      category: (row.category as FileCategory) ?? "other",
+      parentId: null,
+      path: [],
+      createdAt: row.created_at,
+      modifiedAt: row.updated_at,
+      openedAt: null,
+      starred: Boolean(row.starred),
+      trashed: false,
+      purgeAt: null,
+      childCount: 0,
+      shared: true,
+      owned: Boolean(row.owned),
+      ownerName: row.owned ? null : row.owner_name || null,
+    };
+  });
+
+  return { ok: true, data: { items, total: items.length } };
 }
 
 /** Translate a Postgres/Supabase error into the contract's codes. */
@@ -191,16 +299,34 @@ export function createSupabaseDriveRepository(): DriveRepository {
       if (!c.ok) return c.result;
       const { supabase, actor } = c;
 
-      const isTrash = query.scope === "trash";
-      const wantsFolders = query.scope !== "files" && !isTrash;
+      /*
+       * `trash`, `shared` and `starred` are not "all the items, filtered in the
+       * browser". Each is a distinct question the database has to answer, and two
+       * of them were answering it wrongly:
+       *
+       *   trash  — went through the ordinary SELECT policy, which required
+       *            `deleted_at is null`. Asking for trashed rows therefore matched
+       *            nothing, so the bin was permanently empty.
+       *   shared — had no branch at all, so it returned every item the viewer owns.
+       *            A page called "Shared" listing your unshared files is worse than
+       *            an empty one.
+       *   starred— same, and folders had no star column to filter on, so a starred
+       *            folder could not exist.
+       */
+      if (query.scope === "trash") return listTrash(supabase);
+      if (query.scope === "shared") return listShared(supabase);
+
+      const wantsFolders = query.scope !== "files";
       const wantsFiles = query.scope !== "folders";
+      const starredOnly = query.scope === "starred";
 
       const items: DriveItem[] = [];
 
       if (wantsFolders) {
-        let q = supabase.from("folders").select("*").eq("owner_id", actor.userId);
-        q = isTrash ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
-        if (!isTrash && query.parentId !== undefined) {
+        let q = supabase.from("folders").select("*").eq("owner_id", actor.userId).is("deleted_at", null);
+        if (starredOnly) {
+          q = q.eq("starred", true);
+        } else if (query.parentId !== undefined) {
           q = query.parentId === null ? q.is("parent_id", null) : q.eq("parent_id", query.parentId);
         }
         if (query.search) q = q.ilike("name", `%${query.search}%`);
@@ -219,8 +345,10 @@ export function createSupabaseDriveRepository(): DriveRepository {
           // half of "never mark an unverified upload available".
           .eq("status", "available");
 
-        q = isTrash ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
-        if (!isTrash && query.parentId !== undefined) {
+        q = q.is("deleted_at", null);
+        if (starredOnly) {
+          q = q.eq("starred", true);
+        } else if (query.parentId !== undefined) {
           q = query.parentId === null ? q.is("folder_id", null) : q.eq("folder_id", query.parentId);
         }
         if (query.search) q = q.ilike("name", `%${query.search}%`);
@@ -423,30 +551,40 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
+      /*
+       * Through `move_file` / `move_folder`, not `update(...).select()`.
+       *
+       * Both of those are `update ... returning`, and `returning` is evaluated
+       * against the SELECT policy. A file whose row is not readable — pending, or
+       * sitting in a folder the policy hides — matched zero rows and silently did
+       * not move. The functions from migration 0024 do the same write with the
+       * owner check inside, so the write happens whether or not the row can be read
+       * back, and a cycle is refused there rather than racing a handler-side check.
+       */
       const moved: DriveItem[] = [];
       for (const id of ids) {
-        const { data: folder } = await c.supabase
-          .from("folders")
-          .update({ parent_id: parentId })
-          .eq("id", id)
-          .eq("owner_id", c.actor.userId)
-          .select()
-          .maybeSingle();
-
-        if (folder) {
-          moved.push(folderToItem(folder as FolderRow));
+        const folder = await c.supabase.rpc("move_folder", { p_folder: id, p_parent: parentId });
+        if (!folder.error && folder.data) {
+          moved.push(folderToItem(folder.data as FolderRow));
           continue;
         }
 
-        const { data: file } = await c.supabase
-          .from("files")
-          .update({ folder_id: parentId })
-          .eq("id", id)
-          .eq("owner_id", c.actor.userId)
-          .select()
-          .maybeSingle();
+        const file = await c.supabase.rpc("move_file", { p_file: id, p_folder: parentId });
+        if (!file.error && file.data) {
+          moved.push(fileToItem(file.data as FileRow));
+          continue;
+        }
 
-        if (file) moved.push(fileToItem(file as FileRow));
+        // A cycle is a real refusal rather than "nothing happened", and the UI can
+        // only say something useful about it if it arrives as a conflict.
+        const message = `${folder.error?.message ?? ""} ${file.error?.message ?? ""}`;
+        if (message.includes("cycle")) {
+          return {
+            ok: false,
+            code: "conflict",
+            message: "A folder can't be moved inside itself.",
+          };
+        }
       }
 
       if (moved.length === 0) {
@@ -459,7 +597,17 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
-      const { data, error } = await c.supabase
+      /*
+       * Files and folders both.
+       *
+       * This previously only touched `files`, so starring a folder was a silent
+       * no-op — the star never appeared, and `/dashboard/starred` could never list
+       * one. `folders` also had no `starred` column; migration 0024 adds it.
+       *
+       * The folder half goes through `set_folder_star` for the same `returning`
+       * reason as the move paths.
+       */
+      const file = await c.supabase
         .from("files")
         .update({ starred })
         .eq("id", id)
@@ -467,9 +615,14 @@ export function createSupabaseDriveRepository(): DriveRepository {
         .select()
         .maybeSingle();
 
-      if (error) return toDriveError(error);
-      if (!data) return { ok: false, code: "not_found", message: "That file doesn't exist any more." };
-      return { ok: true, data: fileToItem(data as FileRow) };
+      if (file.data) return { ok: true, data: fileToItem(file.data as FileRow) };
+
+      const folder = await c.supabase.rpc("set_folder_star", { p_folder: id, p_starred: starred });
+      if (folder.error) return toDriveError(folder.error);
+      if (!folder.data) {
+        return { ok: false, code: "not_found", message: "That item doesn't exist any more." };
+      }
+      return { ok: true, data: folderToItem(folder.data as FolderRow) };
     },
 
     /* ── Trash ───────────────────────────────────────────────────────── */
@@ -490,8 +643,18 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
-      // Backend-validated purge: only rows already in the bin are eligible.
-      // Passing an id that is not deleted is a no-op, not a delete.
+      /*
+       * Order matters, and it is dictated by two constraints.
+       *
+       * A trashed row is not readable, so `delete ... returning` cannot tell us
+       * which storage objects to remove — the keys have to be collected *before*
+       * the rows go. And the rows must not go before the objects, because a crash
+       * in between would leave an object nobody can find. So: read keys for rows
+       * this owner actually has in the bin, remove the objects, then drop the rows
+       * through `purge_items` (which re-checks ownership and refuses a live row, so
+       * an id that is not in the bin is a no-op rather than a permanent delete).
+       */
+      const keys = new Map<string, string>();
       for (const id of ids) {
         const { data: file } = await c.supabase
           .from("files")
@@ -501,21 +664,34 @@ export function createSupabaseDriveRepository(): DriveRepository {
           .not("deleted_at", "is", null)
           .maybeSingle();
 
-        if (!file) continue;
-
-        const { deleteObject } = await import("@/lib/r2/client");
-        // Object first, then the row: a crash between them leaves an orphan the
-        // sweeper can find, never a row pointing at nothing.
-        await deleteObject(file.storage_key as string).catch(() => {});
-        await c.supabase.from("files").delete().eq("id", id).eq("owner_id", c.actor.userId);
-        await c.supabase.from("activity_events").insert({
-          actor_id: c.actor.userId,
-          subject_type: "file",
-          subject_id: id,
-          kind: "file.purged",
-          metadata: {},
-        });
+        if (file?.storage_key) keys.set(id, file.storage_key as string);
       }
+
+      const { deleteObject } = await import("@/lib/r2/client");
+      for (const storageKey of keys.values()) {
+        await deleteObject(storageKey).catch(() => {});
+      }
+
+      const { error } = await c.supabase.rpc("purge_items", { p_ids: ids });
+      if (error) return toDriveError(error);
+
+      // Activity is a record of what happened, written after the fact. A failure
+      // here must not make the caller think the purge failed.
+      await c.supabase
+        .from("activity_events")
+        .insert(
+          ids.map((id) => ({
+            actor_id: c.actor.userId,
+            subject_type: "file",
+            subject_id: id,
+            kind: "file.purged",
+            metadata: {},
+          })),
+        )
+        .then(
+          () => undefined,
+          () => undefined,
+        );
 
       return { ok: true, data: null };
     },
@@ -524,13 +700,12 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
-      const { data } = await c.supabase
-        .from("files")
-        .select("id")
-        .eq("owner_id", c.actor.userId)
-        .not("deleted_at", "is", null);
-
-      const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+      // Through `list_trash`, not a filtered select: the ordinary policy hides
+      // trashed rows, so the old query here always came back empty and "Empty
+      // trash" was a button that emptied nothing.
+      const listed = await listTrash(c.supabase);
+      if (!listed.ok) return listed;
+      const ids = listed.data.items.map((item) => item.id);
       if (ids.length === 0) return { ok: true, data: null };
       return this.purge({ ids });
     },
@@ -1081,6 +1256,49 @@ async function softDelete(
   ids: string[],
   deletedAt: string | null,
 ): Promise<DriveResult<DriveItem[]>> {
+  /*
+   * Restore (deletedAt === null) cannot use an ordinary update.
+   *
+   * `update ... returning` and even `update` with an owner filter must first *read*
+   * the row, and a trashed row is deliberately unreadable — that is what keeps the
+   * bin out of every listing and download path. So restoring goes through
+   * `restore_items`, which re-checks ownership inside the function. Trashing (a
+   * non-null timestamp) still works the ordinary way, because a live row is
+   * readable.
+   */
+  if (deletedAt === null) {
+    const { data, error } = await supabase.rpc("restore_items", { p_ids: ids });
+    if (error) return toDriveError(error);
+    if (!data) return { ok: false, code: "not_found", message: "Nothing was restored." };
+
+    /*
+     * The restored rows are re-read rather than returned by the function, because
+     * only the ids come back. They are readable again now, so a plain select is
+     * enough and the caller gets the real row shapes.
+     */
+    const restored: DriveItem[] = [];
+    for (const id of ids) {
+      const { data: file } = await supabase
+        .from("files")
+        .select("*")
+        .eq("id", id)
+        .eq("owner_id", userId)
+        .maybeSingle();
+      if (file) {
+        restored.push(fileToItem(file as FileRow));
+        continue;
+      }
+      const { data: folder } = await supabase
+        .from("folders")
+        .select("*")
+        .eq("id", id)
+        .eq("owner_id", userId)
+        .maybeSingle();
+      if (folder) restored.push(folderToItem(folder as FolderRow));
+    }
+    return { ok: true, data: restored };
+  }
+
   const changed: DriveItem[] = [];
 
   for (const id of ids) {

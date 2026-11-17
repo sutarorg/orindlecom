@@ -206,9 +206,28 @@ export const UPLOAD_LIMITS = {
    * account's available storage quota (enforced transactionally in Postgres).
    */
   maxFileSize: null as number | null,
-  /** Rejected outright — these are commonly blocked by browsers anyway. */
-  blockedExtensions: [".exe", ".dll", ".app", ".bat", ".cmd", ".scr", ".msi"],
 } as const;
+
+/**
+ * Every file type uploads. There is deliberately no extension blocklist.
+ *
+ * There used to be one (`.exe`, `.dll`, `.bat`, `.msi`, …), which rejected a
+ * customer's own build output — a `.dll` is an ordinary artefact of any Windows
+ * build. A storage product that refuses file types is deciding what its customers'
+ * work is allowed to contain, and the blocklist was trivial to defeat anyway: to
+ * run something, rename it, or zip it. To run it, you already have to run it.
+ *
+ * What actually keeps this safe is on the other side of the wire and is unchanged:
+ * nothing is ever executed server-side, every object is served with
+ * `Content-Disposition: attachment` from a bucket that is not a website origin, and
+ * the app's CSP (`script-src 'self'`) means a `.html` or `.svg` sitting in a
+ * download cannot script anything here. So the honest position is to accept the
+ * file and let the OS decide what to do with it on the way down.
+ *
+ * This is a product decision, not a security relaxation: removing a rule that
+ * enforced nothing real while blocking legitimate work.
+ */
+export const UPLOAD_ACCEPT = "*/*";
 
 /* ------------------------------------------------------------------ */
 /*  Activity                                                           */

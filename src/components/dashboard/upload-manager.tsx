@@ -308,11 +308,6 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
       const rejected: string[] = [];
 
       for (const file of files) {
-        const lower = file.name.toLowerCase();
-        if (UPLOAD_LIMITS.blockedExtensions.some((ext) => lower.endsWith(ext))) {
-          rejected.push(`${file.name} — this file type isn't allowed`);
-          continue;
-        }
         if (UPLOAD_LIMITS.maxFileSize !== null && file.size > UPLOAD_LIMITS.maxFileSize) {
           rejected.push(`${file.name} — larger than ${formatBytes(UPLOAD_LIMITS.maxFileSize)}`);
           continue;
