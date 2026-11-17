@@ -27,6 +27,7 @@ export type AuthErrorCode =
   | "not_configured"
   | "invalid_credentials"
   | "email_not_confirmed"
+  | "email_delivery_failed"
   | "user_already_exists"
   | "weak_password"
   | "same_password"

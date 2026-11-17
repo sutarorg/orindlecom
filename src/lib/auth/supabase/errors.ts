@@ -32,7 +32,16 @@ interface ProviderErrorLike {
  */
 export function mapProviderError(error: ProviderErrorLike | null | undefined): AuthFailure {
   const status = error?.status;
-  const raw = (error?.code ?? error?.message ?? "").toLowerCase();
+  /*
+   * Both fields are joined rather than picking one. Supabase sets a machine code
+   * and a human message on the same error, and the pair does not always carry the
+   * same information: "Error sending confirmation email" arrives with the generic
+   * code `unexpected_failure`, so matching on the code alone can never identify
+   * it, and matching on the message alone would stop working the day a more
+   * specific code is introduced. Checking both means a mapping keyed on either
+   * still fires.
+   */
+  const raw = `${error?.code ?? ""} ${error?.message ?? ""}`.toLowerCase();
 
   if (status === 429 || raw.includes("rate limit") || raw.includes("over_email_send_rate_limit")) {
     return failure(
@@ -80,9 +89,41 @@ export function mapProviderError(error: ProviderErrorLike | null | undefined): A
     return failure("provider_disabled", "That sign-in method isn't enabled for this deployment.");
   }
 
+  /*
+   * The account was created but the confirmation email could not be sent —
+   * typically the project has no SMTP provider configured, or the SMTP provider
+   * rejected the message. GoTrue reports this as a 500 with an
+   * "Error sending confirmation email" message and `unexpected_failure` code.
+   *
+   * This must not fall through to the generic `unknown` message, for two reasons:
+   * it is not a bug in this app, so retrying the same form will fail the same way;
+   * and it leaves a real account behind that the visitor cannot reach, which they
+   * need to know about. Ordered before the generic checks below because the
+   * message also contains "email", which `email_not_confirmed` matches on — and
+   * that would send someone to a confirmation link that was never delivered.
+   */
+  if (raw.includes("error sending confirmation email") || raw.includes("error sending email")) {
+    return failure(
+      "email_delivery_failed",
+      "We created your account, but couldn't send the confirmation email. Please contact support so we can activate it — signing up again won't help.",
+    );
+  }
+
   if (raw.includes("fetch") || raw.includes("network") || raw.includes("timeout")) {
     return failure("network", "We couldn't reach the server. Check your connection and try again.");
   }
 
+  /*
+   * Nothing matched. Log the provider's own code and status before returning the
+   * generic sentence: without this, `unknown` is a dead end in production, because
+   * the response the visitor sees carries no detail and the mapped failure carries
+   * none either. Logging the code and status (never the message body) is enough to
+   * identify a new failure mode from server logs without exposing provider
+   * internals to the browser.
+   */
+  console.error(
+    "[auth] unmapped provider error:",
+    JSON.stringify({ code: error?.code, status: error?.status, message: error?.message }),
+  );
   return failure("unknown", "Something went wrong on our side. Please try again.");
 }

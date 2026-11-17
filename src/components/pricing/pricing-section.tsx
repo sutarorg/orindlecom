@@ -51,7 +51,16 @@ export function PricingSection({
 
         <CurrencyNotice currency={currency} />
 
-        <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:mt-10 xl:grid-cols-6 xl:gap-3.5">
+        {/*
+          Two columns from `sm` upward, which on desktop gives three rows of two
+          rather than a single horizontal strip of six. Six cards in one row forced
+          every price onto one line at ~150px wide; at two across the card has room
+          for the capacity and the annual equivalent to sit on their own baselines.
+          Below `sm` it stays one column, because a two-column grid of these cards at
+          360px is unreadable, and below `sm` the longest card content ("Premium",
+          "$59.99 /mo", a full-width CTA) needs roughly 300px to avoid wrapping.
+        */}
+        <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:mt-10 lg:gap-5">
           {PLANS.map((plan) => (
             <li key={plan.id} className="flex">
               <PlanCard

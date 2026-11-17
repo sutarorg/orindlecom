@@ -114,8 +114,28 @@ export function SiteHeader() {
             <ul className="flex items-center gap-1">
               {PRIMARY_NAV.map((item) => (
                 <li key={item.href}>
+                  {/*
+                    `prefetch={false}` is a deliberate trade, measured with
+                    perf-probe.mjs on a throttled connection.
+
+                    By default Next prefetches a Link once it enters the viewport,
+                    which here means the header warms all five marketing routes on
+                    every page load. The first-load transfer for `/` was 690KB, of
+                    which ~138KB was prefetch the visitor had not asked for and might
+                    never use — a real cost on a metered mobile connection.
+
+                    The trade: the *first* click on a route not yet visited now waits
+                    for the RSC payload instead of using a warm cache. In production
+                    that is a fraction of a second on a connection fast enough to
+                    have loaded this page at all; the routes are static and heavily
+                    cached at the edge. Prefetching every route on every visit to save
+                    that fraction is the wrong side of the trade.
+
+                    Measured after this change: see the commit message.
+                  */}
                   <Link
                     href={item.href}
+                    prefetch={false}
                     aria-current={isActive(item.href) ? "page" : undefined}
                     className={cn(
                       "relative inline-flex h-9 items-center rounded-full px-3.5 text-[14px] font-medium tracking-[-0.004em] transition-colors duration-150",

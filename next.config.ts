@@ -86,6 +86,13 @@ const nextConfig: NextConfig = {
   experimental: {
     // Keeps server actions within a predictable payload size for the contact form.
     serverActions: { bodySizeLimit: "256kb" },
+    /*
+     * Tried `optimizePackageImports: ["lucide-react"]` here and measured it: the
+     * emitted chunks were byte-identical (same hashes, same sizes) and no chunk
+     * contained a lucide string, so Turbopack was already tree-shaking the icon
+     * imports. Left out rather than kept as a plausible-looking no-op, because a
+     * config line that does nothing is a claim that it does something.
+     */
   },
 
   async headers() {
