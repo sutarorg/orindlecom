@@ -119,9 +119,16 @@ export function FolderIcon({
     size === "md" && "h-[21px] w-6",
     size === "lg" && "h-7 w-8",
     size === "xl" && "h-10 w-11",
-    // The folder-tile glyph. Sized against the landscape plate it sits in: roughly
-    // 55% of the card's width, which fills the frame without touching the edges.
-    size === "xxl" && "h-[58px] w-[70px]",
+    /*
+     * The folder-tile glyph, sized as a share of its plate rather than in pixels.
+     *
+     * It was 70 × 58 fixed, which read as a small sticker on a large card and — worse —
+     * did not adapt: the plate is `w-full aspect-[16/10]`, so on a narrow column the
+     * same fixed glyph grew into the edges, and on a wide one it shrank into the middle.
+     * A percentage keeps one relationship to the card at every column count. The SVG has
+     * a 48 × 40 viewBox, so setting only the width keeps the aspect exactly.
+     */
+    size === "xxl" && "w-[42%] h-auto",
   );
 
   return (

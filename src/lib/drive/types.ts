@@ -69,6 +69,17 @@ export interface ListQuery {
   scope: "files" | "folders" | "recent" | "starred" | "shared" | "trash";
   /** Restrict to a folder when scope is `files`/`folders`. Null = root. */
   parentId?: string | null;
+  /**
+   * Top-level folders only, at any depth of the tree.
+   *
+   * The Folders page is a map of the top of the tree, not a dump of every folder that
+   * exists. Asking for `scope: "folders"` with no `parentId` used to mean "no filter"
+   * — so a folder created inside another one appeared both inside its parent and on
+   * `/dashboard/folders`, which made the page a flat list of everything and left the
+   * nesting invisible. `parentId: null` is the explicit "root" and this flag is kept
+   * separate for callers that mean root but must not be read as "unfiltered".
+   */
+  rootOnly?: boolean;
   search?: string;
   sort?: SortKey;
   direction?: SortDirection;

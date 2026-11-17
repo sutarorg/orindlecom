@@ -101,7 +101,7 @@ Notes that drove the implementation:
 | Gap body → CTA | 29px |
 | Secondary button | x 191 – 300 (**109 × 44**), y 335 – 379, 1px border `#E1E5F0`, white fill, radius 14px, label "Explore Plans" 15px/600 ink |
 | Gutter between CTAs | 14px |
-| Assurance line | "No credit card required", y ≈ 402, 13px, colour `#8B90A8`, preceded by a 14px crossed-circle glyph |
+| Assurance line | "No credit card required", y ≈ 402, 13px, colour `#8B90A8`, preceded by a 14px crossed-circle glyph. Desktop only: hidden below `sm`, where it displaced the mockup |
 | Gap CTA → assurance | 22px |
 
 ### 4.2 Hero backdrop
@@ -183,11 +183,11 @@ inner text overflowed its panel and whose device screens were cropped by their f
 see `src/components/marketing/feature-art.tsx` for what changed and why.
 
 1. *Store without the clutter* — a file-manager panel in perspective-free elevation: a
-   44px icon rail of five marks on an even 33px rhythm, a "Storage" heading, a 24% donut
-   reading **2.4 GB of 10 GB**, a three-row legend (Docs / Media / Other) whose bars
+   44px icon rail of five marks on an even 33px rhythm, a "Storage" heading, a 60% donut
+   reading **6 GB of 10 GB**, a three-row legend (Docs / Media / Other) whose bars
    share one column width, and a stacked usage bar under a hairline that divides the same
-   2.4 GB into the same three categories. Mint circle behind the top-right, peach behind
-   the bottom-right.
+   6 GB into the same three categories. Mint disc behind the top-right, peach behind the
+   bottom-right, both complete circles.
 2. *Access from anywhere* — a laptop, a tablet and a phone, front-most last, sharing one
    cast shadow on a soft tabletop. Each screen is laid out **for its own shape** rather
    than scaled from the laptop: the laptop shows a rail, a title, three folder tiles and
@@ -201,7 +201,12 @@ see `src/components/marketing/feature-art.tsx` for what changed and why.
 
 Palette: the design system's primary `#3178FB` leads each drawing, joined by violet
 `#8B5CF6`, peach `#FB7A5F` and mint `#38BD8B`. Every figure shown is computed from one
-constant — the donut's arc, its label and the usage bar all derive from the same 24%.
+constant — the donut's arc, its label and the usage bar all derive from the same 60%.
+
+The discs behind all three are whole circles placed inside the canvas. They used to be
+centred past the edges, which the viewBox cropped into two-straight-sided shapes; a
+circle seen that way stops reading as a circle. Fitting them means the card is drawn at
+87% and offset within the box, which is the visible cost of keeping the discs round.
 
 The pastel circles are 50–58 units inside the 290-unit box (≈ 96–140px at slot size),
 positioned to bleed past the panel edges, filled with `#DFF4F2`, `#FFE6DC` and

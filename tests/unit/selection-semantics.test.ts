@@ -309,7 +309,8 @@ describe("the tile's thumbnail is a downscaled image, not the original", () => {
 
   it("the route downscales, re-encodes and caches", () => {
     const route = read("src/app/api/thumbnails/[id]/image/route.ts");
-    expect(route).toMatch(/\.resize\(TILE_PX, TILE_PX/);
+    // Landscape since the tiles became 16:10 — see drive-interactions.test.ts.
+    expect(route).toMatch(/\.resize\(TILE_W, TILE_H/);
     expect(route).toMatch(/\.webp\(\{ quality: TILE_QUALITY/);
     expect(route).toMatch(/max-age=31536000, immutable/);
     // Visibility is decided by the repository read, not by the request.
@@ -331,8 +332,9 @@ describe("the feature illustrations", () => {
   });
 
   it("derive every figure from one constant, so the drawing cannot contradict itself", () => {
-    // The donut's arc, its label and the usage bar all read from `usedFraction`.
-    expect(art).toMatch(/const usedFraction = 0\.24/);
+    // The donut's arc, its label and the usage bar all read from `usedFraction`; the
+    // number itself is asserted in feature-art.test.ts against the rendered text.
+    expect(art).toMatch(/const usedFraction = 0\.6/);
     expect(art).toMatch(/circumference \* usedFraction/);
     expect(art).toMatch(/CONTENT_W \* usedFraction/);
     // And the bar's segments are the legend's own colours, in order.

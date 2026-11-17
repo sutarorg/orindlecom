@@ -102,7 +102,16 @@ export function Menu({
         panelRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? [],
       );
 
-    const raf = requestAnimationFrame(() => items_()[0]?.focus());
+    /*
+     * Focus the panel, not its first item.
+     *
+     * Focusing item one put a highlight on "Restore" (or "Open") the instant the menu
+     * opened, which reads as a selection — a menu whose first entry looks chosen
+     * invites the wrong click and, in the bin, made "Restore" look like the default
+     * action on a deleted file. The panel takes focus so the keyboard still works:
+     * ArrowDown moves into the list, Escape closes.
+     */
+    const raf = requestAnimationFrame(() => panelRef.current?.focus());
 
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -124,13 +133,19 @@ export function Menu({
         return;
       }
       if (all.length === 0) return;
-      const index = all.indexOf(document.activeElement as HTMLElement);
+      const active = document.activeElement as HTMLElement;
+      const index = all.indexOf(active);
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        all[(index + 1) % all.length]?.focus();
+        // From the panel itself (nothing focused in the list yet) this means "enter
+        // the list at the top", which is how a menu with no default selection opens.
+        all[index < 0 ? 0 : (index + 1) % all.length]?.focus();
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        all[(index - 1 + all.length) % all.length]?.focus();
+        all[index < 0 ? all.length - 1 : (index - 1 + all.length) % all.length]?.focus();
+      } else if (index < 0) {
+        // Any other key on the panel is not ours to interpret.
+        return;
       } else if (event.key === "Home") {
         event.preventDefault();
         all[0]?.focus();
@@ -156,6 +171,9 @@ export function Menu({
       ref={panelRef}
       role="menu"
       aria-label={label}
+      // Focusable so opening the menu can move focus *here*, without highlighting an
+      // item. -1 keeps it out of the tab order.
+      tabIndex={-1}
       style={{
         top: position?.top ?? -9999,
         left: position?.left ?? -9999,
@@ -174,7 +192,22 @@ export function Menu({
             type="button"
             role="menuitem"
             disabled={item.disabled}
-            onClick={() => {
+            onClick={(event) => {
+              /*
+               * The click must stop at the menu.
+               *
+               * This panel is a portal, and a portal moves where children *paint*,
+               * not who their React parent is: an event dispatched on a menu item
+               * still bubbles through the component tree to the tile that rendered
+               * the trigger. The tile's own onClick then ran, so picking "Select",
+               * "Add to Starred", "Share" or "Move to Trash" from the three-dot menu
+               * also opened the preview behind the menu — the glitch where the panel
+               * appeared as if the file had been clicked.
+               *
+               * `stopPropagation` here is the fix at the source: a menu action is an
+               * answer to "what may I do with this row", never a click *on* the row.
+               */
+              event.stopPropagation();
               onClose();
               item.onSelect();
             }}
@@ -182,8 +215,8 @@ export function Menu({
               "flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12.5px] font-medium transition-colors",
               "focus:outline-none disabled:pointer-events-none disabled:opacity-40",
               item.destructive
-                ? "text-[#C93B2B] hover:bg-[#FDF3F2] focus:bg-[#FDF3F2]"
-                : "text-text hover:bg-[var(--brand-surface-muted)] focus:bg-[var(--brand-surface-muted)]",
+                ? "text-[#C93B2B] hover:bg-[#FDF3F2] focus-visible:bg-[#FDF3F2]"
+                : "text-text hover:bg-[var(--brand-surface-muted)] focus-visible:bg-[var(--brand-surface-muted)]",
             )}
           >
             {item.icon && (

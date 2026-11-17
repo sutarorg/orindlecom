@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MoreVertical, Star } from "lucide-react";
+import { CheckSquare, Eye, FolderInput, MoreVertical, RotateCcw, Share2, Star, Trash2 } from "lucide-react";
 import { Menu, type MenuItem } from "@/components/ui/menu";
 import { formatBytes, formatRelative } from "@/lib/drive/format";
 import type { DriveItem } from "@/lib/drive/types";
@@ -213,11 +213,12 @@ const GridTile = React.forwardRef<
   const items: MenuItem[] = React.useMemo(() => {
     if (mode === "trash") {
       return [
-        { key: "restore", label: "Restore", onSelect: () => onAction("restore") },
-        { key: "select", label: "Select", onSelect: () => beginSelection(item.id) },
+        { key: "restore", label: "Restore", icon: RotateCcw, onSelect: () => onAction("restore") },
+        { key: "select", label: "Select", icon: CheckSquare, onSelect: () => beginSelection(item.id) },
         {
           key: "purge",
           label: "Delete permanently",
+          icon: Trash2,
           destructive: true,
           separatorBefore: true,
           onSelect: () => onAction("purge"),
@@ -225,15 +226,38 @@ const GridTile = React.forwardRef<
       ];
     }
 
+    /*
+     * Every row names its icon.
+     *
+     * "Preview" was the one entry with none, so it read as a stray line of text above
+     * a list of icons and looked like a heading rather than a thing you could press.
+     * `Eye` for a file, and the folder glyph for a folder, because the two entries say
+     * different things: one opens a panel over this list, the other navigates.
+     */
     const base: MenuItem[] = [
-      { key: "open", label: item.kind === "folder" ? "Open" : "Preview", onSelect: onOpen },
-      { key: "select", label: "Select", onSelect: () => beginSelection(item.id) },
+      {
+        key: "open",
+        label: item.kind === "folder" ? "Open" : "Preview",
+        icon: item.kind === "folder" ? FolderInput : Eye,
+        onSelect: onOpen,
+      },
+      {
+        key: "select",
+        label: "Select",
+        icon: CheckSquare,
+        onSelect: () => beginSelection(item.id),
+      },
     ];
 
     if (mode === "default") {
       base.push(
-        { key: "star", label: item.starred ? "Remove from Starred" : "Add to Starred", onSelect: () => onAction("star") },
-        { key: "share", label: "Share", onSelect: () => onAction("share") },
+        {
+          key: "star",
+          label: item.starred ? "Remove from Starred" : "Add to Starred",
+          icon: Star,
+          onSelect: () => onAction("star"),
+        },
+        { key: "share", label: "Share", icon: Share2, onSelect: () => onAction("share") },
         {
           key: "trash",
           label: "Move to Trash",
@@ -337,13 +361,14 @@ const GridTile = React.forwardRef<
       </div>
 
       {/*
-        The plate.
-        
-        Folders get a landscape card and files get a square one, and that difference
-        is deliberate: a 1:1 thumbnail is right for an image or a page, because those
-        have that shape. A folder glyph does not — it is wide, and putting it in a
-        square leaves a band of empty space above and below it that reads as a bug.
-        The landscape frame is sized so the glyph fills it edge to edge.
+        The plate — one shape for both kinds.
+
+        Folders were landscape and files were square. The square was defensible on its
+        own (an image or a page is often 1:1) but not next to a landscape folder: a
+        mixed grid stepped between two card heights, so the rows did not line up and
+        the files looked like a different kind of object. Every tile is now landscape,
+        which also suits the commonest real content — screenshots, photos and landscape
+        phone shots all lose less to a 16:10 crop than to a square one.
       */}
       {item.kind === "folder" ? (
         <div className="flex aspect-[16/10] w-full items-center justify-center">

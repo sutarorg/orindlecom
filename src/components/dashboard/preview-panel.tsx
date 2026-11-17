@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
-import { api } from "@/lib/drive/client";
+import { api, type ApiOutcome } from "@/lib/drive/client";
 import { CATEGORY_LABEL, formatBytes, formatDateTime, extensionOf } from "@/lib/drive/format";
 import type { DriveItem } from "@/lib/drive/types";
 import { FileTypeIcon } from "./file-icon";
@@ -66,6 +66,20 @@ export function PreviewPanel({
   const index = item ? siblings.findIndex((candidate) => candidate.id === item.id) : -1;
   const previous = index > 0 ? siblings[index - 1] : null;
   const next = index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : null;
+
+  /*
+   * Warm the neighbours while you look at this one.
+   *
+   * Stepping with the arrow keys is the main way people move through a folder, and it
+   * used to mint a fresh link on every step. Both neighbours are fetched here, while
+   * nothing is waiting, so the next keypress paints immediately. Only the links are
+   * fetched — not the bytes — so this costs two small requests, not two downloads.
+   */
+  React.useEffect(() => {
+    if (!item) return;
+    prefetchPreview(previous);
+    prefetchPreview(next);
+  }, [item, previous, next]);
 
   React.useEffect(() => {
     if (!item) return;
@@ -251,11 +265,66 @@ export function PreviewPanel({
   );
 }
 
+/**
+ * The signed-URL cache.
+ *
+ * Opening a preview used to cost a `POST /api/download/:id` before a single pixel
+ * could be requested — a round trip to mint a link, then a second one for the bytes.
+ * The link is valid for five minutes and is the same link for the same file, so it is
+ * worth keeping: stepping back to a file you just looked at, or closing and reopening
+ * the panel, now paints from memory with no request at all.
+ *
+ * Keyed by id and discarded after four minutes, comfortably inside the five-minute
+ * lifetime so a cached address is never handed out after it has expired.
+ */
+const PREVIEW_URL_TTL_MS = 4 * 60 * 1000;
+const previewUrls = new Map<string, { url: string; at: number }>();
+
+function cachedUrl(id: string): string | null {
+  const entry = previewUrls.get(id);
+  if (!entry) return null;
+  if (Date.now() - entry.at > PREVIEW_URL_TTL_MS) {
+    previewUrls.delete(id);
+    return null;
+  }
+  return entry.url;
+}
+
+async function previewUrl(id: string): Promise<ApiOutcome<{ url: string }>> {
+  const hit = cachedUrl(id);
+  if (hit) return { ok: true, data: { url: hit } };
+
+  const result = await api.post<{ url: string; expiresAt: string }>(
+    `/api/download/${encodeURIComponent(id)}`,
+    { disposition: "inline" },
+  );
+  if (result.ok) previewUrls.set(id, { url: result.data.url, at: Date.now() });
+  return result;
+}
+
+/**
+ * Warm the cache for a neighbouring file.
+ *
+ * Arrow-key stepping used to stall for a full mint-and-fetch on every keypress. This
+ * fetches the link for the next and previous file in the background so the common
+ * gesture has nothing to wait for. Failure is silent and expected — a prefetch is an
+ * optimisation, never a promise, and it must not surface an error about a file the
+ * visitor has not asked to see.
+ */
+export function prefetchPreview(item: DriveItem | null | undefined) {
+  if (!item || item.kind !== "file") return;
+  if (!PREVIEWABLE.has(item.category)) return;
+  if (cachedUrl(item.id)) return;
+  void previewUrl(item.id).catch(() => undefined);
+}
+
 function PreviewStage({ item }: { item: DriveItem }) {
   const canPreview = PREVIEWABLE.has(item.category);
   const [source, setSource] = React.useState<string | null>(null);
   const [textBody, setTextBody] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  // Starts true only when there is something to wait for, so an un-previewable
+  // format never flashes a spinner before admitting it has no preview.
+  const [loading, setLoading] = React.useState(canPreview);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -264,15 +333,15 @@ function PreviewStage({ item }: { item: DriveItem }) {
     setTextBody(null);
     setErrorMessage(null);
 
-    if (!canPreview) return;
+    if (!canPreview) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
-    void (async () => {
-      const result = await api.post<{ url: string; expiresAt: string }>(
-        `/api/download/${encodeURIComponent(item.id)}`,
-        { disposition: "inline" },
-      );
 
+    void (async () => {
+      const result = await previewUrl(item.id);
       if (!active) return;
 
       if (!result.ok) {
@@ -281,12 +350,22 @@ function PreviewStage({ item }: { item: DriveItem }) {
         return;
       }
 
-      const url = result.data.url;
-      setSource(url);
+      /*
+       * Clear the spinner the moment the URL is known.
+       *
+       * It used to be set false only on the error path, so a successful mint left
+       * `loading` true forever and the panel sat on "Loading preview…" while the
+       * image had already been requested. The flag means "waiting for an address",
+       * not "the file has finished downloading" — the element paints its own
+       * progress after this, and an indefinite label over a rendered image was the
+       * bug this fixes.
+       */
+      setSource(result.data.url);
+      setLoading(false);
 
       if (item.category === "text" || item.category === "code") {
         try {
-          const response = await fetch(url);
+          const response = await fetch(result.data.url);
           if (active && response.ok) {
             const raw = await response.text();
             setTextBody(raw.slice(0, 262_144));
@@ -295,7 +374,6 @@ function PreviewStage({ item }: { item: DriveItem }) {
           if (active) setErrorMessage("Could not load text preview. Download the file instead.");
         }
       }
-
     })();
 
     return () => {
@@ -344,13 +422,17 @@ function PreviewStage({ item }: { item: DriveItem }) {
         <img
           src={source}
           alt={item.name}
+          // Decode off the main thread and hint the fetch priority: the panel is the
+          // only thing on screen at this point, so the image is the critical path.
+          decoding="async"
+          fetchPriority="high"
           className="max-h-full max-w-full rounded-lg object-contain"
         />
       );
     case "video":
-      return <video src={source} controls className="max-h-full max-w-full rounded-lg" />;
+      return <video src={source} controls preload="metadata" className="max-h-full max-w-full rounded-lg" />;
     case "audio":
-      return <audio src={source} controls className="w-full" />;
+      return <audio src={source} controls preload="metadata" className="w-full" />;
     case "pdf":
       return <iframe src={source} title={item.name} className="h-full w-full rounded-lg border-0" />;
     case "text":

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDown, ArrowUp, MoreVertical, Star } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckSquare, Eye, FolderInput, MoreVertical, RotateCcw, Share2, Star, Trash2 } from "lucide-react";
 import { Menu, type MenuItem } from "@/components/ui/menu";
 import { CATEGORY_LABEL, formatBytes, formatRelative } from "@/lib/drive/format";
 import type { DriveItem, SortKey } from "@/lib/drive/types";
@@ -213,11 +213,12 @@ const ListRow = React.forwardRef<
     // still live. See the grid tile for the same rule.
     if (mode === "trash") {
       return [
-        { key: "restore", label: "Restore", onSelect: () => onRowAction("restore") },
-        { key: "select", label: "Select", onSelect: () => onRowAction("select") },
+        { key: "restore", label: "Restore", icon: RotateCcw, onSelect: () => onRowAction("restore") },
+        { key: "select", label: "Select", icon: CheckSquare, onSelect: () => onRowAction("select") },
         {
           key: "purge",
           label: "Delete permanently",
+          icon: Trash2,
           destructive: true,
           separatorBefore: true,
           onSelect: () => onRowAction("purge"),
@@ -225,9 +226,16 @@ const ListRow = React.forwardRef<
       ];
     }
 
+    // Same icons, same order as the grid tile: the two views must not teach two
+    // different vocabularies for the same menu.
     const base: MenuItem[] = [
-      { key: "open", label: item.kind === "folder" ? "Open" : "Preview", onSelect: onOpen },
-      { key: "select", label: "Select", onSelect: () => onRowAction("select") },
+      {
+        key: "open",
+        label: item.kind === "folder" ? "Open" : "Preview",
+        icon: item.kind === "folder" ? FolderInput : Eye,
+        onSelect: onOpen,
+      },
+      { key: "select", label: "Select", icon: CheckSquare, onSelect: () => onRowAction("select") },
     ];
 
     if (mode === "default") {
@@ -235,12 +243,14 @@ const ListRow = React.forwardRef<
         {
           key: "star",
           label: item.starred ? "Remove from Starred" : "Add to Starred",
+          icon: Star,
           onSelect: () => onRowAction("star"),
         },
-        { key: "share", label: "Share", onSelect: () => onRowAction("share") },
+        { key: "share", label: "Share", icon: Share2, onSelect: () => onRowAction("share") },
         {
           key: "trash",
           label: "Move to Trash",
+          icon: Trash2,
           destructive: true,
           separatorBefore: true,
           onSelect: () => onRowAction("trash"),

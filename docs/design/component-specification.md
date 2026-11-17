@@ -57,7 +57,7 @@ Two-column at ≥ 1024px (`grid-template-columns: minmax(0,1fr) minmax(0,1.12fr)
 | `h1` | 3 lines, hard breaks preserved with `<br>` at ≥ 640px, natural wrap below. Line 3 in `--color-primary`. `text-balance` off (the reference breaks are intentional). |
 | Body | 400px max-width, two sentences |
 | CTA row | primary + secondary, 14px gap, wraps to full-width stacked below 420px |
-| Assurance | 13px subtle with a 15px crossed-circle icon, `No credit card required` |
+| Assurance | 13px subtle with a 15px crossed-circle icon, `No credit card required`. **Hidden below `sm`** — on a phone it pushed the product mockup below the fold, and the same reassurance sits on the pricing page and in signup |
 
 ### `HeroBackdrop`
 
@@ -88,7 +88,7 @@ This is the "showcase" variant. A **real** file-manager component
 `/features` and in the authenticated shell later.
 
 Content policy: the mockup shows an **empty-state library** (folders only, no files, no
-user names, no timestamps). The storage caption reads `2.4 GB / 10 GB` only inside the
+user names, no timestamps). The storage caption reads `6 GB / 10 GB` only inside the
 decorative hero composition, which is labelled as illustrative; the `/features` preview
 uses a true empty state with `0 B / 10 GB`.
 
