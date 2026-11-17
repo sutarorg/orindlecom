@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { CANONICAL_ORIGIN, DEFAULT_OG_IMAGE, SITE_LANGUAGE, SITE_LOCALE } from "@/config/seo";
 import { SITE } from "@/config/site";
+import { ScrollToTop } from "@/components/layout/scroll-to-top";
 
 /**
  * Root metadata.
@@ -85,7 +86,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang={SITE_LANGUAGE}>
-      <body>{children}</body>
+      <body>
+        <ScrollToTop />
+        {children}
+      </body>
     </html>
   );
 }
