@@ -384,6 +384,80 @@
   }
 }
 
+/*
+ * Scrollbars.
+ *
+ * The default scrollbar on Windows and Linux is a grey system widget that ignores
+ * the page entirely, and on Windows it is also wide enough to sit oddly against a
+ * 12px type scale. Every panel in the product scrolls — the grid, the sidebar, the
+ * preview stage, the folder picker — so an unstyled bar is the most-seen unstyled
+ * element on the site.
+ *
+ * Three properties, and the design is in the restraint:
+ *   - a transparent track, so the bar reads as floating over the surface rather
+ *     than as a bordered groove cut into it;
+ *   - a thumb with a 3px transparent border and `background-clip: content-box`,
+ *     which is how a 6px-wide thumb is drawn inside a 12px-wide lane — the lane
+ *     stays wide enough to grab, the thumb stays thin;
+ *   - `--brand-border-strong` at rest and `--brand-text-subtle` on interaction, so
+ *     it is visible without competing with content, and it confirms the grab.
+ *
+ * `scrollbar-width`/`scrollbar-color` are set for Firefox and for any browser that
+ * implements the standard properties; the WebKit pseudo-elements are ignored by
+ * those, so the two do not fight. `color-scheme` is left alone so the bar keeps
+ * following the light design rather than flipping in a dark-mode browser.
+ */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--brand-border-strong) transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--brand-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--brand-border-strong);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--brand-text-subtle);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--brand-primary);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/*
+ * Opt-out for the places a visible bar would break the layout: a horizontally
+ * scrolled table of thumbnails or a code block, where the bar is decoration rather
+ * than a control. Applied by adding `scrollbar-none`.
+ */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

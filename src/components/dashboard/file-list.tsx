@@ -35,14 +35,17 @@ export function FileList({
   items,
   onOpen,
   onContext,
+  onRowAction,
   selectable = true,
 }: {
   items: DriveItem[];
   onOpen: (item: DriveItem) => void;
   onContext: (item: DriveItem, anchor: HTMLElement) => void;
+  /** Runs a row action through the manager, which owns the API calls. */
+  onRowAction: (item: DriveItem, action: string) => void;
   selectable?: boolean;
 }) {
-  const { select, isSelected, selected, sort, direction, setSort } = useDrive();
+  const { select, isSelected, selected, selectMode, beginSelection, sort, direction, setSort } = useDrive();
   const [focusIndex, setFocusIndex] = React.useState(0);
   const rowRefs = React.useRef<Array<HTMLDivElement | null>>([]);
 
@@ -142,17 +145,27 @@ export function FileList({
               tabIndex={index === focusIndex ? 0 : -1}
               onFocus={() => setFocusIndex(index)}
               onActivate={(event) => {
-                if (!selectable) return;
                 setFocusIndex(index);
+                /*
+                 * Same rule as the grid: outside select mode a click opens, inside
+                 * it a click picks. Two views that disagree about what a click does
+                 * would make the product feel like two products.
+                 */
+                if (!selectMode) {
+                  onOpen(item);
+                  return;
+                }
                 if (event.shiftKey) select(item.id, { range: true });
-                else if (event.metaKey || event.ctrlKey) select(item.id, { additive: true });
-                else select(item.id);
+                else select(item.id, { additive: true });
               }}
-              onOpen={() => onOpen(item)}
+              onOpen={() => {
+                if (!selectMode) onOpen(item);
+              }}
               onContext={(anchor) => {
-                if (selectable && !active) select(item.id);
+                if (!selectMode) beginSelection(item.id);
                 onContext(item, anchor);
               }}
+              onRowAction={(action) => onRowAction(item, action)}
               selectable={selectable}
             />
           );
@@ -174,23 +187,41 @@ const ListRow = React.forwardRef<
     onActivate: (event: React.MouseEvent | React.KeyboardEvent) => void;
     onOpen: () => void;
     onContext: (anchor: HTMLElement) => void;
+    onRowAction: (action: string) => void;
   }
 >(function ListRow(
-  { item, selected, anySelected, tabIndex, selectable, onFocus, onActivate, onOpen, onContext },
+  { item, selected, anySelected, tabIndex, selectable, onFocus, onActivate, onOpen, onContext, onRowAction },
   ref,
 ) {
   const menuRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [hovered, setHovered] = React.useState(false);
 
+  /*
+   * The same menu as the grid tile, in the same order: Open, Select, Star, Share,
+   * Move to Trash. Select replaces the old duplicated "Preview"/"Open" entry and is
+   * where selection begins; the remaining entries route through the manager instead
+   * of being the `() => undefined` stubs they were.
+   */
   const items: MenuItem[] = React.useMemo(
     () => [
       { key: "open", label: item.kind === "folder" ? "Open" : "Preview", onSelect: onOpen },
-      { key: "star", label: item.starred ? "Remove from Starred" : "Add to Starred", onSelect: () => undefined },
-      { key: "share", label: "Share", onSelect: () => undefined },
-      { key: "trash", label: "Move to Trash", destructive: true, separatorBefore: true, onSelect: () => undefined },
+      { key: "select", label: "Select", onSelect: () => onRowAction("select") },
+      {
+        key: "star",
+        label: item.starred ? "Remove from Starred" : "Add to Starred",
+        onSelect: () => onRowAction("star"),
+      },
+      { key: "share", label: "Share", onSelect: () => onRowAction("share") },
+      {
+        key: "trash",
+        label: "Move to Trash",
+        destructive: true,
+        separatorBefore: true,
+        onSelect: () => onRowAction("trash"),
+      },
     ],
-    [item, onOpen],
+    [item, onOpen, onRowAction],
   );
 
   return (
@@ -201,14 +232,13 @@ const ListRow = React.forwardRef<
       tabIndex={tabIndex}
       aria-selected={selectable ? selected : undefined}
       onFocus={onFocus}
-      onClick={selectable ? onActivate : undefined}
+      onClick={onActivate}
       onDoubleClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
-          if (event.metaKey || event.ctrlKey || event.shiftKey) onActivate(event);
-          else onOpen();
-        } else if (event.key === " " && selectable) {
+          onOpen();
+        } else if (event.key === " ") {
           event.preventDefault();
           onActivate(event);
         } else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
@@ -298,7 +328,7 @@ const ListRow = React.forwardRef<
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            if (selectable) onActivate(event);
+            // Opening the menu asks what you may do; it does not pick the row.
             setMenuOpen(true);
           }}
           aria-label={`Actions for ${item.name}`}

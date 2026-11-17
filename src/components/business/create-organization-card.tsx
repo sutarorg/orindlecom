@@ -86,9 +86,22 @@ export function CreateOrganizationCard() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[680px] space-y-4 px-4 py-6 sm:px-6">
+    /*
+     * Centred in the content area, not just horizontally centred inside it.
+     *
+     * This card is the whole page when it appears — there is no organization, so
+     * there is nothing above or below it. It was pinned to the top with
+     * `mx-auto … py-6`, which put a single card in the upper third of a tall empty
+     * column: the card looked misplaced rather than deliberate.
+     *
+     * `min-h-full` + `justify-center` centres it in whatever height the shell gives
+     * the main region, and `flex-1` on `main` lets that be the full viewport. The
+     * padding keeps it off the edges on a short screen, and `items-center` keeps the
+     * card itself from stretching.
+     */
+    <div className="mx-auto flex min-h-full w-full max-w-[680px] flex-col items-center justify-center gap-4 px-4 py-8 sm:px-6">
       {inviteToken && (
-        <section className="overflow-hidden rounded-2xl border border-primary/30 bg-primary-soft/30 p-5">
+        <section className="w-full overflow-hidden rounded-2xl border border-primary/30 bg-primary-soft/30 p-5">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white">
               <Mail className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
@@ -119,7 +132,7 @@ export function CreateOrganizationCard() {
         </section>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-white">
+      <section className="w-full overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-white">
         <div className="border-b border-[var(--brand-border-soft)] px-5 py-4">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">

@@ -27,6 +27,8 @@ export interface MenuItem {
   /** Renders in the destructive colour. */
   destructive?: boolean;
   disabled?: boolean;
+  /** Secondary line under the label, for context the label cannot carry. */
+  description?: string;
   /** Right-aligned hint, e.g. a keyboard shortcut. */
   shortcut?: string;
   /** Draw a hairline above this item. */
@@ -191,7 +193,14 @@ export function Menu({
                 aria-hidden
               />
             )}
-            <span className="flex-1 truncate">{item.label}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{item.label}</span>
+              {item.description && (
+                <span className="block truncate text-[10.5px] font-normal text-text-subtle">
+                  {item.description}
+                </span>
+              )}
+            </span>
             {item.shortcut && (
               <span className="shrink-0 font-mono text-[10.5px] text-text-subtle">
                 {item.shortcut}

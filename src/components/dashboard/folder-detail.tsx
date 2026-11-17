@@ -60,7 +60,7 @@ export function FolderDetail({
       <PageHeader
         title={folder.name}
         description={`${items.length} ${items.length === 1 ? "item" : "items"} in this folder`}
-        action={<DashboardActions />}
+        action={<DashboardActions parentId={folder.id} />}
         className="mb-4"
       />
 
@@ -73,7 +73,7 @@ export function FolderDetail({
           icon: FolderOpen,
           title: "This folder is empty.",
           description: "Add files here, or move existing ones in from My Files.",
-          action: <DashboardActions showFolder />,
+          action: <DashboardActions showFolder parentId={folder.id} />,
           footnote: "Only folders and files that live directly here are listed.",
         }}
       />

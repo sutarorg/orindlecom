@@ -261,6 +261,48 @@ export function DriveProvider({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [selected.size, clearSelection, selectAll]);
 
+  /**
+   * Clicking away from the items clears the selection.
+   *
+   * A selection mode that can only be left with the X leaves the page in a state
+   * where clicking a file does something different from what it did a moment ago,
+   * with no obvious way back. Clicking the empty space is the gesture people try,
+   * so it is the one that works.
+   *
+   * The check is on the *item* rather than the surface: a click on the toolbar, the
+   * breadcrumb, the search field or the selection bar itself must not clear —
+   * otherwise pressing "Move" would empty the selection it was about to act on.
+   */
+  React.useEffect(() => {
+    if (!selectMode) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      // A click on an item is handled by the item, which decides whether to toggle.
+      if (target.closest("[data-item-id]")) return;
+
+      /*
+       * Anything interactive on the page keeps the selection: controls, links,
+       * inputs, dialogs, menus, and the bar itself. The rule is "clicked empty
+       * space", not "clicked something that is not a file".
+       */
+      if (
+        target.closest(
+          "button, a, input, textarea, select, label, [role='menu'], [role='dialog'], [role='toolbar'], [data-keep-selection]",
+        )
+      ) {
+        return;
+      }
+
+      clearSelection();
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [selectMode, clearSelection]);
+
   // Keep preview in sync when the item disappears from the list.
   React.useEffect(() => {
     if (previewId && !visible.some((item) => item.id === previewId)) setPreviewId(null);

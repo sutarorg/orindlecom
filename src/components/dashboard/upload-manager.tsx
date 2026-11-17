@@ -26,6 +26,13 @@ import { cn } from "@/lib/utils";
 interface UploadContextValue {
   tasks: UploadTask[];
   addFiles: (files: File[], parentId?: string | null) => void;
+  /**
+   * Upload a picked directory, recreating its folder structure.
+   *
+   * Asynchronous because it creates the folders first — there is nothing to upload
+   * into until they exist.
+   */
+  addFolder: (files: File[], parentId?: string | null) => Promise<void>;
   cancel: (id: string) => void;
   retry: (id: string) => void;
   dismiss: (id: string) => void;
@@ -349,6 +356,95 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
     [runUpload, toast],
   );
 
+  /**
+   * Recreate the folder tree a directory upload arrived as, then upload into it.
+   *
+   * A browser hands a picked directory over as a flat file list whose entries each
+   * carry a `webkitRelativePath` like `Holiday/2024/beach.jpg`. Creating one folder
+   * for the root and dumping every file inside would lose that structure, which is
+   * the whole point of uploading a folder. So the path segments are turned into
+   * folders depth-first — each folder is created once, under its real parent — and
+   * the files then land where they belong.
+   *
+   * Folders are created through the same endpoint the New folder button uses, so
+   * name validation is identical and a bad segment fails the same way. A failure
+   * part-way through reports how many landed rather than claiming success.
+   */
+  const addFolder = React.useCallback(
+    async (files: File[], parentId: string | null = null) => {
+      const withPaths = files.filter((file) => {
+        const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+        return Boolean(path && path.includes("/"));
+      });
+
+      if (withPaths.length === 0) {
+        // No relative paths: a browser that ignored `webkitdirectory` gave us plain
+        // files. Uploading them is the closest honest behaviour.
+        addFiles(files, parentId);
+        return;
+      }
+
+      // Segment list per folder path, so each folder is created exactly once.
+      const folders = new Map<string, { id: string | null; parentId: string | null }>();
+      const failures: string[] = [];
+
+      const ensureFolder = async (segments: string[]): Promise<string | null> => {
+        let parent: string | null = parentId;
+        let key = "";
+
+        for (const segment of segments) {
+          key = key ? `${key}/${segment}` : segment;
+          const existing = folders.get(key);
+          if (existing) {
+            parent = existing.id;
+            continue;
+          }
+
+          const result = await api.post<{ id: string }>("/api/folders", {
+            name: segment,
+            parentId: parent,
+          });
+
+          if (!result.ok) {
+            failures.push(`${segment} — ${result.message}`);
+            return null;
+          }
+
+          folders.set(key, { id: result.data.id, parentId: parent });
+          parent = result.data.id;
+        }
+
+        return parent;
+      };
+
+      const byTarget = new Map<string | null, File[]>();
+
+      for (const file of withPaths) {
+        const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? "";
+        const segments = relative.split("/").filter(Boolean);
+        // Drop the file name itself; the rest is the folder path.
+        const folderSegments = segments.slice(0, -1);
+
+        const target = await ensureFolder(folderSegments);
+        if (target === null) continue;
+
+        byTarget.set(target, [...(byTarget.get(target) ?? []), file]);
+      }
+
+      for (const [target, group] of byTarget) addFiles(group, target);
+
+      if (failures.length > 0) {
+        toast({
+          tone: "error",
+          title: "Some folders weren't created",
+          description: `${failures.slice(0, 2).join(" · ")}${failures.length > 2 ? ` · and ${failures.length - 2} more` : ""}`,
+        });
+      }
+    },
+    [addFiles, toast],
+  );
+
+
   const cancel = React.useCallback((id: string) => {
     cancelledRef.current.add(id);
     const activeXhrs = xhrsRef.current.get(id);
@@ -394,8 +490,8 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
   ).length;
 
   const value = React.useMemo(
-    () => ({ tasks, addFiles, cancel, retry, dismiss, activeCount }),
-    [tasks, addFiles, cancel, retry, dismiss, activeCount],
+    () => ({ tasks, addFiles, addFolder, cancel, retry, dismiss, activeCount }),
+    [tasks, addFiles, addFolder, cancel, retry, dismiss, activeCount],
   );
 
   return <UploadContext.Provider value={value}>{children}</UploadContext.Provider>;

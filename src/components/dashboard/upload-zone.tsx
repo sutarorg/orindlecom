@@ -16,14 +16,106 @@ import { cn } from "@/lib/utils";
  * The drag state is local here (the window-level overlay is separate) so the
  * zone itself lights up under the pointer.
  */
+/**
+ * Walk a dropped directory and produce `File` objects carrying a relative path.
+ *
+ * `FileSystemEntry` is a non-standard, callback-based API that predates promises and
+ * has no TypeScript DOM types for the read methods in all versions, so it is read
+ * defensively. Each entry's `fullPath` is rewritten onto a `webkitRelativePath` so
+ * the rest of the pipeline sees exactly what a `webkitdirectory` picker produces.
+ */
+function collectDirectory(
+  directory: FileSystemDirectoryEntry,
+  path: string,
+  out: File[],
+): Promise<void> {
+  return new Promise((resolve) => {
+    const reader = directory.createReader();
+    // `readEntries` returns at most 100 per call and signals the end with an empty
+    // batch, so it must be called repeatedly.
+    const readBatch = () => {
+      reader.readEntries(async (entries) => {
+        if (entries.length === 0) {
+          resolve();
+          return;
+        }
+
+        for (const entry of entries) {
+          if (entry.isDirectory) {
+            await collectDirectory(entry as FileSystemDirectoryEntry, `${path}/${entry.name}`, out);
+          } else {
+            const file = await new Promise<File | null>((done) => {
+              (entry as FileSystemFileEntry).file(
+                (result) => {
+                  Object.defineProperty(result, "webkitRelativePath", {
+                    value: `${path}/${entry.name}`,
+                    configurable: true,
+                  });
+                  done(result);
+                },
+                () => done(null),
+              );
+            });
+            if (file) out.push(file);
+          }
+        }
+
+        readBatch();
+      }, () => resolve());
+    };
+
+    readBatch();
+  });
+}
+
 export function UploadZone({ compact = false }: { compact?: boolean }) {
-  const { addFiles } = useUploadManager();
+  const { addFiles, addFolder } = useUploadManager();
   const [dragging, setDragging] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files?.length) return;
-    addFiles(Array.from(files));
+  /**
+   * A drop, which may be files, folders, or both.
+   *
+   * `webkitGetAsEntry` is the only way to tell a dropped folder from a dropped file:
+   * `dataTransfer.files` flattens a folder into nothing (the browser refuses to
+   * expose a directory's contents that way). So the drop is walked through the entry
+   * API first, and only falls back to the flat file list when entries are not
+   * available. Dropping a folder recreates it, the same as picking one.
+   */
+  const handleDrop = async (transfer: DataTransfer) => {
+    const items = Array.from(transfer.items ?? []);
+
+    const entries = items
+      .map((item) =>
+        (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null })
+          .webkitGetAsEntry?.(),
+      )
+      .filter((entry): entry is FileSystemEntry => Boolean(entry));
+
+    if (entries.length === 0) {
+      addFiles(Array.from(transfer.files));
+      return;
+    }
+
+    const directoryEntries = entries.filter((entry) => entry.isDirectory);
+
+    if (directoryEntries.length === 0) {
+      addFiles(Array.from(transfer.files));
+      return;
+    }
+
+    // Build File objects with a synthetic relative path so `addFolder` can rebuild
+    // the tree. Reading must happen inside the drop's user activation window, which
+    // is why this collects rather than streams.
+    const collected: File[] = [];
+    for (const entry of directoryEntries) {
+      await collectDirectory(entry as FileSystemDirectoryEntry, entry.name, collected);
+    }
+
+    // Any loose files dropped alongside the folders still upload, at the top level.
+    const looseFiles = Array.from(transfer.files).filter((file) => !file.webkitRelativePath);
+    if (collected.length > 0) await addFolder(collected);
+    if (looseFiles.length > 0) addFiles(looseFiles);
   };
 
   return (
@@ -34,7 +126,8 @@ export function UploadZone({ compact = false }: { compact?: boolean }) {
         multiple
         className="hidden"
         onChange={(event) => {
-          handleFiles(event.target.files);
+          const files = Array.from(event.target.files ?? []);
+          if (files.length) addFiles(files);
           event.target.value = "";
         }}
       />
@@ -49,7 +142,7 @@ export function UploadZone({ compact = false }: { compact?: boolean }) {
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
-          handleFiles(event.dataTransfer.files);
+          void handleDrop(event.dataTransfer);
         }}
         className={cn(
           "group flex w-full items-center justify-center rounded-xl border-2 border-dashed transition-colors",

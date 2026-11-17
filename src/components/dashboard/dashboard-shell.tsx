@@ -236,7 +236,7 @@ function ShellInner({
           />
           {/* Bottom padding on small screens keeps the last row of content
               clear of the floating upload button. */}
-          <main id="dashboard-main" className="min-w-0 flex-1 pb-24 lg:pb-0">
+          <main id="dashboard-main" className="flex min-w-0 flex-1 flex-col pb-24 lg:pb-0">
             {/*
               * Suspense is mandatory here, not cosmetic.
               *

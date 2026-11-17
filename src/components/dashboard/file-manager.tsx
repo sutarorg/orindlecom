@@ -600,6 +600,7 @@ function FileManagerInner({
           items={items}
           onOpen={openItem}
           onContext={(item, anchor) => setContext({ item, anchor })}
+          onRowAction={handleRowAction}
           selectable
         />
       )}
