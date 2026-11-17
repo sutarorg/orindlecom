@@ -12,12 +12,23 @@ import type { DriveItem, ListQuery, SortDirection, SortKey } from "@/lib/drive/t
  * toolbar, the content grid and the selection bar all read the same state and
  * threading it through would make every intermediate component care.
  *
- * Selection semantics follow the conventions people already have from file
- * managers:
- *   - Plain click selects one item and clears the rest.
- *   - Ctrl/Cmd-click toggles.
+ * Selection is an explicit mode, not something a click does by accident.
+ *
+ * Clicking a file opens it. Clicking a folder opens it. Neither selects, because
+ * in this product the click is the primary action — you are here to look at your
+ * files, not to build a selection. Selection begins from the three-dot menu
+ * ("Select"), and once it has begun, clicking items toggles them, so building a
+ * multi-file selection is a run of clicks with no modifier keys.
+ *
+ * That is why the mode has to be visible: if clicking sometimes opens and
+ * sometimes selects, the only honest thing to do is say which one is live. The
+ * bar at the top of the list is that statement, and it disappears the moment the
+ * selection is cleared.
+ *
+ * Within select mode the modifiers still work as people expect:
+ *   - Click toggles one item.
  *   - Shift-click extends from the anchor within the current ordering.
- *   - Escape clears; Ctrl/Cmd-A selects all visible.
+ *   - Escape clears (and leaves the mode); Ctrl/Cmd-A selects all visible.
  */
 
 export type ViewMode = "grid" | "list";
@@ -43,9 +54,14 @@ interface DriveState {
   setSearch: (value: string) => void;
 
   selected: Set<string>;
+  /** True while clicks pick items instead of opening them. */
+  selectMode: boolean;
+  /** Enter select mode, optionally selecting one item on the way in. */
+  beginSelection: (id?: string) => void;
+  /** Leave select mode and drop the selection. */
+  clearSelection: () => void;
   select: (id: string, options?: { additive?: boolean; range?: boolean }) => void;
   selectAll: () => void;
-  clearSelection: () => void;
   isSelected: (id: string) => boolean;
 
   /** Item currently shown in the preview panel, if any. */
@@ -108,6 +124,7 @@ export function DriveProvider({
   const [categories, setCategories] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = React.useState(false);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
   const anchorRef = React.useRef<string | null>(null);
 
@@ -196,11 +213,26 @@ export function DriveProvider({
     [visible],
   );
 
-  const selectAll = React.useCallback(() => {
-    setSelected(new Set(visible.map((item) => item.id)));
-  }, [visible]);
+  const selectAll = React.useCallback(() => setSelected(new Set(visible.map((item) => item.id))), [visible]);
 
-  const clearSelection = React.useCallback(() => setSelected(new Set()), []);
+  const beginSelection = React.useCallback((id?: string) => {
+    setSelectMode(true);
+    if (id) {
+      anchorRef.current = id;
+      setSelected(new Set([id]));
+    }
+  }, []);
+
+  /*
+   * Leaving select mode and emptying the selection are one operation, because they
+   * are one experience: the bar goes away and clicking opens again. Splitting them
+   * would let the app sit in select mode with nothing selected, which looks like a
+   * broken file manager.
+   */
+  const clearSelection = React.useCallback(() => {
+    setSelected(new Set());
+    setSelectMode(false);
+  }, []);
   const isSelected = React.useCallback((id: string) => selected.has(id), [selected]);
 
   // Keyboard: Escape clears selection, Ctrl/Cmd-A selects the visible list.
@@ -234,6 +266,16 @@ export function DriveProvider({
     if (previewId && !visible.some((item) => item.id === previewId)) setPreviewId(null);
   }, [visible, previewId]);
 
+  /*
+   * A selection that has been emptied from underneath us — the last selected item
+   * was deleted, or a filter hid them — must not leave the bar up. Otherwise the
+   * bar reads "0 selected" over an empty list, which is the visual version of a
+   * stale pointer.
+   */
+  React.useEffect(() => {
+    if (selectMode && selected.size === 0) clearSelection();
+  }, [selectMode, selected.size, clearSelection]);
+
   const value: DriveState = {
     items: visible,
     isLoading: false,
@@ -249,6 +291,8 @@ export function DriveProvider({
     search,
     setSearch,
     selected,
+    selectMode,
+    beginSelection,
     select,
     selectAll,
     clearSelection,

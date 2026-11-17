@@ -53,6 +53,7 @@ export function createEmptyDriveRepository(): DriveRepository {
     rename: async () => notConnected(),
     move: async () => notConnected(),
     toggleStar: async () => notConnected(),
+    toggleStarMany: async () => notConnected(),
 
     trash: async () => notConnected(),
     restore: async () => notConnected(),

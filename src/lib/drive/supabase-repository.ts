@@ -625,6 +625,53 @@ export function createSupabaseDriveRepository(): DriveRepository {
       return { ok: true, data: folderToItem(folder.data as FolderRow) };
     },
 
+    async toggleStarMany({ ids, starred }): Promise<DriveResult<DriveItem[]>> {
+      const c = await ctx();
+      if (!c.ok) return c.result;
+      if (ids.length === 0) return { ok: true, data: [] };
+
+      /*
+       * Two statements, not two per id.
+       *
+       * The selection bar starred a whole selection by issuing one PATCH per item,
+       * so a twenty-file selection was twenty sequential round trips — and each one
+       * had to read its row back through `files_select`, which is the same
+       * `returning` trap as everywhere else in this file. `in (...)` sets them all
+       * in one statement.
+       *
+       * Folders go through `set_folder_star` one at a time *only* because there is
+       * no array form and folder stars are far rarer than file stars — but they are
+       * still issued concurrently rather than in a chain, so the wall time is the
+       * slowest one rather than their sum.
+       */
+      const files = await c.supabase
+        .from("files")
+        .update({ starred })
+        .in("id", ids)
+        .eq("owner_id", c.actor.userId)
+        .select();
+
+      if (files.error) return toDriveError(files.error);
+
+      const updated = (files.data ?? []).map((row) => fileToItem(row as FileRow));
+      const done = new Set(updated.map((item) => item.id));
+      const remaining = ids.filter((id) => !done.has(id));
+
+      if (remaining.length > 0) {
+        const folders = await Promise.all(
+          remaining.map((id) => c.supabase.rpc("set_folder_star", { p_folder: id, p_starred: starred })),
+        );
+        for (const folder of folders) {
+          // A miss here means the id was neither a file nor a folder this caller
+          // owns. That is not worth failing the whole batch over — the count the
+          // caller sees comes from what actually changed.
+          if (!folder.error && folder.data) updated.push(folderToItem(folder.data as FolderRow));
+        }
+      }
+
+      return { ok: true, data: updated };
+    },
+
     /* ── Trash ───────────────────────────────────────────────────────── */
 
     async trash({ ids }): Promise<DriveResult<DriveItem[]>> {

@@ -247,6 +247,30 @@ export async function headObject(key: string): Promise<{ size: number; contentTy
   }
 }
 
+/**
+ * Replace an object's bytes directly.
+ *
+ * Only used by the public edit path, where the new body is small (a text file) and
+ * already in memory. Ordinary uploads never come through here — they are presigned
+ * PUTs straight from the browser to R2, so a large file does not pass through a
+ * function with a request-size limit.
+ */
+export async function putObject(
+  key: string,
+  body: Buffer | Uint8Array,
+  options: { contentType?: string } = {},
+) {
+  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+  await s3().send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: options.contentType ?? "application/octet-stream",
+    }),
+  );
+}
+
 export async function deleteObject(key: string) {
   await s3().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 }

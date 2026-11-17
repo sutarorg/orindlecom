@@ -36,7 +36,17 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
   // The URL the server returned, if a link has been created. Null until then —
   // there is nothing to show before the backend has agreed one exists.
   const [linkUrl, setLinkUrl] = React.useState<string | null>(null);
+  /*
+   * The link's permission is its own state.
+   *
+   * It used to share `permission` with the invite form, so choosing "Can edit" for
+   * an email also silently changed what the public link allowed — and that change
+   * was only ever local, because nothing wrote it back.
+   */
+  const [linkPermission, setLinkPermission] = React.useState<PermissionLevel>("viewer");
   const [copied, setCopied] = React.useState(false);
+  /** Set when an invitation was created but the email could not be sent. */
+  const [inviteUrl, setInviteUrl] = React.useState<string | null>(null);
   const emailId = React.useId();
 
   React.useEffect(() => {
@@ -48,6 +58,8 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
       setCopied(false);
       setLinkEnabled(false);
       setLinkUrl(null);
+      setLinkPermission("viewer");
+      setInviteUrl(null);
     }
   }, [item]);
 
@@ -67,6 +79,37 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
   React.useEffect(() => {
     if (item) void loadGrants(item.id);
   }, [item, loadGrants]);
+
+  /**
+   * Load the link that already exists, if any.
+   *
+   * Without this the dialog opened claiming "Link sharing is off" for a file that
+   * already had a public link, and the first Copy press created a *second* link
+   * while the original kept working. The link is server state, so it is read from
+   * the server rather than assumed from this session.
+   */
+  React.useEffect(() => {
+    if (!item) return;
+    let active = true;
+
+    void api
+      .get<{ url: string | null; permission: PermissionLevel; enabled: boolean } | null>(
+        `/api/files/${item.id}/link`,
+      )
+      .then((result) => {
+        if (!active || !result.ok) return;
+        const link = result.data;
+        if (link?.enabled && link.url) {
+          setLinkEnabled(true);
+          setLinkUrl(new URL(link.url, window.location.origin).toString());
+          setLinkPermission(link.permission);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [item]);
 
   const revokeGrant = async (grantId: string) => {
     const result = await api.del(`/api/grants/${grantId}`);
@@ -102,70 +145,167 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
     }
     setPending(true);
 
-    const result = await api.post<{ email: string; permission: PermissionLevel }>(
-      `/api/files/${item.id}/grants`,
-      { email: email.trim().toLowerCase(), permission },
-    );
+    const result = await api.post<{
+      email: string;
+      permission: PermissionLevel;
+      invited: boolean;
+      delivered: boolean;
+      inviteUrl: string | null;
+      expiresAt: string;
+    }>(`/api/files/${item.id}/grants`, { email: email.trim().toLowerCase(), permission });
 
     setPending(false);
 
     if (!result.ok) {
-      // An address with no account is a real, actionable answer — offer the link
-      // flow instead of leaving them stuck.
       setError(result.message);
       return;
     }
 
     setEmail("");
-    // Only claim an email was sent if the backend said the grant exists. Whether a
-    // notification was delivered is a separate fact and is not claimed here.
-    toast({
-      tone: "success",
-      title: "Access granted",
-      description: `${result.data.email} can now ${
-        result.data.permission === "editor" ? "edit" : "view"
-      } this item.`,
-    });
-  };
+    void loadGrants(item.id);
 
-  const copyLink = async () => {
-    setPending(true);
-
-    // A link only exists once the server has created one. Copying a constructed URL
-    // to the clipboard would put a dead address in someone's message, so the URL
-    // comes from the response or nothing is copied.
-    const created = await api.put<{ url: string; enabled: boolean }>(
-      `/api/files/${item.id}/link`,
-      { permission },
-    );
-
-    if (!created.ok || !created.data.enabled) {
-      setPending(false);
+    /*
+     * An address with no account is no longer an error — it becomes an invitation.
+     * What is reported depends on what actually happened: if the mail provider is
+     * not configured, saying "invitation sent" would be a lie, so the link is shown
+     * for the owner to pass on themselves.
+     */
+    if (!result.data.invited) {
       toast({
-        tone: "error",
-        title: "Link wasn't created",
-        description: created.ok ? "That link isn't active." : created.message,
+        tone: "success",
+        title: "Access granted",
+        description: `${result.data.email} can now ${PERMISSION_LABEL[result.data.permission].toLowerCase()}.`,
       });
       return;
     }
 
-    const absolute = new URL(created.data.url, window.location.origin).toString();
-    setLinkUrl(absolute);
+    if (result.data.delivered) {
+      toast({
+        tone: "success",
+        title: "Invitation sent",
+        description: `${result.data.email} will get access as soon as they open the link and sign up.`,
+      });
+      return;
+    }
 
+    setError(null as unknown as string);
+    setInviteUrl(result.data.inviteUrl);
+    toast({
+      tone: "error",
+      title: "Email wasn't sent",
+      description: "Email isn't configured, so copy the invitation link below and send it yourself.",
+    });
+  };
+
+  /**
+   * Create the link, or re-show the one that exists.
+   *
+   * "Copy" on a live link must copy it — not mint a second one. Only when there is
+   * no link does this create one, and the URL that is copied is the one the server
+   * returned, never a client-side guess: a constructed URL could point at a token
+   * that was never issued, which is how a dead link ends up in someone's inbox.
+   */
+  const copyLink = async () => {
+    setPending(true);
+
+    if (!linkUrl) {
+      const created = await api.put<{ url: string | null; enabled: boolean }>(
+        `/api/files/${item.id}/link`,
+        { permission: linkPermission },
+      );
+
+      if (!created.ok || !created.data.enabled || !created.data.url) {
+        setPending(false);
+        toast({
+          tone: "error",
+          title: "Link wasn't created",
+          description: created.ok ? "That link isn't active." : created.message,
+        });
+        return;
+      }
+
+      const absolute = new URL(created.data.url, window.location.origin).toString();
+      setLinkUrl(absolute);
+      setLinkEnabled(true);
+      await writeToClipboard(absolute);
+      setPending(false);
+      return;
+    }
+
+    await writeToClipboard(linkUrl);
+    setPending(false);
+  };
+
+  const writeToClipboard = async (value: string) => {
     try {
-      await navigator.clipboard.writeText(absolute);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
+      // The tick is confirmation, not decoration: it reverts, so a second copy
+      // press is visibly a new action rather than a no-op on a stale checkmark.
+      window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      // The clipboard API needs a secure context and permission. The link is on
-      // screen either way, so say so rather than pretending the copy worked.
+      // Clipboard access needs a secure context and permission. The link is on
+      // screen either way, so say so rather than claiming the copy worked.
       toast({
         tone: "error",
         title: "Couldn't copy automatically",
-        description: "Select the link shown and copy it manually.",
+        description: "The link is shown below — select it and copy it manually.",
       });
     }
+  };
 
+  /**
+   * Turn link sharing off.
+   *
+   * This has to revoke the link on the server. It used to only flip local state, so
+   * the link kept working for anyone who already had it — the dialog said "off"
+   * while the URL was still live, which is the worst possible answer: it tells the
+   * owner their file is private when it is not.
+   */
+  const disableLink = async () => {
+    setPending(true);
+    const result = await api.del(`/api/files/${item.id}/link`);
     setPending(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "The link is still active", description: result.message });
+      return;
+    }
+
+    setLinkEnabled(false);
+    setLinkUrl(null);
+    setCopied(false);
+    toast({ tone: "success", title: "Link turned off", description: "The old URL no longer opens." });
+  };
+
+  /**
+   * Change what the link allows.
+   *
+   * Writes the new permission to the existing link, so the public page changes for
+   * everyone immediately. Choosing a level and having it apply only to a link you
+   * create later is not a setting, it is a note to self.
+   */
+  const changeLinkPermission = async (level: PermissionLevel) => {
+    const previous = linkPermission;
+    setLinkPermission(level);
+
+    const result = await api.put<{ url: string | null; enabled: boolean }>(
+      `/api/files/${item.id}/link`,
+      { permission: level },
+    );
+
+    if (!result.ok || !result.data.enabled) {
+      // Put the selector back rather than leaving it showing a level the server
+      // refused.
+      setLinkPermission(previous);
+      toast({ tone: "error", title: "That change wasn't saved", description: result.ok ? undefined : result.message });
+      return;
+    }
+
+    if (result.data.url) {
+      setLinkUrl(new URL(result.data.url, window.location.origin).toString());
+    }
+    setCopied(false);
   };
 
   return (
@@ -244,6 +384,19 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
         ) : (
           <p className="mt-1.5 text-[11px] text-text-subtle">{PERMISSION_DESCRIPTION[permission]}</p>
         )}
+
+        {inviteUrl && (
+          <div className="mt-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-canvas)] p-2">
+            <p className="text-[11px] font-medium text-text-muted">Invitation link</p>
+            <input
+              readOnly
+              value={inviteUrl}
+              aria-label="Invitation link"
+              onFocus={(event) => event.currentTarget.select()}
+              className="mt-1 w-full rounded border border-[var(--brand-border)] bg-white px-1.5 py-1 font-mono text-[10.5px] text-text-muted focus:outline-none"
+            />
+          </div>
+        )}
       </form>
 
       {/* People with access */}
@@ -312,14 +465,14 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
             <p className="text-[12px] font-semibold text-ink">Anyone with the link</p>
             <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
               {linkEnabled
-                ? `${PERMISSION_LABEL[permission].toLowerCase()} — anyone with the link can open it.`
+                ? `${PERMISSION_LABEL[linkPermission]} — anyone with the link can open it.`
                 : "Link sharing is off. Only people you invite can open this."}
             </p>
             {linkEnabled && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <select
-                  value={permission}
-                  onChange={(event) => setPermission(event.target.value as PermissionLevel)}
+                  value={linkPermission}
+                  onChange={(event) => void changeLinkPermission(event.target.value as PermissionLevel)}
                   aria-label="Link permission level"
                   className="h-7 rounded-md border border-[var(--brand-border-strong)] bg-white px-1.5 text-[11px] font-medium text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-[rgba(49,120,251,0.16)]"
                 >
@@ -358,7 +511,8 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
               </button>
               <button
                 type="button"
-                onClick={() => setLinkEnabled(false)}
+                onClick={() => void disableLink()}
+                disabled={pending}
                 aria-label="Turn off link sharing"
                 className="flex h-7 w-7 items-center justify-center rounded-md text-text-subtle transition-colors hover:bg-[var(--brand-surface-muted)] hover:text-[#C93B2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
@@ -368,11 +522,12 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
           ) : (
             <button
               type="button"
-              onClick={() => setLinkEnabled(true)}
-              className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--brand-border-strong)] bg-white px-2 text-[11px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              onClick={() => void copyLink()}
+              disabled={pending}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--brand-border-strong)] bg-white px-2 text-[11px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
             >
               <Globe className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-              Turn on
+              Create link
             </button>
           )}
         </div>

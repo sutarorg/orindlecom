@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import {
+  Archive,
   ChevronLeft,
   ChevronRight,
   Download,
   ExternalLink,
+  File,
   FileQuestion,
   Loader2,
   Share2,
@@ -18,6 +20,13 @@ import type { DriveItem } from "@/lib/drive/types";
 import { FileTypeIcon } from "./file-icon";
 import { cn } from "@/lib/utils";
 
+/**
+ * Everything with a preview.
+ *
+ * Archives are on the list because a zip *can* be previewed sensibly — not by
+ * unpacking it, but by showing what is inside, which is exactly what you want to
+ * know before downloading one. Everything else here renders natively.
+ */
 const PREVIEWABLE = new Set<DriveItem["category"]>([
   "image",
   "video",
@@ -25,6 +34,7 @@ const PREVIEWABLE = new Set<DriveItem["category"]>([
   "pdf",
   "text",
   "code",
+  "archive",
 ]);
 
 /**
@@ -242,10 +252,116 @@ export function PreviewPanel({
   );
 }
 
+/**
+ * What is inside an archive.
+ *
+ * Reads the central directory only — the index at the end of the file — so a 2 GB
+ * zip lists in the time it takes to fetch its tail, and nothing is inflated. This
+ * is a listing, not an extraction: opening an archive to *browse* it is a different
+ * feature, and pretending otherwise would mean unpacking untrusted files on a
+ * server for a preview.
+ *
+ * ZIP only. RAR, 7z and tar are recognised and honestly reported as unlistable in
+ * the browser rather than shown as an empty box.
+ */
+interface ArchiveEntry {
+  name: string;
+  size: number;
+  directory: boolean;
+}
+
+function readArchiveIndex(buffer: Uint8Array): ArchiveEntry[] | null {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+  const findEocd = () => {
+    const earliest = Math.max(0, buffer.length - 0xffff - 22);
+    for (let offset = buffer.length - 22; offset >= earliest; offset -= 1) {
+      if (view.getUint32(offset, true) === 0x06054b50) return offset;
+    }
+    return -1;
+  };
+
+  const eocd = findEocd();
+  if (eocd < 0) return null;
+
+  const count = view.getUint16(eocd + 10, true);
+  let offset = view.getUint32(eocd + 16, true);
+  const entries: ArchiveEntry[] = [];
+
+  for (let i = 0; i < count && entries.length < 500; i += 1) {
+    if (offset + 46 > buffer.length) break;
+    if (view.getUint32(offset, true) !== 0x02014b50) break;
+
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const uncompressed = view.getUint32(offset + 24, true);
+    const name = new TextDecoder().decode(buffer.subarray(offset + 46, offset + 46 + nameLength));
+
+    if (name) {
+      entries.push({ name, size: uncompressed, directory: name.endsWith("/") });
+    }
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+
+  return entries;
+}
+
+function ArchiveStage({ entries, name }: { entries: ArchiveEntry[] | null; name: string }) {
+  if (entries === null) {
+    return (
+      <div className="flex flex-col items-center px-6 text-center">
+        <Archive className="h-9 w-9 text-text-subtle" strokeWidth={1.6} aria-hidden />
+        <p className="mt-3 text-[13px] font-semibold text-ink">Archive contents</p>
+        <p className="mt-1.5 max-w-[300px] text-[12px] leading-relaxed text-text-muted">
+          This archive&apos;s index can&apos;t be read in the browser. Download {name} to open it —
+          it is unchanged and complete.
+        </p>
+      </div>
+    );
+  }
+
+  const files = entries.filter((entry) => !entry.directory);
+
+  return (
+    <div className="flex h-full w-full flex-col rounded-lg bg-white">
+      <div className="flex items-center justify-between border-b border-[var(--brand-border-soft)] px-3 py-2">
+        <span className="text-[11.5px] font-semibold text-ink">
+          {files.length} {files.length === 1 ? "file" : "files"}
+        </span>
+        <span className="text-[10.5px] text-text-subtle">
+          {formatBytes(files.reduce((sum, entry) => sum + entry.size, 0))} uncompressed
+        </span>
+      </div>
+      {files.length === 0 ? (
+        <p className="px-3 py-4 text-[12px] text-text-subtle">This archive has no files in it.</p>
+      ) : (
+        <ul className="min-h-0 flex-1 overflow-auto py-1">
+          {files.map((entry) => (
+            <li
+              key={entry.name}
+              className="flex items-center gap-2 px-3 py-1 text-[11.5px] text-text"
+            >
+              <File className="h-3 w-3 shrink-0 text-text-subtle" strokeWidth={2} aria-hidden />
+              <span className="truncate" title={entry.name}>
+                {entry.name}
+              </span>
+              <span className="ml-auto shrink-0 tabular-nums text-[10.5px] text-text-subtle">
+                {formatBytes(entry.size)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function PreviewStage({ item }: { item: DriveItem }) {
   const canPreview = PREVIEWABLE.has(item.category);
   const [source, setSource] = React.useState<string | null>(null);
   const [textBody, setTextBody] = React.useState<string | null>(null);
+  const [archiveEntries, setArchiveEntries] = React.useState<ArchiveEntry[] | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
@@ -253,6 +369,7 @@ function PreviewStage({ item }: { item: DriveItem }) {
     let active = true;
     setSource(null);
     setTextBody(null);
+    setArchiveEntries(null);
     setErrorMessage(null);
 
     if (!canPreview) return;
@@ -284,6 +401,24 @@ function PreviewStage({ item }: { item: DriveItem }) {
           }
         } catch {
           if (active) setErrorMessage("Could not load text preview. Download the file instead.");
+        }
+      }
+
+      /*
+       * An archive is fetched as bytes and listed, not unpacked. Listing is done
+       * here rather than server-side because the signed URL is already in hand and
+       * the central directory is at the end of the file — one range-ish read, no
+       * extra request, and nothing is ever written to disk.
+       */
+      if (item.category === "archive") {
+        try {
+          const response = await fetch(url);
+          if (active && response.ok) {
+            const buffer = new Uint8Array(await response.arrayBuffer());
+            setArchiveEntries(readArchiveIndex(buffer));
+          }
+        } catch {
+          if (active) setErrorMessage("Could not read the archive listing. Download it to open it.");
         }
       }
 
@@ -345,6 +480,8 @@ function PreviewStage({ item }: { item: DriveItem }) {
       return <audio src={source} controls className="w-full" />;
     case "pdf":
       return <iframe src={source} title={item.name} className="h-full w-full rounded-lg border-0" />;
+    case "archive":
+      return <ArchiveStage entries={archiveEntries} name={item.name} />;
     case "text":
     case "code":
       return (

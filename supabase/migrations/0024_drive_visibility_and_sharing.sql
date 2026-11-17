@@ -555,3 +555,59 @@ $$;
 -- Anonymous visitors must be able to resolve a link to a file. That is what a
 -- share link is. Nothing else is granted to them by this function.
 grant execute on function public.resolve_share_link(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 11. Comments, so "can comment" is a permission and not a word in a dropdown.
+--
+-- The link permission model already had three levels, but only two of them did
+-- anything: viewer and editor differ in whether a file can be written, and
+-- commenter differed in nothing at all, because there was nowhere for a comment to
+-- go. A permission that grants no capability is a label.
+--
+-- Comments are on files only. A comment on a folder would have to answer "which
+-- file in it", and the honest answer is that a folder is a container, not a thing
+-- you annotate.
+-- ---------------------------------------------------------------------------
+create table if not exists public.file_comments (
+  id          uuid primary key default gen_random_uuid(),
+  file_id     uuid not null references public.files(id) on delete cascade,
+  -- Always null for an anonymous visitor on a public link: there is no account to
+  -- attribute it to, and inventing one would misrepresent who said it.
+  author_id   uuid references auth.users(id) on delete set null,
+  author_name text not null default 'Guest',
+  body        text not null,
+  -- True when the comment came through a public link rather than from a signed-in
+  -- collaborator, so the owner can tell the two apart at a glance.
+  external    boolean not null default false,
+  resolved_at timestamptz,
+  created_at  timestamptz not null default now(),
+  constraint comment_body_length check (char_length(body) between 1 and 4000),
+  constraint comment_author_name_length check (char_length(author_name) between 1 and 120)
+);
+
+create index if not exists file_comments_file on public.file_comments (file_id, created_at desc);
+
+alter table public.file_comments enable row level security;
+
+grant select, insert, update on public.file_comments to authenticated;
+grant all on public.file_comments to service_role;
+
+-- Anyone who can read the file can read its comments: reading the discussion of a
+-- document you cannot open would leak its contents through the questions asked
+-- about it.
+create policy comments_select_by_access on public.file_comments
+  for select to authenticated
+  using (public.has_file_access(file_id, auth.uid()));
+
+-- The author writes their own, and only with their own id. A signed-in collaborator
+-- cannot post as somebody else.
+create policy comments_insert_own on public.file_comments
+  for insert to authenticated
+  with check (author_id = auth.uid() and public.has_file_access(file_id, auth.uid()));
+
+create policy comments_resolve_owner on public.file_comments
+  for update to authenticated
+  using (public.has_file_access(file_id, auth.uid()) and (author_id = auth.uid() or public.can_administer_org(
+    (select organization_id from public.files where id = file_id), auth.uid()
+  )))
+  with check (public.has_file_access(file_id, auth.uid()));
