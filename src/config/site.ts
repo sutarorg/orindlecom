@@ -7,10 +7,15 @@ export const SITE = {
   supportEmail: "tejassutar.business@gmail.com",
 } as const;
 
+/*
+ * `/business` is the signed-in team workspace, so the public marketing link points
+ * at `/teams`. Pointing the nav at `/business` would send anonymous visitors into
+ * the app shell, which redirects them to login.
+ */
 export const PRIMARY_NAV = [
   { label: "Features", href: "/features" },
   { label: "Pricing", href: "/pricing" },
-  { label: "Business", href: "/business" },
+  { label: "Teams", href: "/teams" },
   { label: "Blog", href: "/blog" },
   { label: "About", href: "/about" },
 ] as const;
@@ -21,14 +26,14 @@ export const FOOTER_NAV = [
     links: [
       { label: "Features", href: "/features" },
       { label: "Pricing", href: "/pricing" },
-      { label: "Business", href: "/business" },
+      { label: "Teams", href: "/teams" },
     ],
   },
   {
     title: "Company",
     links: [
       { label: "About", href: "/about" },
-      { label: "Business", href: "/business" },
+      { label: "Teams", href: "/teams" },
       { label: "Blog", href: "/blog" },
       { label: "Contact", href: "/contact" },
     ],

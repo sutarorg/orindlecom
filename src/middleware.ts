@@ -32,7 +32,15 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "
  * line exists so the *anonymous* case produces a sensible redirect, and nothing
  * more.
  */
-const PROTECTED_PREFIXES = ["/dashboard", "/account", "/admin"];
+/*
+ * `/business` is the team workspace (it used to live under `/dashboard/business`).
+ * It must be listed here in its own right: the move took it out from under the
+ * `/dashboard` prefix, and while the page itself calls the auth service, middleware
+ * is what turns an anonymous visit into a login redirect instead of an empty shell.
+ * This is a coarse gate only — every business route and `/api/organizations/*`
+ * still authorizes the actor on the server.
+ */
+const PROTECTED_PREFIXES = ["/dashboard", "/account", "/admin", "/business"];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(

@@ -97,6 +97,12 @@ export function BillingToggle({
  * Displays the visitor's location-determined currency. Deliberately read-only:
  * currency is derived automatically from the user's location and cannot be
  * manually changed.
+ *
+ * Only the symbol is shown. The code beside it ("₹ INR") labelled a fact the
+ * prices already state — every amount on the page carries the symbol — and the
+ * pair read as a control even though nothing could be changed. Assistive
+ * technology still gets the full name and code from the label, so a screen-reader
+ * user is not left guessing which currency they are looking at.
  */
 export function CurrencyBadge({
   currency,
@@ -108,7 +114,9 @@ export function CurrencyBadge({
   const meta = currencyMeta(currency);
   return (
     <span
+      role="img"
       aria-label={`Prices shown in ${meta.label} (${meta.code}) based on your location`}
+      title={`Prices shown in ${meta.label} (${meta.code})`}
       className={cn(
         "inline-flex h-[34px] items-center gap-1.5 rounded-full border border-[var(--brand-border)] bg-[var(--brand-canvas)] px-3 text-[11.5px] font-semibold leading-none text-text-muted",
         className,
@@ -116,7 +124,6 @@ export function CurrencyBadge({
     >
       <Globe className="h-3.5 w-3.5 text-text-subtle" strokeWidth={2} aria-hidden="true" />
       <span className="text-ink">{meta.symbol.trim()}</span>
-      <span className="text-ink">{meta.code}</span>
     </span>
   );
 }
@@ -124,14 +131,13 @@ export function CurrencyBadge({
 /** Honest notice shown whenever a currency has no approved price table. */
 export function CurrencyNotice({ currency }: { currency: CurrencyCode }) {
   if (isCurrencyPublished(currency)) return null;
-  const meta = currencyMeta(currency);
   return (
     <p
       role="status"
       className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[var(--brand-surface-muted)] px-3 py-1.5 text-[11.5px] text-text-muted"
     >
       <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#F9A53B]" />
-      {meta.code} pricing is being finalised. Amounts below are shown for reference only.
+      Pricing for your region is being finalised. Amounts below are shown for reference only.
     </p>
   );
 }

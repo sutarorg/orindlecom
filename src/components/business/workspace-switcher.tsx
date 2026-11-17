@@ -34,7 +34,7 @@ export function WorkspaceSwitcher({
   const [open, setOpen] = React.useState(false);
 
   const inBusiness =
-    pathname === "/dashboard/business" || pathname.startsWith("/dashboard/business/");
+    pathname === "/business" || pathname.startsWith("/business/");
 
   const orgName = organization?.shortName ?? "Your organization";
   const initials = organization?.initials ?? "OR";
@@ -119,7 +119,7 @@ export function WorkspaceSwitcher({
             shortcut: inBusiness ? "Current" : undefined,
             onSelect: () => {
               setOpen(false);
-              router.push("/dashboard/business");
+              router.push("/business");
             },
           },
         ]}

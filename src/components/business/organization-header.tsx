@@ -142,7 +142,7 @@ export function OrganizationHeader({
             icon: Users,
             onSelect: () => {
               setOpen(false);
-              router.push("/dashboard/business/settings");
+              router.push("/business/settings");
             },
           },
           {

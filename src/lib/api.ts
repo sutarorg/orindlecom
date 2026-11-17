@@ -46,7 +46,22 @@ export async function handle(fn: () => Promise<NextResponse>): Promise<NextRespo
   try {
     return await fn();
   } catch (error) {
-    if (error instanceof AppError) return error.toJSON() as unknown as NextResponse;
+    if (error instanceof AppError) {
+      /*
+       * This used to be `error.toJSON() as unknown as NextResponse`. That cast was
+       * the bug: `toJSON` returns a plain object, and a route handler that returns a
+       * plain object does not produce a response — Next throws while serialising it,
+       * and the browser gets a 500 with an HTML body instead of the JSON envelope.
+       *
+       * The effect was that *every* handled failure in any route using `handle()`
+       * (validation, conflict, not-found, quota) surfaced to the client as
+       * "The server sent an unexpected response. Nothing was changed." — which is
+       * exactly what creating a folder reported when its name was rejected, or when
+       * it collided with an existing folder. The specific, actionable message was
+       * being computed and then discarded by the type assertion.
+       */
+      return NextResponse.json(error.toJSON(), { status: error.status });
+    }
 
     const message = error instanceof Error ? error.message : String(error);
     console.error("[api] unhandled", { message });

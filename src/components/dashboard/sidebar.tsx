@@ -225,7 +225,7 @@ export function Sidebar({
       >
         {usage && !collapsed && (
           <Link
-            href={inBusiness ? "/dashboard/business/storage" : "/dashboard/storage"}
+            href={inBusiness ? "/business/storage" : "/dashboard/storage"}
             className="group block rounded-xl border border-[var(--brand-border-soft)] bg-[var(--brand-canvas)] p-3 transition-colors hover:border-[var(--brand-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <div className="flex items-baseline justify-between">
@@ -287,9 +287,24 @@ function isActive(pathname: string, href: string) {
 
 function NavItem({ item, active, collapsed }: { item: NavEntry; active: boolean; collapsed: boolean }) {
   const Icon = ICONS[item.icon];
+      {/*
+        Prefetch explicitly. These routes are dynamic (`force-dynamic`), and Next
+        only prefetches a dynamic route's *loading boundary* by default — there is
+        none here, so the default effectively prefetching nothing. Turning it on has
+        the server render the RSC payload when the link enters the viewport, which
+        is what makes a tab click paint from cache instead of waiting for a round
+        trip to Supabase.
+
+        It costs one background request per visible sidebar item. The sidebar is a
+        fixed list of ten, all of them plausible next clicks, and they are only
+        fetched once per session — a reasonable price for navigation that does not
+        stall. (The marketing header does the opposite: it disables prefetch because
+        those links are a guess about where an anonymous visitor might go next.)
+      */}
   return (
     <Link
       href={item.href}
+      prefetch
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
       className={cn(
@@ -337,6 +352,7 @@ function BusinessNavItem({
   return (
     <Link
       href={item.href}
+      prefetch
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
       className={cn(

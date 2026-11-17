@@ -7,7 +7,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Roles & permissions",
   description: "What each role in your organization can do.",
-  path: "/dashboard/business/permissions",
+  path: "/business/permissions",
   noIndex: true,
 });
 

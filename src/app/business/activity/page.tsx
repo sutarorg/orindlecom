@@ -7,7 +7,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Activity",
   description: "What's changed in your organization.",
-  path: "/dashboard/business/activity",
+  path: "/business/activity",
   noIndex: true,
 });
 

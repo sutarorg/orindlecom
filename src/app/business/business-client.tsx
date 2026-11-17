@@ -33,8 +33,8 @@ export function BusinessClient({
   const entry = businessEntryFor(pathname);
 
   const crumbs = entry
-    ? [{ label: "Organization", href: "/dashboard/business" }, { label: entry.label }]
-    : [{ label: "Organization", href: "/dashboard/business" }];
+    ? [{ label: "Organization", href: "/business" }, { label: entry.label }]
+    : [{ label: "Organization", href: "/business" }];
 
   return (
     <DashboardShell

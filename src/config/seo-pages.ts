@@ -146,8 +146,14 @@ export const PAGE_SEO = {
     h1: "Your files deserve thoughtful protection.",
   },
 
+  /*
+   * The team-workspace marketing page. It moved to `/teams` because `/business`
+   * is now the workspace itself (see src/app/business), and a signed-in app route
+   * must not be the canonical URL for a public marketing page — it is noindex, so
+   * the old path would have dropped out of search entirely.
+   */
   business: {
-    path: "/business",
+    path: "/teams",
     title: "Business Cloud Storage for Teams",
     description:
       "Explore business cloud storage with Orindle. Organize company files, manage team access and share folders with a cloud storage workspace built for teams.",

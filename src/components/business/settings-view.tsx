@@ -379,7 +379,7 @@ function GovernanceSection({
             </p>
           </div>
           <Link
-            href="/dashboard/business/members"
+            href="/business/members"
             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-[var(--brand-border-strong)] bg-white px-2.5 text-[11.5px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Members

@@ -92,7 +92,25 @@ function putWithProgress(
       }
     };
 
-    xhr.onerror = () => reject(new Error("Network error while uploading directly to storage."));
+    /*
+     * `onerror` fires with `status === 0` for any failure the browser refuses to
+     * describe — a blocked request, a CORS preflight rejection, DNS failure, or a
+     * dropped connection all land here identically. The old message said "network
+     * error" for all of them, which sent people to check their wifi when the usual
+     * cause is CSP or the bucket's CORS policy rejecting the origin.
+     *
+     * The message now names the origin being uploaded from, because that is the value
+     * that has to appear in the bucket's CORS `AllowedOrigins` and in the page's
+     * `connect-src`. A browser cannot tell us which of the two rejected it, so the
+     * text says what to check rather than guessing.
+     */
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          `Couldn't upload to storage from ${window.location.origin}. ` +
+            "The request was blocked or the connection dropped — check the bucket's CORS policy and this site's connect-src allow this origin.",
+        ),
+      );
     xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
 
     xhr.send(body);

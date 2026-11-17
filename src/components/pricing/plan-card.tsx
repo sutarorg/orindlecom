@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PlanIcon } from "@/components/brand/plan-icon";
 import {
-  currencyMeta,
   formatPrice,
   resolveAnnualTotal,
   resolvePrice,
@@ -47,7 +46,6 @@ export function PlanCard({
   const annualTotal = billing === "yearly" ? resolveAnnualTotal(plan, currency) : null;
   const published = price !== null;
   const isFree = published && price === 0;
-  const meta = currencyMeta(currency);
 
   return (
     <div
@@ -94,7 +92,7 @@ export function PlanCard({
                   ? "Free forever"
                   : billing === "yearly" && annualTotal !== null
                     ? `${formatPrice(annualTotal, currency)}/yr · save 20%`
-                    : `${meta.code} · billed monthly`}
+                    : "Billed monthly"}
               </p>
             </>
           ) : (
@@ -103,7 +101,7 @@ export function PlanCard({
                 Being finalised
               </p>
               <p className="mt-1.5 text-[11.5px] leading-snug text-text-subtle">
-                {meta.code} pricing not yet published
+                Pricing not yet published
               </p>
             </>
           )}

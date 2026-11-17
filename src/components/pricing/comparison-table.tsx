@@ -2,7 +2,6 @@ import { Check, Minus } from "lucide-react";
 import {
   HIGHLIGHTED_PLAN,
   PLANS,
-  currencyMeta,
   formatPrice,
   resolvePrice,
   type CurrencyCode,
@@ -32,7 +31,6 @@ const ROWS: { feature: string; get: (planId: string) => Support }[] = [
 ];
 
 export function ComparisonTable({ currency }: { currency: CurrencyCode }) {
-  const meta = currencyMeta(currency);
 
   return (
     <section className="py-12 sm:py-16 lg:py-20">
@@ -160,7 +158,7 @@ export function ComparisonTable({ currency }: { currency: CurrencyCode }) {
         </div>
 
         <p className="mt-4 text-[11.5px] text-text-subtle">
-          Monthly rates displayed in {meta.code}. Switch to Yearly above to save 20%. GST and
+          Monthly rates shown for your region. Switch to Yearly above to save 20%. GST and
           downloadable tax invoices are not currently enabled.
         </p>
       </div>

@@ -29,7 +29,30 @@ const supabaseHost = (() => {
   }
 })();
 
+/**
+ * The R2 origin that browser uploads PUT to.
+ *
+ * `R2_ENDPOINT` wins, and `R2_ACCOUNT_ID` is only the fallback — the same
+ * precedence `src/lib/r2/client.ts` uses. Deriving this from the account id alone
+ * was a real bug: a deployment that sets `R2_ENDPOINT` and not `R2_ACCOUNT_ID` (or
+ * uses a custom-domain endpoint) got the correct presigned URL from the server but a
+ * CSP with no R2 in `connect-src`. The browser then blocked the PUT, and the upload
+ * sidebar reported "Network error while uploading directly to storage" — which points
+ * at the network rather than at the specific header that caused it.
+ *
+ * Any host R2 hands back must be reachable, or every upload fails, so this mirrors
+ * the server's own resolution rather than approximating it.
+ */
 const r2Host = (() => {
+  const raw = process.env.R2_ENDPOINT?.trim();
+  if (raw) {
+    try {
+      return new URL(raw).origin;
+    } catch {
+      // A malformed endpoint is the server's problem to report, not a reason to
+      // widen CSP.
+    }
+  }
   const account = process.env.R2_ACCOUNT_ID?.trim();
   return account ? `https://${account}.r2.cloudflarestorage.com` : "";
 })();

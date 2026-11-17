@@ -69,7 +69,7 @@ export function BusinessOverview({
       description: "They get an email, you pick their role. It's how the organization becomes shared.",
       action: canInvite
         ? { label: "Invite member", onClick: () => setInviteOpen(true) }
-        : { label: "View members", href: "/dashboard/business/members" },
+        : { label: "View members", href: "/business/members" },
       icon: UserPlus,
     },
     {
@@ -77,7 +77,7 @@ export function BusinessOverview({
       done: folders.length > 0,
       title: "Create a shared folder",
       description: "One folder with one set of rules beats emailing files around.",
-      action: { label: "Shared folders", href: "/dashboard/business/folders" },
+      action: { label: "Shared folders", href: "/business/folders" },
       icon: FolderLock,
     },
     {
@@ -85,7 +85,7 @@ export function BusinessOverview({
       done: members.length > 1 && folders.length > 0,
       title: "Decide who can do what",
       description: "Three roles, each with a clear boundary. Review them before the team grows.",
-      action: { label: "See roles", href: "/dashboard/business/permissions" },
+      action: { label: "See roles", href: "/business/permissions" },
       icon: ShieldCheck,
     },
   ];
@@ -128,7 +128,7 @@ export function BusinessOverview({
               <SectionHead
                 title="Members"
                 icon={Users}
-                href="/dashboard/business/members"
+                href="/business/members"
                 meta={`${members.length} ${members.length === 1 ? "person" : "people"}`}
               />
               <ul className="divide-y divide-[var(--brand-border-soft)]">
@@ -159,7 +159,7 @@ export function BusinessOverview({
                     accepted
                   </p>
                   <Link
-                    href="/dashboard/business/members"
+                    href="/business/members"
                     className="shrink-0 rounded text-[10.5px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     Review
@@ -174,7 +174,7 @@ export function BusinessOverview({
                 <SectionHead
                   title="Recent activity"
                   icon={Activity}
-                  href="/dashboard/business/activity"
+                  href="/business/activity"
                 />
                 <div className="px-4 pb-3 pt-1">
                   <ActivityTimeline events={events.slice(0, 6)} />
@@ -188,14 +188,14 @@ export function BusinessOverview({
                 <SectionHead
                   title="Shared folders"
                   icon={FolderLock}
-                  href="/dashboard/business/folders"
+                  href="/business/folders"
                   meta={`${folders.length}`}
                 />
                 <ul className="divide-y divide-[var(--brand-border-soft)]">
                   {folders.slice(0, 4).map((folder) => (
                     <li key={folder.id}>
                       <Link
-                        href="/dashboard/business/folders"
+                        href="/business/folders"
                         className="flex items-center gap-2.5 px-4 py-2.5 transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                       >
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#EAF1FF] text-primary">
@@ -425,7 +425,7 @@ function AccessSummary({ role }: { role: BusinessRole }) {
         })}
       </ul>
       <Link
-        href="/dashboard/business/permissions"
+        href="/business/permissions"
         className="mt-2 inline-flex min-h-6 items-center gap-1 rounded text-[10.5px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         See what every role can do
