@@ -171,12 +171,29 @@ export interface AuthService {
   readonly providers: ReadonlyArray<OAuthProvider>;
 
   signUp(input: SignUpInput): Promise<AuthResult<{ user: AuthUser; needsVerification: boolean }>>;
-  signIn(input: SignInInput): Promise<AuthResult<AuthSession>>;
+  /**
+   * `needsVerification` is true when the provider returned a session for an account
+   * whose address was never confirmed. The product refuses to let such an account
+   * reach the dashboard, so the caller shows the confirm-your-email card instead.
+   */
+  signIn(input: SignInInput): Promise<AuthResult<AuthSession & { needsVerification: boolean }>>;
   signOut(): Promise<AuthResult<null>>;
   resetPassword(input: ResetPasswordInput): Promise<AuthResult<null>>;
   updatePassword(input: UpdatePasswordInput): Promise<AuthResult<null>>;
   resendVerification(input: { email: string; emailRedirectTo: string }): Promise<AuthResult<null>>;
   handleOAuthCallback(input: OAuthCallbackInput): Promise<OAuthCallbackOutcome>;
+  /**
+   * Verify an email link server-side with its token hash.
+   *
+   * Separate from `handleOAuthCallback` because it needs no PKCE code verifier: a
+   * confirmation link is routinely opened in a different browser from the one that
+   * signed up, and the code-exchange path fails there with a `flow_state` error that
+   * looks identical to an expired token.
+   */
+  verifyEmailLink(input: {
+    tokenHash: string;
+    type: "signup" | "recovery" | "invite" | "magiclink" | "email_change";
+  }): Promise<AuthResult<AuthSession>>;
   getCurrentSession(): Promise<AuthSession | null>;
   /** Returns the provider consent URL, or a failure if OAuth isn't enabled. */
   startOAuth(

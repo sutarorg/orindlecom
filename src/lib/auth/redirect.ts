@@ -6,7 +6,22 @@
  * pass through here before being used.
  */
 
-const ALLOWED_PREFIXES = ["/", "/pricing", "/features", "/dashboard", "/business"];
+/*
+ * `/auth` is on the list because of the onboarding gate: an interrupted Google
+ * signup sends the person to `/login?next=/auth/set-password`, and without this
+ * entry that `next` was silently replaced by the fallback — so the sign-in form
+ * appeared to do nothing and the Set Password screen was unreachable from a
+ * bookmarked or emailed link. These are all internal, same-origin app routes;
+ * allowing them grants an attacker nothing they could not already type.
+ */
+const ALLOWED_PREFIXES = [
+  "/",
+  "/pricing",
+  "/features",
+  "/dashboard",
+  "/business",
+  "/auth",
+];
 
 /**
  * Returns a safe same-origin path, or the fallback.

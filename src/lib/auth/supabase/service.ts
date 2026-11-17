@@ -123,6 +123,18 @@ export function createSupabaseAuthService(): AuthService {
           return failure("unknown", "Sign-in didn't complete. Please try again.");
         }
 
+        /*
+         * An account whose address was never confirmed.
+         *
+         * Supabase will hand back a session for an unconfirmed user when the project
+         * has "Confirm email" switched off, and some projects do. The product's rule
+         * does not depend on that setting: an unconfirmed address may not reach the
+         * dashboard. Reported as a distinct outcome so the caller can show the
+         * confirm-your-email card and send a fresh link, rather than either letting
+         * the account in or showing a dead end.
+         */
+        const needsVerification = !(data.user.email_confirmed_at || data.user.confirmed_at);
+
         // `remember: false` shortens the cookie to a browser-session cookie.
         // Supabase writes the auth cookies itself; this flag is information for
         // the cookie layer we control (see `auth-cookie.ts`).
@@ -132,7 +144,7 @@ export function createSupabaseAuthService(): AuthService {
 
         return {
           ok: true,
-          data: toSession(data.user, data.session.expires_at ?? null),
+          data: { ...toSession(data.user, data.session.expires_at ?? null), needsVerification },
         };
       } catch (error) {
         return mapProviderError({ message: String(error) });
@@ -249,6 +261,48 @@ export function createSupabaseAuthService(): AuthService {
         }
 
         return failure("session_missing", "That link is missing its verification code.");
+      } catch (error) {
+        return mapProviderError({ message: String(error) });
+      }
+    },
+
+    /**
+     * Verify an email link with its token hash.
+     *
+     * `verifyOtp` needs no PKCE code verifier, so this works when the link is
+     * opened on a different device from the one that signed up — which is the
+     * normal case for an email. The session it returns is written into this
+     * request's cookie jar by the existing server client, so the caller only has to
+     * redirect.
+     *
+     * Unlike `handleOAuthCallback`, a failure here really does mean the token was
+     * rejected: there is no code-exchange step that can fail for an unrelated
+     * reason. That makes `link_expired` an honest diagnosis at this point.
+     */
+    async verifyEmailLink(input: {
+      tokenHash: string;
+      type: "signup" | "recovery" | "invite" | "magiclink" | "email_change";
+    }) {
+      if (!configured) return failure("not_configured", NOT_CONFIGURED_MESSAGE);
+      try {
+        const supabase = await client();
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: input.tokenHash,
+          type: input.type,
+        });
+
+        if (error) return mapProviderError(error);
+        if (!data.user || !data.session) {
+          return failure(
+            "link_expired",
+            "That link has expired or was already used. Request a new one below.",
+          );
+        }
+
+        return {
+          ok: true,
+          data: toSession(data.user, data.session.expires_at ?? null),
+        };
       } catch (error) {
         return mapProviderError({ message: String(error) });
       }

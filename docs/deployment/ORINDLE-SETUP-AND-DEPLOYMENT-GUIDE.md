@@ -515,13 +515,23 @@ Expected verification output:
    - In **`orindle-dev`** (Dev + Preview):
      ```text
      http://localhost:3000/auth/callback
+     http://localhost:3000/auth/verify
      https://*.vercel.app/auth/callback
+     https://*.vercel.app/auth/verify
      ```
      *(Tip: Replace the wildcard with your specific Vercel Preview domain pattern once known, e.g., `https://orindlecom-*.vercel.app/auth/callback`, to keep the allowlist tight.)*
    - In **`orindle-prod`** (Production ONLY — **do NOT leave `localhost` here!**):
      ```text
      https://orindle.com/auth/callback
+     https://orindle.com/auth/verify
      ```
+   - **`/auth/verify` is not optional.** It is the server-side handler that confirms an
+     email link with `verifyOtp({ token_hash })`. Without it on the allow-list, Supabase
+     silently substitutes the Site URL, and a confirmation link lands on the marketing
+     page with a token nobody consumes. It is also what makes confirmation work when the
+     link is opened in a different browser from the one that signed up, which the old
+     PKCE `code` exchange could not do — that failure was reported as "link expired"
+     seconds after the email arrived.
 4. Click **Save**.
 
 > **Why `/auth/callback`?** Every Orindle auth flow (`signUpAction`, `resendVerificationAction`, `requestPasswordResetAction`, and `/api/auth/oauth/google/start`) redirects back through `/auth/callback`, which exchanges either `?code=...` (PKCE) or `?token_hash=...&type=...` (OTP/email confirmation/recovery).

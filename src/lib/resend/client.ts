@@ -485,11 +485,11 @@ export function renderTemplate(template: string, data: Record<string, string>): 
         subject: "Your Orindle account is scheduled for deletion",
         html: layout({
           heading: "Your account is scheduled for deletion",
-          body: `<p style="margin:0 0 10px;">Nothing has been deleted yet. Your account is now read-only and will be permanently deleted on <strong>${esc(data.purgeOn ?? "the date shown in your settings")}</strong> (after the 7-day grace period).</p>
-                 <p style="margin:0 0 10px;">Signing in before that date cancels the deletion automatically and puts everything back to normal.</p>
+          body: `<p style="margin:0 0 10px;">Nothing has been deleted yet. You have been signed out on every device, and your account and files will be permanently deleted on <strong>${esc(data.purgeOn ?? "the date shown in your settings")}</strong> (after the 7-day grace period).</p>
+                 <p style="margin:0 0 10px;">Until then your account still works normally — it is not read-only. Signing in before that date cancels the deletion automatically and puts everything back to normal.</p>
                  <p style="margin:0;">If you didn't ask for this, sign in now and change your password, then reply to this email.</p>`,
         }),
-        text: `Your Orindle account is scheduled for deletion on ${data.purgeOn ?? "the date in your settings"} (7-day grace period). Nothing has been deleted yet, and signing in before then cancels it.`,
+        text: `Your Orindle account is scheduled for deletion on ${data.purgeOn ?? "the date in your settings"} (7-day grace period). Nothing has been deleted yet and you have been signed out everywhere. Signing in before then cancels it.`,
       };
 
     case "account-deleted":
