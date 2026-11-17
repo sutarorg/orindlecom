@@ -108,8 +108,23 @@ export function PlanCard({
         </div>
       </div>
 
+      {/*
+        * `prefetch={false}` on the paid plan links.
+        *
+        * Every card pointed at a different `/signup?plan=<id>` URL, and Next
+        * prefetches each one on hover and on viewport entry. That produced six
+        * separate RSC round trips for what is the same page: the `plan` parameter
+        * only pre-selects a sentence of copy in the form, so all six responses
+        * differ by one string. On the pricing page this measured at 14 prefetch
+        * requests on first load.
+        *
+        * Prefetching the free-plan link is kept — it is the plain `/signup` route,
+        * which every one of the others would have rendered anyway, so it warms the
+        * one cache entry that actually gets reused.
+        */}
       <Link
         href={plan.id === "free" ? "/signup" : `/signup?plan=${plan.id}`}
+        prefetch={plan.id === "free"}
         className={cn(
           "mt-6 inline-flex h-11 items-center justify-center rounded-full text-[13px] font-semibold leading-none tracking-[-0.005em] transition-colors duration-150",
           highlighted

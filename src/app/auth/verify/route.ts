@@ -37,9 +37,28 @@ import { safeRedirectPath } from "@/lib/auth/redirect";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Supabase calls it `token_hash`; `token` is what the link's own query uses. */
+/**
+ * Three shapes arrive here, and all three have to work.
+ *
+ *   `token_hash`  — GoTrue's newer email template variable (`{{ .TokenHash }}`),
+ *                   and what `verifyOtp` consumes directly.
+ *   `token`       — the bare token carried inside the stock `{{ .ConfirmationURL }}`.
+ *   `code`        — what the auth server redirects with after it has already
+ *                   verified the token itself. This was the missing one: Supabase
+ *                   verifies `<site>/auth/v1/verify?token=...&redirect_to=<here>`
+ *                   and then sends the browser here with `?code=...`, so a link
+ *                   built from `{{ .ConfirmationURL }}` never carried a token at
+ *                   all. The route fell through to "no handoff" and returned
+ *                   `callback_failed` — the exact error reported.
+ *
+ * A PKCE `code` normally needs the code-verifier cookie set when the flow began.
+ * When it is absent, `exchangeCodeForSession` fails with `flow_state`, so a code is
+ * only treated as a last resort: it works for the visitor who started the flow in
+ * this browser, and the token shapes above cover everyone else.
+ */
 const HASH_PARAM = "token_hash";
 const TOKEN_PARAM = "token";
+const CODE_PARAM = "code";
 
 /**
  * The `type` values GoTrue accepts for `verifyOtp`, mapped to the ones this app
@@ -55,14 +74,11 @@ const ACCEPTED_TYPES = new Set(["signup", "email", "magiclink", "recovery", "inv
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
 
-  const tokenHash = searchParams.get(HASH_PARAM);
-  const token = searchParams.get(TOKEN_PARAM);
+  const code = searchParams.get(CODE_PARAM);
   const rawType = searchParams.get("type") ?? "signup";
   const type = ACCEPTED_TYPES.has(rawType) ? rawType : "signup";
   const next = safeRedirectPath(searchParams.get("next"));
   const errorDescription = searchParams.get("error_description");
-
-  const handoff = tokenHash ?? token;
 
   const fail = (reason: string, path = "/login") => {
     const url = new URL(path, request.nextUrl.origin);
@@ -70,36 +86,66 @@ export async function GET(request: NextRequest) {
     return noStore(NextResponse.redirect(url));
   };
 
-  if (!handoff) {
-    // An error_description here means the auth server already rejected the link
-    // (expired, already used, deleted user). That is a genuine expiry, unlike the
-    // code-exchange failures this route exists to avoid.
-    if (errorDescription) return fail("link_expired", "/verify-email");
+  /*
+   * An `error`/`error_description` first. The auth server sends these when it has
+   * already rejected the token itself (expired, already used, deleted user), which
+   * is the one case where "expired" is the true diagnosis.
+   */
+  if (errorDescription || searchParams.get("error")) {
+    return fail("link_expired", "/verify-email");
+  }
+
+  const handoff = searchParams.get(HASH_PARAM) ?? searchParams.get(TOKEN_PARAM);
+
+  if (!handoff && !code) {
     return fail("callback_failed");
   }
 
-  const outcome = await getAuthService().verifyEmailLink({
-    tokenHash: handoff,
-    // `email` is the umbrella GoTrue uses for signup + email-change confirmations.
-    type: type as "signup" | "recovery" | "invite" | "magiclink" | "email_change",
-  });
+  /*
+   * Token shapes go through `verifyOtp`, which needs no cookie and works on any
+   * device. The `code` fallback is the older PKCE exchange, kept because the auth
+   * server may hand one back on the same-browser path.
+   */
+  const outcome = handoff
+    ? await getAuthService().verifyEmailLink({
+        tokenHash: handoff,
+        // `email` is the umbrella GoTrue uses for signup + email-change confirmations.
+        type: type as "signup" | "recovery" | "invite" | "magiclink" | "email_change",
+      })
+    : await getAuthService().handleOAuthCallback({
+        code,
+        tokenHash: null,
+        tokenType: null,
+        error: null,
+      });
 
   if (!outcome.ok) {
-    switch (outcome.code) {
-      case "not_configured":
-        return fail("not_configured");
-      case "network":
-        return fail("network");
-      case "rate_limited":
-        return fail("rate_limited");
-      case "link_expired":
-        // Only now is "expired or already used" the true diagnosis: the token
-        // itself was rejected by the auth server. Send them somewhere that can
-        // issue a new one.
-        return fail("link_expired", "/verify-email");
-      default:
-        return fail("callback_failed");
-    }
+    /*
+     * Record the provider's own reason before mapping it.
+     *
+     * The previous version only rendered a generic "that link didn't work", which
+     * is indistinguishable between a rejected token, a missing PKCE verifier and a
+     * transient network failure — three problems with three different fixes. The
+     * code and message go to the log; the customer still gets a plain sentence.
+     */
+    console.error("[auth/verify] link verification failed", {
+      shape: handoff ? "token" : "code",
+      type,
+      code: outcome.code,
+      message: outcome.message,
+    });
+
+    if (outcome.code === "not_configured") return fail("not_configured");
+    if (outcome.code === "network") return fail("network", "/verify-email");
+    if (outcome.code === "rate_limited") return fail("rate_limited");
+
+    /*
+     * Every other outcome means the link could not be redeemed. `/verify-email` is
+     * the right destination for all of them because it is the only screen that can
+     * issue a replacement — landing on `/login` with "that sign-in link didn't
+     * work" left the visitor with no action except guessing.
+     */
+    return fail("link_expired", "/verify-email");
   }
 
   /*

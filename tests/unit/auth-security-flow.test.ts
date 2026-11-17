@@ -398,3 +398,51 @@ describe("account deletion", () => {
     expect(route).toContain("request_account_deletion");
   });
 });
+
+/* ── Client-side rendering boundaries ─────────────────────────────────────── */
+
+describe("useSearchParams boundaries", () => {
+  it("every component reading useSearchParams sits under a Suspense boundary", async () => {
+    /*
+     * `useSearchParams` opts its enclosing tree into client-side rendering. Next
+     * requires a Suspense boundary above it in any statically prerenderable route;
+     * without one the prerender is cancelled and the route throws at runtime,
+     * unmounting the tree. The symptom is a blank page with a correct document
+     * title, which is easy to mistake for a slow load or a CSS problem — and it is
+     * exactly what happened when the deletion banner was added to the dashboard
+     * shell without one.
+     *
+     * This asserts the pairing for the two call sites that render inside a page
+     * tree. `admin/filter-bar` is rendered inside pages that are all dynamic, and
+     * `business/create-organization-card` is already wrapped at its call site.
+     */
+    const shell = await read("src/components/dashboard/dashboard-shell.tsx");
+    expect(shell).toContain("useSearchParams");
+
+    // The boundary must wrap the component, not merely be imported.
+    expect(shell).toMatch(/<Suspense[^>]*>\s*<DeletionCancelledNotice\s*\/>/);
+  });
+
+  it("the business card is wrapped at its call site", async () => {
+    const page = await read("src/app/business/page.tsx");
+    expect(page).toMatch(/<Suspense[^>]*>[\s\S]{0,120}<CreateOrganizationCard\s*\/>/);
+  });
+});
+
+/* ── Email link shapes ────────────────────────────────────────────────────── */
+
+describe("the verify route accepts every link shape Supabase emits", () => {
+  it("handles token_hash, bare token and the PKCE code fallback", async () => {
+    /*
+     * A link built from `{{ .ConfirmationURL }}` reaches the auth server first,
+     * which verifies the token and then redirects here with `?code=...` — it never
+     * carries a token. Handling only `token_hash`/`token` meant those links fell
+     * through to `callback_failed`, which is the error that was reported.
+     */
+    const route = await read("src/app/auth/verify/route.ts");
+    expect(route).toContain('"token_hash"');
+    expect(route).toContain('"token"');
+    expect(route).toContain('"code"');
+    expect(route).toContain("handleOAuthCallback");
+  });
+});
