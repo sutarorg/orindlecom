@@ -142,30 +142,7 @@ function DirectPreview({ item, url }: { item: DriveItem; url: string }) {
   }
 
   if (item.category === "video") {
-    return (
-      <>
-        {/*
-          A frame, not a player. `#t=0.5` makes the browser seek to half a second,
-          which is past the black first frame most encoders emit, and
-          `preload="metadata"` keeps the request to the header rather than the file.
-          `pointer-events-none` means the tile's click still opens the preview.
-        */}
-        <video
-          src={`${url}#t=0.5`}
-          preload="metadata"
-          muted
-          playsInline
-          aria-hidden="true"
-          tabIndex={-1}
-          className="pointer-events-none h-full w-full object-cover"
-        />
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 backdrop-blur-[2px]">
-            <Play className="ml-0.5 h-3.5 w-3.5 fill-white text-white" aria-hidden="true" />
-          </span>
-        </span>
-      </>
-    );
+    return <VideoFrame url={url} />;
   }
 
   // PDF: page one, non-interactive so the tile opens the preview rather than
@@ -179,6 +156,56 @@ function DirectPreview({ item, url }: { item: DriveItem; url: string }) {
       loading="lazy"
       className="pointer-events-none h-full w-full border-0 bg-white"
     />
+  );
+}
+
+/**
+ * A frame from the video, and a play affordance over it.
+ *
+ * A `#t=` fragment in the URL is not enough: Chrome shows a black or empty tile
+ * unless the element actually seeks, and `preload="metadata"` alone often renders
+ * nothing at all. So the seek is explicit — set `currentTime` once the metadata
+ * arrives, which makes every browser paint that frame.
+ *
+ * Half a second rather than zero, because the first frame of most encodes is black
+ * or a fade-in. `preload="metadata"` keeps the request to the container header
+ * rather than downloading the file, so a grid of videos does not pull gigabytes.
+ * `pointer-events-none` means the tile's click still opens the preview instead of
+ * being swallowed by a player.
+ */
+function VideoFrame({ url }: { url: string }) {
+  const [ready, setReady] = React.useState(false);
+
+  return (
+    <>
+      <video
+        src={url}
+        preload="metadata"
+        muted
+        playsInline
+        aria-hidden="true"
+        tabIndex={-1}
+        onLoadedMetadata={(event) => {
+          const video = event.currentTarget;
+          // A source shorter than half a second would clamp; that is fine.
+          try {
+            if (Number.isFinite(video.duration) && video.duration > 0.5) video.currentTime = 0.5;
+          } catch {
+            // Seeking is best-effort; the poster frame is an acceptable fallback.
+          }
+        }}
+        onSeeked={() => setReady(true)}
+        className={cn(
+          "pointer-events-none h-full w-full object-cover transition-opacity",
+          ready ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 backdrop-blur-[2px]">
+          <Play className="ml-0.5 h-3.5 w-3.5 fill-white text-white" aria-hidden="true" />
+        </span>
+      </span>
+    </>
   );
 }
 

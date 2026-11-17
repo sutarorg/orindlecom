@@ -23,7 +23,8 @@
 
 import "server-only";
 
-import { handle, ok, requireUuid, withActor } from "@/lib/api";
+import { enforceRateLimit, handle, ok, requireUuid, withActor } from "@/lib/api";
+import { LIMITS, userBucket } from "@/lib/rate-limit";
 import { getDriveRepository } from "@/lib/drive/service";
 import { AppError } from "@/domain/auth/errors";
 import { documentText, plainTextOpening } from "@/lib/drive/document-text";
@@ -51,6 +52,19 @@ export async function GET(
   return handle(async () => {
     const auth = await withActor();
     if (!auth.ok) return auth.response;
+
+    /*
+     * Rate limited, but generously: a grid of sixty tiles issues sixty of these on
+     * mount, and the limit has to sit above a big folder or the lower half of the
+     * page would show nothing. It is not a security gate — `repo.get` is, and it
+     * refuses anything the caller may not read — it is a bound on a per-item
+     * endpoint that also fetches object bytes for documents.
+     */
+    const limited = await enforceRateLimit(
+      userBucket("thumbnails", auth.actor.userId),
+      LIMITS.download,
+    );
+    if (limited) return limited;
 
     const { id } = await params;
     // Validated before it reaches a query, so a malformed id is a 400 rather than a
