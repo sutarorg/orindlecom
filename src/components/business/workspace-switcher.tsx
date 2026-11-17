@@ -36,11 +36,33 @@ export function WorkspaceSwitcher({
   const inBusiness =
     pathname === "/business" || pathname.startsWith("/business/");
 
-  const orgName = organization?.shortName ?? "Your organization";
+  /*
+   * The real name, not a placeholder.
+   *
+   * This used to fall back to the literal string "Your organization", which read as
+   * a name — so a customer with a workspace called "Northwind Ltd" saw "Your
+   * organization" in the switcher, and it looked like their organization had been
+   * renamed or lost. A fallback that is indistinguishable from real data is worse
+   * than no fallback.
+   *
+   * Two separate cases, and they now read differently:
+   *   - an organization exists, so its name is shown;
+   *   - none does, so the entry says so and offers to create one.
+   */
+  const orgName = organization?.name ?? null;
   const initials = organization?.initials ?? "OR";
 
   const active = inBusiness
-    ? { label: orgName, sub: viewerRole ? capitalize(viewerRole) : "Organization" }
+    ? {
+        // `null` name means "you are in the business workspace area but have not
+        // created one yet", which is a different thing from having one.
+        label: orgName ?? "No workspace yet",
+        sub: orgName
+          ? viewerRole
+            ? capitalize(viewerRole)
+            : "Organization"
+          : "Create one to start",
+      }
     : { label: "Personal", sub: "Your own files" };
 
   return (
@@ -114,7 +136,12 @@ export function WorkspaceSwitcher({
           },
           {
             key: "business",
-            label: orgName,
+            label: orgName ?? "Create a workspace",
+            description: orgName
+              ? viewerRole
+                ? `${capitalize(viewerRole)} of this organization`
+                : undefined
+              : "Set up a shared space for your team",
             icon: Building2,
             shortcut: inBusiness ? "Current" : undefined,
             onSelect: () => {

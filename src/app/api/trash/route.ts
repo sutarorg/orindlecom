@@ -42,12 +42,22 @@ export async function GET() {
 
     const now = Date.now();
     const items = result.data.items.map((item) => {
-      // The row already carries its own purge deadline, set when it was trashed. Derive
-      // the remaining days from that rather than from the retention constant, so a
-      // change to the policy never retroactively shifts an item's deadline.
+      /*
+       * Days remaining, from the row's own deadline.
+       *
+       * The repository computes `purgeAt` from the row's `deleted_at` plus the
+       * retention period, because `deleted_at` is only readable through the bin's
+       * function. This route just converts it to a number of days, so the UI never
+       * does date arithmetic that could disagree with what the cleanup job actually
+       * deletes.
+       *
+       * A missing `purgeAt` means the row has no deletion timestamp, which should
+       * not happen — falling back to the full window is the least alarming answer,
+       * and it is not silently reported as "expired".
+       */
       const purgeAt = item.purgeAt ? new Date(item.purgeAt).getTime() : null;
       const daysRemaining =
-        purgeAt === null
+        purgeAt === null || !Number.isFinite(purgeAt)
           ? TRASH_RETENTION.days
           : Math.max(0, Math.ceil((purgeAt - now) / 86_400_000));
       return { ...item, daysRemaining };

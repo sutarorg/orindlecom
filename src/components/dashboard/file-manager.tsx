@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   Download,
+  FolderInput,
   FolderPlus,
   Info,
   Link2,
@@ -23,6 +24,7 @@ import { FileGrid } from "./file-grid";
 import { FileList } from "./file-list";
 import { FileToolbar, ActiveFilterNotice } from "./file-toolbar";
 import { SelectionBar } from "./selection-bar";
+import { MoveDialog } from "./move-dialog";
 import { PreviewPanel } from "./preview-panel";
 import { ShareDialog } from "./share-dialog";
 import { UploadZone } from "./upload-zone";
@@ -86,6 +88,7 @@ export function FileManager({
         toolbarTrailing={toolbarTrailing}
         showUploadZone={showUploadZone}
         totalCount={items.length}
+        parentId={parentId}
       />
     </DriveProvider>
   );
@@ -100,7 +103,9 @@ function FileManagerInner({
   toolbarTrailing,
   showUploadZone,
   totalCount,
+  parentId,
 }: {
+  parentId: string | null;
   empty: EmptyCopy;
   mode: ManagerMode;
   showFilters: boolean;
@@ -110,8 +115,17 @@ function FileManagerInner({
   showUploadZone: boolean;
   totalCount: number;
 }) {
-  const { items, view, selected, clearSelection, previewId, openPreview, closePreview, setSearch } =
-    useDrive();
+  const {
+    items,
+    view,
+    selected,
+    beginSelection,
+    clearSelection,
+    previewId,
+    openPreview,
+    closePreview,
+    setSearch,
+  } = useDrive();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -123,6 +137,7 @@ function FileManagerInner({
   const [shareItem, setShareItem] = React.useState<DriveItem | null>(null);
   const [confirmTrash, setConfirmTrash] = React.useState(false);
   const [confirmPurge, setConfirmPurge] = React.useState(false);
+  const [moveOpen, setMoveOpen] = React.useState(false);
   const [renameItem, setRenameItem] = React.useState<DriveItem | null>(null);
 
   /**
@@ -261,28 +276,77 @@ function FileManagerInner({
     [router, toast],
   );
 
+  /**
+   * Star selected items.
+   *
+   * One request for the whole selection. This used to be one PATCH per id, so a
+   * twenty-file selection was twenty sequential round trips — the reason starring
+   * a selection felt slow. `desired` is passed explicitly by the bar, which knows
+   * what the icon meant; without it, the rule is "star everything unless they are
+   * all already starred", which is what a tri-state button implies.
+   */
   const toggleStar = React.useCallback(
-    async (ids: string[]) => {
+    async (ids: string[], desired?: boolean) => {
+      if (ids.length === 0) return;
       const itemsById = new Map(items.map((item) => [item.id, item]));
-      // Starring is a small reversible action, so all selected items are set to the
-      // same state: starred if any of them is not, cleared only if all are.
-      const anyUnstarred = ids.some((id) => !itemsById.get(id)?.starred);
-      const starred = anyUnstarred;
+      const starred = desired ?? ids.some((id) => !itemsById.get(id)?.starred);
 
-      const results = await Promise.all(
-        ids.map((id) => api.patch(`/api/files/${id}/star`, { starred })),
-      );
-      const failed = results.filter((result) => !result.ok).length;
-      if (failed > 0) {
+      const result = await api.patch<{ updated: number }>("/api/files/star", { ids, starred });
+      if (!result.ok) {
+        toast({ tone: "error", title: "Nothing changed", description: result.message });
+        return;
+      }
+      if (result.data.updated < ids.length) {
         toast({
           tone: "error",
-          title: failed === 1 ? "1 item wasn't updated" : `${failed} items weren't updated`,
+          title: `${ids.length - result.data.updated} not updated`,
           description: "The others were saved.",
         });
       }
       router.refresh();
     },
     [items, router, toast],
+  );
+
+  /**
+   * Move selected items into a folder, or back to the top level.
+   *
+   * Batched into one request per item by the API surface, but issued concurrently
+   * so the wall time is the slowest move rather than the sum — a selection of ten
+   * files should not take ten round trips end to end.
+   */
+  const moveItems = React.useCallback(
+    async (ids: string[], parentId: string | null) => {
+      if (ids.length === 0) return;
+      const results = await Promise.all(
+        ids.map((id) =>
+          id.startsWith("folder:")
+            ? api.patch(`/api/folders/${id.slice(7)}/move`, { parentId })
+            : api.patch(`/api/files/${id}/move`, { parentId }),
+        ),
+      );
+      const failed = results.filter((result) => !result.ok);
+      if (failed.length === ids.length) {
+        toast({ tone: "error", title: "Nothing was moved", description: failed[0]?.message });
+        return;
+      }
+      if (failed.length > 0) {
+        toast({
+          tone: "error",
+          title: `${failed.length} ${failed.length === 1 ? "item" : "items"} not moved`,
+          description: failed[0]?.message ?? "The others were moved.",
+        });
+      } else {
+        toast({
+          tone: "success",
+          title: ids.length === 1 ? "1 item moved" : `${ids.length} items moved`,
+          description: parentId === null ? "Moved to your top level." : "Moved into the folder.",
+        });
+      }
+      clearSelection();
+      router.refresh();
+    },
+    [clearSelection, router, toast],
   );
 
   const restoreItems = React.useCallback(
@@ -321,6 +385,9 @@ function FileManagerInner({
 
   const handleSelectionAction = (action: string) => {
     switch (action) {
+      case "move":
+        setMoveOpen(true);
+        break;
       case "download": {
         // Download every selected file the user can read. One request per file,
         // sequential, so a burst of twenty files does not open twenty signed
@@ -333,7 +400,11 @@ function FileManagerInner({
       case "star": {
         const ids = [...selected];
         if (ids.length === 0) break;
-        void toggleStar(ids);
+        /*
+         * The bar sends the state it displayed, so the result is always the one the
+         * visitor asked for: a full star clears, a half star fills everything.
+         */
+        void toggleStar(ids, selectionStar.state !== "all");
         break;
       }
       case "share":
@@ -353,6 +424,56 @@ function FileManagerInner({
         break;
     }
   };
+
+  /**
+   * What the star button should show for the current selection.
+   *
+   *   all    — every selected item is starred: a filled icon, click clears.
+   *   none   — none is: an outline icon, click fills.
+   *   mixed  — some are: the icon is deliberately NOT filled, because a filled icon
+   *            would claim a state half the selection is not in.
+   */
+  // Not memoised: it is a set-membership count over a handful of items, and the
+  // compiler could not preserve the memo anyway, so an explicit one would only be
+  // a lie about the cost.
+  const selectionStar = (() => {
+    const ids = [...selected];
+    const starred = ids.filter((id) => items.find((item) => item.id === id)?.starred).length;
+    if (ids.length === 0) return { state: "none" as const, count: 0 };
+    if (starred === ids.length) return { state: "all" as const, count: ids.length };
+    if (starred === 0) return { state: "none" as const, count: ids.length };
+    return { state: "mixed" as const, count: ids.length };
+  })();
+
+  /**
+   * Row actions from a tile menu.
+   *
+   * The tile does not call the API; it names an action and the manager runs it, so
+   * there is one implementation of "star this row" rather than one per view. A row
+   * action that needs a selection makes that row the selection first, which is why
+   * `beginSelection` is called here rather than in the tile.
+   */
+  const handleRowAction = React.useCallback(
+    (item: DriveItem, action: string) => {
+      switch (action) {
+        case "select":
+          beginSelection(item.id);
+          break;
+        case "star":
+          void toggleStar([item.id]);
+          break;
+        case "share":
+          beginSelection(item.id);
+          setShareItem(item);
+          break;
+        case "trash":
+          beginSelection(item.id);
+          setConfirmTrash(true);
+          break;
+      }
+    },
+    [beginSelection, toggleStar],
+  );
 
   const previewItem = previewId ? items.find((item) => item.id === previewId) ?? null : null;
   const filtering = items.length !== totalCount;
@@ -379,6 +500,15 @@ function FileManagerInner({
         label: item.starred ? "Remove from Starred" : "Add to Starred",
         icon: Star,
         onSelect: () => void toggleStar([item.id]),
+      },
+      {
+        key: "move",
+        label: "Move to…",
+        icon: FolderInput,
+        onSelect: () => {
+          beginSelection(item.id);
+          setMoveOpen(true);
+        },
       },
       {
         key: "rename",
@@ -422,7 +552,7 @@ function FileManagerInner({
       {/* The toolbar sticks under the topbar so sort and view stay reachable
           while scrolling a long folder. */}
       <div className="sticky top-[60px] z-20 -mx-1 bg-[var(--brand-canvas)] px-1 pt-1">
-        <SelectionBar onAction={handleSelectionAction} />
+        <SelectionBar onAction={handleSelectionAction} star={selectionStar} />
         {selected.size === 0 && (
           <FileToolbar
             showFilters={showFilters}
@@ -463,12 +593,14 @@ function FileManagerInner({
           items={items}
           onOpen={openItem}
           onContext={(item, anchor) => setContext({ item, anchor })}
+          onRowAction={handleRowAction}
         />
       ) : (
         <FileList
           items={items}
           onOpen={openItem}
           onContext={(item, anchor) => setContext({ item, anchor })}
+          onRowAction={handleRowAction}
           selectable
         />
       )}
@@ -492,6 +624,22 @@ function FileManagerInner({
       />
 
       <ShareDialog item={shareItem} onClose={() => setShareItem(null)} />
+
+      <MoveDialog
+        open={moveOpen}
+        onClose={() => setMoveOpen(false)}
+        itemCount={selected.size}
+        currentParentId={parentId}
+        disabledIds={
+          // A folder cannot be moved inside itself or its own descendant; the server
+          // refuses it, and offering the option would only produce an error toast.
+          new Set([...selected])
+        }
+        onMove={(target) => {
+          setMoveOpen(false);
+          void moveItems([...selected], target);
+        }}
+      />
 
       <RenameDialog
         item={renameItem}

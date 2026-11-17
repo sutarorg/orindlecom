@@ -5,7 +5,9 @@ import { MoreVertical, Star } from "lucide-react";
 import { Menu, type MenuItem } from "@/components/ui/menu";
 import { formatBytes, formatRelative } from "@/lib/drive/format";
 import type { DriveItem } from "@/lib/drive/types";
-import { FileTypeIcon, FolderIcon } from "./file-icon";
+import { FolderIcon } from "./file-icon";
+import { FileThumbnail } from "./file-thumbnail";
+import { assignFolderColours, type FolderColour } from "@/lib/drive/folder-colour";
 import { useDrive } from "./drive-store";
 import { cn } from "@/lib/utils";
 
@@ -25,14 +27,30 @@ export function FileGrid({
   items,
   onOpen,
   onContext,
+  onRowAction,
 }: {
   items: DriveItem[];
   onOpen: (item: DriveItem) => void;
   onContext: (item: DriveItem, anchor: HTMLElement) => void;
+  /**
+   * Runs a row action for one item. Owned by the manager, which is the only place
+   * that knows how to talk to the API — the tile asks, it does not act.
+   */
+  onRowAction: (item: DriveItem, action: string) => void;
 }) {
-  const { select, isSelected, selected, view } = useDrive();
+  const { select, isSelected, selected, selectMode, beginSelection, view } = useDrive();
   const [focusIndex, setFocusIndex] = React.useState(0);
   const tileRefs = React.useRef<Array<HTMLDivElement | null>>([]);
+
+  /*
+   * Folder colours are assigned across the visible set, not hashed per id, so the
+   * first four folders in any listing are four different colours. See
+   * `folder-colour.ts` for the measurement behind that choice.
+   */
+  const folderColours = React.useMemo(
+    () => assignFolderColours(items.filter((item) => item.kind === "folder").map((item) => item.id)),
+    [items],
+  );
 
   // Keep the roving index inside the list as it shrinks.
   React.useEffect(() => {
@@ -108,18 +126,37 @@ export function FileGrid({
             anySelected={selected.size > 0}
             tabIndex={index === focusIndex ? 0 : -1}
             onFocus={() => setFocusIndex(index)}
-            onActivate={(event) => {
+            onClick={(event) => {
               setFocusIndex(index);
+              /*
+               * Two behaviours behind one click, decided by whether a selection is
+               * live. Outside select mode a click opens — the primary action, and
+               * what a person clicking a file in their own drive expects. Inside
+               * it, a click picks; modifiers still refine the pick.
+               */
+              if (!selectMode) {
+                onOpen(item);
+                return;
+              }
               if (event.shiftKey) select(item.id, { range: true });
-              else if (event.metaKey || event.ctrlKey) select(item.id, { additive: true });
-              else select(item.id);
+              else select(item.id, { additive: true });
             }}
-            onOpen={() => onOpen(item)}
+            /* A double click is two clicks, so in select mode it must not toggle
+               twice and land back where it started. Outside select mode the first
+               click already opened the item, so there is nothing left to do. */
+            onOpen={() => {
+              if (!selectMode) onOpen(item);
+            }}
+            onAction={(action) => onRowAction(item, action)}
             onContext={(anchor) => {
-              if (!active) select(item.id);
+              // The row menu shows the menu bar's actions for this row, so it makes
+              // it the current selection — but it must not replace a multi-item
+              // selection the visitor built deliberately.
+              if (!selectMode) beginSelection(item.id);
               onContext(item, anchor);
             }}
             view={view}
+            folderColour={folderColours.get(item.id)}
           />
         );
       })}
@@ -135,38 +172,53 @@ const GridTile = React.forwardRef<
     anySelected: boolean;
     tabIndex: number;
     onFocus: () => void;
-    onActivate: (event: React.MouseEvent | React.KeyboardEvent) => void;
+    onClick: (event: React.MouseEvent) => void;
     onOpen: () => void;
     onContext: (anchor: HTMLElement) => void;
+    /** Runs a row action through the manager, which owns the API calls. */
+    onAction: (action: string) => void;
+    /** Assigned across the listing so neighbouring folders differ. */
+    folderColour?: FolderColour;
     view: "grid" | "list";
   }
 >(function GridTile(
-  { item, selected, anySelected, tabIndex, onFocus, onActivate, onOpen, onContext },
+  { item, selected, anySelected, tabIndex, onFocus, onClick, onOpen, onContext, onAction, folderColour },
   ref,
 ) {
   const menuRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const { select } = useDrive();
+  const { beginSelection } = useDrive();
   const [hovered, setHovered] = React.useState(false);
 
+  /*
+   * Open, then Select.
+   *
+   * The tile menu used to offer "Preview"/"Open" — the same action a click already
+   * performs — and its star, share and trash entries were `() => undefined` stubs
+   * that closed the menu and did nothing. "Select" replaces the redundant open
+   * entry, which is where selection now begins; the destructive and sharing actions
+   * are routed through the manager's row menu, which is one implementation rather
+   * than two that can drift.
+   */
   const items: MenuItem[] = React.useMemo(
     () => [
       { key: "open", label: item.kind === "folder" ? "Open" : "Preview", onSelect: onOpen },
       {
-        key: "star",
-        label: item.starred ? "Remove from Starred" : "Add to Starred",
-        onSelect: () => undefined,
+        key: "select",
+        label: "Select",
+        onSelect: () => beginSelection(item.id),
       },
-      { key: "share", label: "Share", onSelect: () => undefined },
+      { key: "star", label: item.starred ? "Remove from Starred" : "Add to Starred", onSelect: () => onAction("star") },
+      { key: "share", label: "Share", onSelect: () => onAction("share") },
       {
         key: "trash",
         label: "Move to Trash",
         destructive: true,
         separatorBefore: true,
-        onSelect: () => undefined,
+        onSelect: () => onAction("trash"),
       },
     ],
-    [item, onOpen],
+    [item, onOpen, beginSelection, onAction],
   );
 
   return (
@@ -179,16 +231,20 @@ const GridTile = React.forwardRef<
       data-selected={selected}
       data-item-id={item.id}
       onFocus={onFocus}
-      onClick={onActivate}
+      onClick={onClick}
       onDoubleClick={onOpen}
       onKeyDown={(event) => {
+        /*
+         * Enter opens, Space selects — the native file-manager pair. Keyboard users
+         * get the same rule, and Space is what enters select mode from the
+         * keyboard, so a selection can be built without a pointer.
+         */
         if (event.key === "Enter") {
           event.preventDefault();
-          if (event.metaKey || event.ctrlKey || event.shiftKey) onActivate(event);
-          else onOpen();
+          onOpen();
         } else if (event.key === " ") {
           event.preventDefault();
-          onActivate(event);
+          onAction("select-row");
         } else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
           event.preventDefault();
           onContext((menuRef.current?.parentElement as HTMLElement) ?? (event.target as HTMLElement));
@@ -242,7 +298,8 @@ const GridTile = React.forwardRef<
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            select(item.id);
+            // Opening the menu is not a selection: it is how you ask what you may
+            // do, and answering that should not change what is picked.
             setMenuOpen(true);
           }}
           aria-label={`Actions for ${item.name}`}
@@ -264,10 +321,17 @@ const GridTile = React.forwardRef<
         />
       </div>
 
-      {/* Plate */}
-      <div className="flex h-[76px] items-center justify-center rounded-lg bg-[var(--brand-canvas)]">
-        {item.kind === "folder" ? <FolderIcon size="lg" /> : <FileTypeIcon category={item.category} size="lg" />}
-      </div>
+      {/*
+        Plate. Square, and showing the file itself wherever the file can be shown —
+        an icon standing in for an image, a PDF or a spreadsheet is a wasted square.
+      */}
+      {item.kind === "folder" ? (
+        <div className="flex aspect-square w-full items-center justify-center">
+          <FolderIcon size="xl" colour={folderColour} id={item.id} />
+        </div>
+      ) : (
+        <FileThumbnail item={item} />
+      )}
 
       <div className="mt-2 min-w-0">
         <p className="truncate text-[12px] font-semibold leading-snug text-ink" title={item.name}>

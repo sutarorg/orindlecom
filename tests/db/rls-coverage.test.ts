@@ -76,6 +76,11 @@ describe("row level security", () => {
     // are internal. Both are read only through an authorized service-role query.
     "platform_admin_audit_logs",
     "support_messages",
+    // Email confirmation tokens (0024). The row *is* the credential: anyone who
+    // could read it could confirm the address it was minted for. Verification is a
+    // server-side exchange through the service role, so there is no client read
+    // path that should exist — and no policy is the strongest way to say so.
+    "email_verifications",
   ]);
 
   it("every table with RLS has at least one policy, unless deny-all is the design", async () => {
@@ -103,10 +108,17 @@ describe("row level security", () => {
     // rather than trusting the comment: a policy added by a later migration would
     // silently open one of them.
     for (const table of DENY_ALL_BY_DESIGN) {
-      const rows = await db.asUser<Record<string, unknown>>(
-        user,
-        `select * from public.${table} limit 1`,
-      );
+      /*
+       * Denied means either zero rows or a flat refusal. A revoked grant is a
+       * stronger denial than an empty result — there is no query to get wrong — so
+       * refusing is accepted here, but *anything* returned is not.
+       */
+      const rows = await db
+        .asUser<Record<string, unknown>>(user, `select * from public.${table} limit 1`)
+        .catch((error: Error) => {
+          expect(String(error.message)).toMatch(/permission denied/i);
+          return [] as Record<string, unknown>[];
+        });
       expect(rows, `${table} returned rows to a signed-in user`).toHaveLength(0);
     }
   });
@@ -124,14 +136,28 @@ describe("row level security", () => {
     for (const table of tables) {
       if (!table.rowsecurity || publicByDesign.has(table.tablename)) continue;
 
-      // Every one of these tables is either empty for this user or scoped to them.
-      // The assertion is that the query succeeds — a policy that raises would be a
-      // different bug — and returns rows the user may see.
-      const rows = await db.asUser<Record<string, unknown>>(
-        user,
-        `select * from public.${table.tablename} limit 5`,
-      );
-      expect(Array.isArray(rows), `${table.tablename} select failed`).toBe(true);
+      /*
+       * Two acceptable shapes, and no third.
+       *
+       * Either the query succeeds and returns only rows this user may see, or it is
+       * refused outright. Refusal is the stronger answer and some tables use it:
+       * `email_verifications` revokes the table grant from `authenticated`, because
+       * its rows are credentials and a policy would still leave the table readable
+       * by anything that could grant itself a role. What must never happen is a
+       * successful read of a table this user has no business in.
+       */
+      try {
+        const rows = await db.asUser<Record<string, unknown>>(
+          user,
+          `select * from public.${table.tablename} limit 5`,
+        );
+        expect(Array.isArray(rows), `${table.tablename} select failed`).toBe(true);
+      } catch (error) {
+        expect(error, `${table.tablename} failed for a reason other than refusal`).toBeInstanceOf(
+          Error,
+        );
+        expect(String((error as Error).message)).toMatch(/permission denied/i);
+      }
     }
   });
 });

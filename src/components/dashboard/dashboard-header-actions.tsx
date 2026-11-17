@@ -22,15 +22,26 @@ export function DashboardActions({
    * looking at a folder list. `showUpload={false}` keeps the action honest.
    */
   showFolderOnly = false,
+  parentId = null,
   className,
 }: {
   showFolder?: boolean;
   showUpload?: boolean;
   showFolderOnly?: boolean;
+  /**
+   * Where new folders and uploads land.
+   *
+   * Defaults to the top level, which is right for the My Files page. The folder
+   * detail view passes its own id, so "New folder" inside a folder creates inside
+   * that folder — the nesting the backend has always supported and the UI never
+   * offered.
+   */
+  parentId?: string | null;
   className?: string;
 }) {
-  const { addFiles } = useUploadManager();
+  const { addFiles, addFolder } = useUploadManager();
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const folderInputRef = React.useRef<HTMLInputElement>(null);
   const [folderOpen, setFolderOpen] = React.useState(false);
 
   return (
@@ -42,7 +53,7 @@ export function DashboardActions({
         className="hidden"
         onChange={(event) => {
           const files = Array.from(event.target.files ?? []);
-          if (files.length) addFiles(files);
+          if (files.length) addFiles(files, parentId);
           event.target.value = "";
         }}
       />
@@ -59,6 +70,41 @@ export function DashboardActions({
           New folder
         </button>
       )}
+      {/*
+        A folder, uploaded as a folder.
+
+        `webkitdirectory` on a second hidden input is what makes the browser offer a
+        directory picker instead of a file picker; the files it yields carry a
+        `webkitRelativePath`, which the upload manager uses to recreate the tree. A
+        separate input rather than a modifier key, because the two actions are
+        different and should say so.
+      */}
+      {showUpload && !showFolderOnly && (
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          // React does not type `webkitdirectory`; it is a real attribute and the
+          // only way to ask a browser for a directory.
+          {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+          onChange={(event) => {
+            const files = Array.from(event.target.files ?? []);
+            if (files.length) void addFolder(files, parentId);
+            event.target.value = "";
+          }}
+        />
+      )}
+      {showUpload && !showFolderOnly && (
+        <button
+          type="button"
+          onClick={() => folderInputRef.current?.click()}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[var(--brand-border-strong)] bg-white px-3 text-[12.5px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <FolderPlus className="h-3.5 w-3.5 text-text-subtle" strokeWidth={2.1} aria-hidden="true" />
+          Upload folder
+        </button>
+      )}
       {showUpload && !showFolderOnly && (
       <button
         type="button"
@@ -69,7 +115,7 @@ export function DashboardActions({
         Upload files
       </button>
       )}
-      <NewFolderDialog open={folderOpen} onClose={() => setFolderOpen(false)} />
+      <NewFolderDialog open={folderOpen} onClose={() => setFolderOpen(false)} parentId={parentId} />
     </>
   );
 }

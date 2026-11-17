@@ -58,6 +58,15 @@ export interface DriveRepository {
   rename(input: { id: string; name: string }): Promise<DriveResult<DriveItem>>;
   move(input: { ids: string[]; parentId: string | null }): Promise<DriveResult<DriveItem[]>>;
   toggleStar(input: { id: string; starred: boolean }): Promise<DriveResult<DriveItem>>;
+  /**
+   * Star or unstar many items in one round trip.
+   *
+   * The single-id version exists because a row menu acts on one row. The selection
+   * bar acts on a set, and looping it produced one request per item — twenty
+   * request/response cycles for one click of a button, which is why starring a
+   * selection felt slow.
+   */
+  toggleStarMany(input: { ids: string[]; starred: boolean }): Promise<DriveResult<DriveItem[]>>;
 
   trash(input: { ids: string[] }): Promise<DriveResult<DriveItem[]>>;
   restore(input: { ids: string[] }): Promise<DriveResult<DriveItem[]>>;

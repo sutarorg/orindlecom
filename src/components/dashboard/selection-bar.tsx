@@ -1,19 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Download, Share2, Star, Trash2, X } from "lucide-react";
+import { Download, FolderInput, Share2, Star, Trash2, X } from "lucide-react";
 import { useDrive } from "./drive-store";
 import { cn } from "@/lib/utils";
 
 /**
- * Contextual selection bar.
+ * The contextual selection bar.
  *
- * Appears in place of the page-level action row once anything is selected, so
- * the actions on offer always match the thing being acted on. It announces the
- * count politely, and every action reports honestly that the backend isn't
- * connected rather than silently doing nothing.
+ * Its existence is the statement that select mode is on: it replaces the toolbar
+ * the moment selection begins and disappears the moment it ends. That is the whole
+ * reason it can be a horizontal bar rather than a floating panel — it occupies the
+ * toolbar's slot, so the list below does not jump.
+ *
+ * The star button is tri-state, and the state is the icon's fill, not its colour
+ * alone. "Mixed" is intentionally *not* filled: a selection where one item is
+ * starred and another is not is not a starred selection, and a filled icon would
+ * be claiming otherwise. Clicking always resolves to a definite state — if
+ * everything is starred it clears, otherwise it stars everything.
  */
-export function SelectionBar({ onAction }: { onAction: (action: string) => void }) {
+export function SelectionBar({
+  onAction,
+  star,
+}: {
+  onAction: (action: string) => void;
+  /** Aggregate star state of the current selection. */
+  star: { state: "all" | "none" | "mixed"; count: number };
+}) {
   const { selected, clearSelection, selectAll, items } = useDrive();
 
   if (selected.size === 0) return null;
@@ -51,13 +64,58 @@ export function SelectionBar({ onAction }: { onAction: (action: string) => void 
       </button>
 
       <div className="ml-auto flex items-center gap-1">
+        <StarButton state={star.state} onClick={() => onAction("star")} />
+        <ToolbarButton icon={FolderInput} label="Move" onClick={() => onAction("move")} />
         <ToolbarButton icon={Download} label="Download" onClick={() => onAction("download")} />
-        <ToolbarButton icon={Star} label="Star" onClick={() => onAction("star")} />
         <ToolbarButton icon={Share2} label="Share" onClick={() => onAction("share")} />
         <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-primary/20" />
         <ToolbarButton icon={Trash2} label="Delete" destructive onClick={() => onAction("trash")} />
       </div>
     </div>
+  );
+}
+
+/**
+ * The star control.
+ *
+ * `aria-pressed` reports the definite state: true only when every selected item is
+ * starred, so a mixed selection reads as "not pressed" — matching the icon, which
+ * is also unfilled. The label says what the click will do, not what the state is,
+ * because the click is what the visitor is deciding about.
+ */
+function StarButton({
+  state,
+  onClick,
+}: {
+  state: "all" | "none" | "mixed";
+  onClick: () => void;
+}) {
+  const filled = state === "all";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={filled}
+      aria-label={
+        filled ? "Remove star from selected items" : "Star all selected items"
+      }
+      className={cn(
+        "flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        filled ? "text-[#B77414] hover:bg-white" : "text-primary-ink hover:bg-white",
+      )}
+    >
+      <Star
+        className={cn(
+          "h-3.5 w-3.5 transition-colors",
+          filled ? "fill-[#F9A53B] text-[#F9A53B]" : "text-primary-ink",
+        )}
+        strokeWidth={2.1}
+        aria-hidden
+      />
+      <span className="hidden sm:inline">{filled ? "Starred" : "Star"}</span>
+      <span className="sr-only sm:hidden">{filled ? "Starred" : "Star"}</span>
+    </button>
   );
 }
 
@@ -78,9 +136,7 @@ function ToolbarButton({
       onClick={onClick}
       className={cn(
         "flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-        destructive
-          ? "text-[#C93B2B] hover:bg-[#FDF3F2]"
-          : "text-primary-ink hover:bg-white",
+        destructive ? "text-[#C93B2B] hover:bg-[#FDF3F2]" : "text-primary-ink hover:bg-white",
       )}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />

@@ -52,6 +52,9 @@ export const EMAIL_TEMPLATES = [
   "data-export-ready",
   "support-received",
   "support-reply",
+  // Sharing to an address with no account. Distinct from `org-invite`, which adds
+  // somebody to a workspace — this grants access to one file or folder.
+  "share-invite",
 ] as const;
 
 export type EmailTemplateName = (typeof EMAIL_TEMPLATES)[number] | `subscription-expiring-${number}`;
@@ -239,6 +242,34 @@ export function renderTemplate(template: string, data: Record<string, string>): 
           actionLabel: "Open your dashboard",
         }),
         text: `Hi ${rawName}, welcome to Orindle. Your account is confirmed with 10 GB of free storage. Open your dashboard: ${data.url ?? `${SITE.url}/dashboard`}`,
+      };
+
+    case "share-invite":
+      /*
+       * A file somebody shared with an address that has no account yet.
+       *
+       * The recipient is told three things and nothing more: who shared it, what it
+       * is called, and that opening the link is what grants access. The item name is
+       * escaped because it is user-supplied text appearing in an email — the same
+       * reason invite and support mails are templated rather than assembled.
+       */
+      return {
+        subject: `${rawName === "there" ? "Someone" : rawName} shared “${data.itemName ?? "a file"}” with you`,
+        html: layout({
+          heading: `${name === "there" ? "Somebody" : name} shared something with you`,
+          body: `<p style="margin:0 0 10px;">${esc(data.ownerName ?? "An Orindle user")} shared <strong>${esc(
+            data.itemName ?? "a file",
+          )}</strong> with you on Orindle, with permission to ${esc(
+            data.permissionLabel ?? "view it",
+          )}.</p>
+                 <p style="margin:0 0 10px;">You don't need an account to open it. The link expires in ${esc(
+                   data.expiresLabel ?? "14 days",
+                 )}.</p>
+                 <p style="margin:0;">If you weren't expecting this, you can ignore the email — access is only granted to whoever opens the link.</p>`,
+          action: data.url,
+          actionLabel: "Open it",
+        }),
+        text: `${rawName === "there" ? "Somebody" : rawName} shared “${data.itemName ?? "a file"}” with you on Orindle (${data.permissionLabel ?? "view"}). Open it: ${data.url ?? ""}`,
       };
 
     case "verify-email":

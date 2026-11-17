@@ -39,6 +39,9 @@ export const LIMITS = {
   // A person downloading a folder of 40 files mints 40 URLs. The cap is well above
   // that so ordinary use never trips it.
   download: { limit: 300, windowSeconds: 60 },
+  // Comments through a public link. A discussion moves faster than a download but
+  // not faster than this, and the route is anonymous so the limit is the only brake.
+  comment: { limit: 30, windowSeconds: 60 },
   checkout: { limit: 10, windowSeconds: 300 },
   emailSend: { limit: 20, windowSeconds: 3600 },
   supportMessage: { limit: 5, windowSeconds: 3600 },

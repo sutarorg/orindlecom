@@ -3,8 +3,13 @@
  * POST /api/files/:id/grants — grant access to an email address.
  *
  * The caller names an *email*, never a user id. The server resolves it, so a
- * request cannot name an arbitrary account. When no account exists for the address
- * the response says so rather than creating a grant against nobody.
+ * request cannot name an arbitrary account.
+ *
+ * When no account exists for the address, the item is still shared: an invitation is
+ * recorded and emailed, and the grant is created when that person signs up and
+ * confirms the address. Refusing here — which is what this route used to do — meant
+ * that sharing with anybody who was not already a customer simply did not work, and
+ * that is most of the people you would want to send a file to.
  */
 
 import "server-only";
@@ -27,8 +32,8 @@ export const dynamic = "force-dynamic";
 
 
 function readPermission(value: unknown): PermissionLevel {
-  if (value === "viewer" || value === "editor") return value;
-  throw new AppError("validation_failed", "Choose whether they can view or edit.");
+  if (value === "viewer" || value === "commenter" || value === "editor") return value;
+  throw new AppError("validation_failed", "Choose whether they can view, comment or edit.");
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -75,21 +80,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const repo = getDriveRepository();
     const result = await repo.addGrant({ itemId: id, email, permission });
 
-    if (!result.ok) {
-      if (result.code === "not_found") {
-        // The address has no account. Saying that plainly is better than a grant
-        // that appears to exist and grants nothing.
-        throw new AppError(
-          "not_found",
-          "That person doesn't have an Orindle account yet. Share a link instead.",
-        );
-      }
-      throw new AppError(
-        result.code === "not_configured" ? "not_configured" : "unknown",
-        result.message,
-      );
+    if (result.ok) {
+      return ok({ ...result.data, invited: false });
     }
 
-    return ok(result.data);
+    if (result.code === "not_found") {
+      /*
+       * No account for that address — which is a normal thing to want to do, not an
+       * error. Record the intent and email a link.
+       *
+       * `addGrant` resolved the address and found nobody, so the item has already
+       * been authorised by the repository read that preceded it. The invitation is
+       * written with the service client because `share_invitations` deliberately has
+       * no INSERT grant for customers: creating one requires resolving an address
+       * the inviter must not be able to enumerate.
+       */
+      const meta = await repo.get(id);
+      if (!meta.ok) throw new AppError("not_found", meta.message);
+
+      const { createInvitation } = await import("@/lib/share/invitations");
+      const invitation = await createInvitation({
+        email,
+        fileId: meta.data.kind === "folder" ? null : id,
+        folderId: meta.data.kind === "folder" ? id : null,
+        permission,
+        invitedBy: auth.actor.userId,
+        itemName: meta.data.name,
+        ownerName: "You",
+      });
+
+      /*
+       * `delivered` is reported, not assumed. If the mail provider is not configured
+       * the caller shows the link for the owner to pass on themselves — claiming an
+       * email was sent when it was not is how a file silently fails to arrive.
+       */
+      return ok({
+        invited: true,
+        email,
+        permission,
+        delivered: invitation.delivered,
+        inviteUrl: invitation.delivered ? null : invitation.url,
+        expiresAt: invitation.expiresAt,
+      });
+    }
+
+    throw new AppError(
+      result.code === "not_configured" ? "not_configured" : "unknown",
+      result.message,
+    );
   });
 }

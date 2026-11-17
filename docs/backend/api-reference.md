@@ -49,7 +49,8 @@ apart.
 | ✅ | `GET` | `/api/files` | | List. Query: `scope`, `parentId`, `search`, `sort`, `direction`, `category[]`, `cursor` |
 | ✅ | `GET` | `/api/files/:id` | | One file's metadata |
 | ✅ | `PATCH` | `/api/files/:id` | | Rename (`name`) |
-| ✅ | `PATCH` | `/api/files/:id/star` | | `{ starred: boolean }` |
+| ✅ | `PATCH` | `/api/files/:id/star` | | `{ starred: boolean }` — one file |
+| ✅ | `PATCH` | `/api/files/star` | | `{ ids: string[], starred: boolean }` — one round trip for a whole selection |
 | ✅ | `PATCH` | `/api/files/:id/move` | | `{ parentId: string \| null }` |
 | ✅ | `DELETE` | `/api/files/:id` | | Move to trash (soft) |
 | ✅ | `POST` | `/api/download/:id` | | `{ disposition?: "attachment" \| "inline" }` → signed URL, 5-minute expiry |
@@ -151,6 +152,7 @@ in the current deployment, and the UI says so rather than pretending.
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
+| ✅ | `GET` | `/api/thumbnails/:id` | | What a grid tile should draw: `redirect` (signed URL), `text` (extracted opening), or `icon` |
 | ✅ | `GET` | `/api/trash` | | Items in the bin, with `daysRemaining` |
 | ✅ | `POST` | `/api/trash/restore` | | `{ ids: string[] }` |
 | ✅ | `POST` | `/api/trash/purge` | | `{ ids: string[] }` — only acts on rows already in the bin |
@@ -489,3 +491,32 @@ Razorpay and Resend, plus whether each is usable:
 
 It is public and deliberately says nothing an attacker can use: no hostnames, no key
 prefixes, no bucket names.
+
+---
+
+## Public share links (anonymous)
+
+The only routes in the product with no session behind them. The token in the URL is
+the entire authority, so each handler re-resolves it and trusts nothing the client
+sends. All are rate limited by hashed IP rather than by user id, and all return
+`404` for a token that is unknown, revoked **or** expired — a distinct "expired"
+message would confirm that a guessed token was once real.
+
+| Built | Method | Path | Request | Response |
+| --- | --- | --- | --- | --- |
+| ✅ | `GET` | `/api/s/:token` | — | Resolved item: name, size, type, permission, owner display name |
+| ✅ | `POST` | `/api/s/:token` | `{ action: "download" }` | `{ url, filename, expiresIn }` — signed URL, 5-minute expiry |
+| ✅ | `POST` | `/api/s/:token` | `{ action: "comment", body, author? }` | `{ posted: true }` — refused unless the link grants `commenter` or `editor` |
+| ✅ | `GET` | `/api/s/:token/content` | — | `{ url, text, previewable }` — a signed URL for media, extracted text for documents |
+| ✅ | `POST` | `/api/s/:token/edit` | `{ body }` | `{ saved: true, bytes, versioned: false }` — refused unless the link grants `editor` and the file is text or code |
+
+The page at `/s/:token` renders one of three experiences from the resolved
+permission — view, comment, edit — on the same header and footer as the rest of the
+site. The permission is not a UI gate: `/api/s/:token` refuses a comment from a
+`viewer` link and `/api/s/:token/edit` refuses any write from a non-`editor` link,
+regardless of what the page rendered.
+
+Content types are checked on the way out. Only images, audio, video, PDF and plain
+text are served `inline`; everything else — including HTML, SVG and anything
+unrecognised — is forced to `application/octet-stream`, which a browser downloads
+rather than renders.

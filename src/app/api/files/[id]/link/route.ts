@@ -53,8 +53,18 @@ export async function PUT(request: Request, { params }: Params) {
     const { id } = await params;
     const body = await readJson(request);
 
-    if (body.permission !== "viewer" && body.permission !== "editor") {
-      throw new AppError("validation_failed", "Choose whether the link can view or edit.");
+    /*
+     * Three levels, matching the three public pages. `commenter` was missing here
+     * even though the dialog offered it, so choosing "Can comment" made the PUT fail
+     * and the link stayed on its previous permission — the select moved and nothing
+     * behind it did.
+     */
+    if (
+      body.permission !== "viewer" &&
+      body.permission !== "commenter" &&
+      body.permission !== "editor"
+    ) {
+      throw new AppError("validation_failed", "Choose whether the link can view, comment or edit.");
     }
 
     const repo = getDriveRepository();
