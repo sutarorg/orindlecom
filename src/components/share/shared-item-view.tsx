@@ -2,15 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Download,
-  Eye,
-  Loader2,
-  MessageSquare,
-  PencilLine,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, Download, Eye, Loader2, MessageSquare, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/drive/client";
 import { formatBytes } from "@/lib/drive/format";
 import type { PublicLinkItem } from "@/lib/share/public-link";
@@ -27,11 +19,12 @@ import { cn } from "@/lib/utils";
  * resolved link, never from a query parameter:
  *
  *   viewer    — the file and a download. Nothing else.
- *   commenter — the file, a download, and a comment box.
- *   editor    — the file, a download, an inline editor for text, and a comment box.
+ *   commenter — the file, a download, the conversation so far, and a comment box.
  *
- * The controls are a consequence of the permission, not a gate in front of it: the
- * server refuses a comment on a viewer link even if the box were somehow present.
+ * There is no editor any more: a public link can be read and replied to, not
+ * rewritten. The controls are a consequence of the permission, not a gate in front
+ * of it — the server refuses a comment on a viewer link even if the box were
+ * somehow present.
  */
 
 export function SharedItemView({ token, item }: { token: string; item: PublicLinkItem }) {
@@ -43,8 +36,7 @@ export function SharedItemView({ token, item }: { token: string; item: PublicLin
   const [error, setError] = React.useState<string | null>(null);
   const [downloading, setDownloading] = React.useState(false);
 
-  const canComment = item.permission === "commenter" || item.permission === "editor";
-  const canEdit = item.permission === "editor";
+  const canComment = item.permission === "commenter";
 
   React.useEffect(() => {
     let active = true;
@@ -144,7 +136,7 @@ export function SharedItemView({ token, item }: { token: string; item: PublicLin
               individually.
             </p>
           ) : (
-            <Stage item={item} url={url} text={text} canEdit={canEdit} token={token} />
+            <Stage item={item} url={url} text={text} />
           )}
         </div>
       </div>
@@ -172,7 +164,6 @@ function PermissionChip({ permission }: { permission: PublicLinkItem["permission
   const config = {
     viewer: { icon: Eye, label: "Can view", tone: "text-text-muted" },
     commenter: { icon: MessageSquare, label: "Can comment", tone: "text-[#2A62B8]" },
-    editor: { icon: PencilLine, label: "Can edit", tone: "text-[#2A8F68]" },
   }[permission];
 
   const Icon = config.icon;
@@ -197,14 +188,10 @@ function Stage({
   item,
   url,
   text,
-  canEdit,
-  token,
 }: {
   item: PublicLinkItem;
   url: string | null;
   text: string | null;
-  canEdit: boolean;
-  token: string;
 }) {
   if (item.category === "image" && url) {
     return (
@@ -222,7 +209,11 @@ function Stage({
     return <iframe src={url} title={item.name} className="h-[560px] w-full rounded-lg border-0" />;
   }
   if (text !== null) {
-    return <TextBody text={text} editable={canEdit} token={token} />;
+    return (
+      <pre className="h-[520px] w-full overflow-auto whitespace-pre-wrap rounded-lg bg-white p-4 font-mono text-[12px] leading-relaxed text-text">
+        {text}
+      </pre>
+    );
   }
 
   return (
@@ -237,60 +228,84 @@ function Stage({
 }
 
 /**
- * Text and code, with an editor when the link allows one.
+ * The conversation on a shared file.
  *
- * The editor is local until saved, and "saved" only reports success once the server
- * has said so — a shared document that silently discards an edit is worse than one
- * that refuses to open it. Saving is refused by the server for viewer and commenter
- * links regardless of what this component renders.
+ * Two parts, and both matter: the comments already left, and the box to add one.
+ * Only the box was rendered before, and the comments it wrote were never read back
+ * anywhere — an anonymous visitor posted into a void, and the owner could not see
+ * what a recipient had said. A comment section that shows nothing after you comment
+ * reads as a broken form, which is exactly what it was.
+ *
+ * The list is fetched through `GET /api/s/:token/comments`, which resolves the link
+ * server-side; this component never decides who may read what.
  */
-function TextBody({ text, editable, token }: { text: string; editable: boolean; token: string }) {
-  const [value, setValue] = React.useState(text);
-  const [saving, setSaving] = React.useState(false);
-  const [saved, setSaved] = React.useState<"idle" | "ok" | "error">("idle");
+interface PublicComment {
+  id: string;
+  authorName: string;
+  body: string;
+  external: boolean;
+  createdAt: string;
+}
 
-  if (!editable) {
+function CommentThread({
+  comments,
+  loading,
+}: {
+  comments: PublicComment[];
+  loading: boolean;
+}) {
+  if (loading) {
     return (
-      <pre className="h-[520px] w-full overflow-auto whitespace-pre-wrap rounded-lg bg-white p-4 font-mono text-[12px] leading-relaxed text-text">
-        {text}
-      </pre>
+      <p className="mt-3 text-[12px] text-text-subtle">Loading comments…</p>
+    );
+  }
+
+  if (comments.length === 0) {
+    return (
+      <p className="mt-3 text-[12.5px] leading-relaxed text-text-muted">
+        No comments yet. If you have a question about this file, leave one below.
+      </p>
     );
   }
 
   return (
-    <div className="flex h-[520px] w-full flex-col">
-      <textarea
-        value={value}
-        onChange={(event) => {
-          setValue(event.target.value);
-          setSaved("idle");
-        }}
-        spellCheck={false}
-        aria-label="Edit this document"
-        className="min-h-0 flex-1 resize-none rounded-t-lg border-0 bg-white p-4 font-mono text-[12px] leading-relaxed text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-      />
-      <div className="flex items-center justify-end gap-2 rounded-b-lg border-t border-[var(--brand-border-soft)] bg-white px-3 py-2">
-        {saved === "ok" && <span className="text-[11.5px] text-[#2A8F68]">Saved</span>}
-        {saved === "error" && <span className="text-[11.5px] text-[#C93B2B]">Not saved</span>}
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => {
-            setSaving(true);
-            setSaved("idle");
-            // Wired to the save endpoint; refuses for links that are not editors.
-            void api
-              .post(`/api/s/${encodeURIComponent(token)}/edit`, { body: value })
-              .then((result) => setSaved(result.ok ? "ok" : "error"))
-              .finally(() => setSaving(false));
-          }}
-          className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[12px] font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-55"
+    <ol className="mt-3 space-y-2.5">
+      {comments.map((comment) => (
+        <li
+          key={comment.id}
+          className="rounded-lg border border-[var(--brand-border-soft)] bg-[var(--brand-canvas)] px-3.5 py-2.5"
         >
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </div>
-    </div>
+          <div className="flex items-baseline justify-between gap-3">
+            {/*
+              The name is what the server decided to show. A visitor who left the
+              optional name field blank arrives here as "User" — that mapping lives
+              in `link_comments`, so the dashboard and this page agree.
+            */}
+            <p className="truncate text-[12px] font-semibold text-ink">{comment.authorName}</p>
+            <time
+              dateTime={comment.createdAt}
+              className="shrink-0 text-[11px] text-text-subtle"
+            >
+              {formatCommentTime(comment.createdAt)}
+            </time>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-text">
+            {comment.body}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
+}
+
+function formatCommentTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "";
+  const minutes = Math.round((Date.now() - then) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h ago`;
+  return new Date(then).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
 function CommentBox({ token }: { token: string }) {
@@ -298,6 +313,23 @@ function CommentBox({ token }: { token: string }) {
   const [author, setAuthor] = React.useState("");
   const [state, setState] = React.useState<"idle" | "posting" | "posted" | "error">("idle");
   const [message, setMessage] = React.useState<string | null>(null);
+  const [comments, setComments] = React.useState<PublicComment[]>([]);
+  const [loadingComments, setLoadingComments] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    const result = await api.get<{ comments: PublicComment[] }>(
+      `/api/s/${encodeURIComponent(token)}/comments`,
+    );
+    // A failed read shows the empty state rather than an error banner: the box still
+    // works, and a scary message above it would discourage the comment the visitor
+    // came to leave.
+    setComments(result.ok ? result.data.comments : []);
+    setLoadingComments(false);
+  }, [token]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   const post = async () => {
     setState("posting");
@@ -317,54 +349,68 @@ function CommentBox({ token }: { token: string }) {
 
     setState("posted");
     setBody("");
+    setAuthor("");
+    // Read back what the server now holds, so the thread shows the new comment with
+    // the name the server actually stored — not a client-side guess at it.
+    await load();
   };
 
   return (
     <section className="mt-4 rounded-xl border border-[var(--brand-border-soft)] bg-white p-4" aria-label="Comments">
       <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
         <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden />
-        Leave a comment
+        Comments
+        {comments.length > 0 && (
+          <span className="ml-0.5 rounded-full bg-[var(--brand-surface-muted)] px-1.5 text-[10.5px] font-semibold text-text-muted">
+            {comments.length}
+          </span>
+        )}
       </h2>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-[200px_1fr]">
-        <label className="sr-only" htmlFor="comment-author">
-          Your name
-        </label>
-        <input
-          id="comment-author"
-          value={author}
-          onChange={(event) => setAuthor(event.target.value)}
-          placeholder="Your name (optional)"
-          maxLength={120}
-          className="h-9 rounded-lg border border-[var(--brand-border-strong)] px-3 text-[12.5px] text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        />
-        <label className="sr-only" htmlFor="comment-body">
-          Your comment
-        </label>
-        <input
-          id="comment-body"
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          placeholder="Add a note about this file…"
-          maxLength={4000}
-          className="h-9 rounded-lg border border-[var(--brand-border-strong)] px-3 text-[12.5px] text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        />
-      </div>
+      <CommentThread comments={comments} loading={loadingComments} />
 
-      <div className="mt-2.5 flex items-center justify-between gap-3">
-        <p className="text-[11.5px] text-text-subtle">
-          {state === "posted"
-            ? "Your comment was posted."
-            : message ?? "Your name appears with the comment. No account needed."}
-        </p>
-        <button
-          type="button"
-          onClick={() => void post()}
-          disabled={state === "posting" || body.trim().length === 0}
-          className="inline-flex h-9 shrink-0 items-center rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-55"
-        >
-          {state === "posting" ? "Posting…" : "Post comment"}
-        </button>
+      <div className="mt-4 border-t border-[var(--brand-border-soft)] pt-3.5">
+        <div className="grid gap-2 sm:grid-cols-[200px_1fr]">
+          <label className="sr-only" htmlFor="comment-author">
+            Your name
+          </label>
+          <input
+            id="comment-author"
+            value={author}
+            onChange={(event) => setAuthor(event.target.value)}
+            placeholder="Your name (optional)"
+            maxLength={120}
+            className="h-9 rounded-lg border border-[var(--brand-border-strong)] px-3 text-[12.5px] text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+          <label className="sr-only" htmlFor="comment-body">
+            Your comment
+          </label>
+          <input
+            id="comment-body"
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            placeholder="Add a note about this file…"
+            maxLength={4000}
+            className="h-9 rounded-lg border border-[var(--brand-border-strong)] px-3 text-[12.5px] text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+        </div>
+
+        <div className="mt-2.5 flex items-center justify-between gap-3">
+          <p className="text-[11.5px] text-text-subtle">
+            {state === "posted"
+              ? "Your comment was posted."
+              : message ??
+                "Leave the name blank and your comment shows as “User”. No account needed."}
+          </p>
+          <button
+            type="button"
+            onClick={() => void post()}
+            disabled={state === "posting" || body.trim().length === 0}
+            className="inline-flex h-9 shrink-0 items-center rounded-lg bg-primary px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-55"
+          >
+            {state === "posting" ? "Posting…" : "Post comment"}
+          </button>
+        </div>
       </div>
     </section>
   );

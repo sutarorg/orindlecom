@@ -39,6 +39,18 @@ interface DriveState {
   isLoading: boolean;
   error: string | null;
 
+  /**
+   * Apply an optimistic change to rows, and get a function that undoes it.
+   *
+   * Starring used to wait for the PATCH *and* then call `router.refresh()`, so the
+   * icon only changed after a full server round trip of the whole route — two
+   * network waits for a boolean. The star is now painted from local state the moment
+   * it is clicked, the request confirms it, and only a failure puts it back. The
+   * undo handle is what makes that honest: a caller cannot "apply" a change without
+   * being able to revert it.
+   */
+  patchItems: (ids: string[], patch: Partial<DriveItem>) => () => void;
+
   view: ViewMode;
   setView: (view: ViewMode) => void;
 
@@ -128,6 +140,66 @@ export function DriveProvider({
   const [previewId, setPreviewId] = React.useState<string | null>(null);
   const anchorRef = React.useRef<string | null>(null);
 
+  /*
+   * Optimistic overrides, keyed by item id.
+   *
+   * Kept separate from `initialItems` because those are server data: merging at read
+   * time means a patch never mutates the props, and a re-render from above does not
+   * silently discard what the visitor just did.
+   */
+  const [patches, setPatches] = React.useState<Record<string, Partial<DriveItem>>>({});
+
+  const patchItems = React.useCallback((ids: string[], patch: Partial<DriveItem>) => {
+    const previous: Record<string, Partial<DriveItem>> = {};
+    setPatches((current) => {
+      const next = { ...current };
+      for (const id of ids) {
+        // Remember exactly what this item looked like *including* any earlier patch,
+        // so undo restores the state before this call rather than the server's.
+        previous[id] = current[id] ?? {};
+        next[id] = { ...current[id], ...patch };
+      }
+      return next;
+    });
+
+    return () => {
+      setPatches((current) => {
+        const next = { ...current };
+        for (const id of ids) {
+          const before = previous[id];
+          if (before && Object.keys(before).length > 0) next[id] = before;
+          else delete next[id];
+        }
+        return next;
+      });
+    };
+  }, []);
+
+  /*
+   * Drop overrides the server has caught up with.
+   *
+   * After a refresh the row already holds the value the patch was standing in for,
+   * and keeping the entry would pin the client's copy over any *later* server change
+   * — a star removed on another device would never disappear here.
+   */
+  React.useEffect(() => {
+    setPatches((current) => {
+      if (Object.keys(current).length === 0) return current;
+      const next: Record<string, Partial<DriveItem>> = {};
+      let changed = false;
+      for (const [id, patch] of Object.entries(current)) {
+        const server = initialItems.find((item) => item.id === id);
+        if (!server) continue; // Gone from this route; the patch is moot.
+        const pending = Object.entries(patch).some(
+          ([key, value]) => server[key as keyof DriveItem] !== value,
+        );
+        if (pending) next[id] = patch;
+        else changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [initialItems]);
+
   // Persist the view mode: people who prefer a list expect it back tomorrow.
   React.useEffect(() => {
     const stored = window.localStorage.getItem("orindle:view");
@@ -145,14 +217,17 @@ export function DriveProvider({
 
   // Keep the visible ordering stable so shift-click ranges match what's on screen.
   const visible = React.useMemo(() => {
-    let list = sortItems(initialItems, sort, direction);
+    const merged = Object.keys(patches).length === 0
+      ? initialItems
+      : initialItems.map((item) => (patches[item.id] ? { ...item, ...patches[item.id] } : item));
+    let list = sortItems(merged, sort, direction);
     if (categories.length > 0) list = list.filter((item) => categories.includes(item.category));
     if (search.trim()) {
       const needle = search.trim().toLowerCase();
       list = list.filter((item) => item.name.toLowerCase().includes(needle));
     }
     return list;
-  }, [initialItems, sort, direction, categories, search]);
+  }, [initialItems, patches, sort, direction, categories, search]);
 
   const setSort = React.useCallback(
     (key: SortKey) => {
@@ -322,6 +397,7 @@ export function DriveProvider({
     items: visible,
     isLoading: false,
     error: null,
+    patchItems,
     view,
     setView: changeView,
     sort,

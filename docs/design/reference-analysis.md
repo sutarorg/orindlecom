@@ -176,19 +176,36 @@ composed — it is a rendered React component, never a screenshot.
 
 Illustration treatments (all built in code):
 
-1. *Store without the clutter* — a floating file-manager panel at a slight angle with a
-   left rail of 4 icons and a "Storage" donut reading **2.4 GB of 10 GB**, plus a
-   legend of three progress rows. A mint circle sits behind its top-right and a peach
-   circle behind its bottom-right.
-2. *Access from anywhere* — three overlapping device frames (laptop, tablet, phone),
-   each showing the same folder grid, standing on a shared soft shadow. A mint circle
-   sits behind them.
-3. *Share with simplicity* — a "Share folder" card with an email input, a "Can view"
-   select and a blue "Share" button, with a linking glyph in a tile overlapping the
-   card's top-right corner. Peach circle behind.
+Each of the three is a single inline `<svg>` with its own `viewBox` (`290 × 200`) and
+`preserveAspectRatio="xMidYMax meet"`, so the composition holds its proportions across
+the 170/180/200px slots instead of reflowing. That replaced a div-and-flex build whose
+inner text overflowed its panel and whose device screens were cropped by their frames —
+see `src/components/marketing/feature-art.tsx` for what changed and why.
 
-The pastel circles are 96–140px, positioned to bleed past the column edges, filled with
-`#DFF4F2`, `#FFE6DC` and `#F1ECFE` respectively.
+1. *Store without the clutter* — a file-manager panel in perspective-free elevation: a
+   44px icon rail of five marks on an even 33px rhythm, a "Storage" heading, a 24% donut
+   reading **2.4 GB of 10 GB**, a three-row legend (Docs / Media / Other) whose bars
+   share one column width, and a stacked usage bar under a hairline that divides the same
+   2.4 GB into the same three categories. Mint circle behind the top-right, peach behind
+   the bottom-right.
+2. *Access from anywhere* — a laptop, a tablet and a phone, front-most last, sharing one
+   cast shadow on a soft tabletop. Each screen is laid out **for its own shape** rather
+   than scaled from the laptop: the laptop shows a rail, a title, three folder tiles and
+   three file rows; the tablet shows two tiles; the phone shows a title and a list. The
+   folder glyph (two-tone, 31-unit body) is identical on all three, which is the point of
+   the illustration. Mint circle behind, periwinkle low left.
+3. *Share with simplicity* — a "Share Project files" card: a recipient row (initial
+   avatar, address, "Added by you", a "Can view" chip), an invite field with a caret, and
+   a link row beside a primary "Share" button. The rotated link tile still breaks the
+   card's top-right corner. Peach circle behind the top-right, violet low left.
+
+Palette: the design system's primary `#3178FB` leads each drawing, joined by violet
+`#8B5CF6`, peach `#FB7A5F` and mint `#38BD8B`. Every figure shown is computed from one
+constant — the donut's arc, its label and the usage bar all derive from the same 24%.
+
+The pastel circles are 50–58 units inside the 290-unit box (≈ 96–140px at slot size),
+positioned to bleed past the panel edges, filled with `#DFF4F2`, `#FFE6DC` and
+`#F1ECFE` respectively.
 
 ---
 
@@ -379,3 +396,17 @@ To avoid adding template furniture the reference does not contain:
 
 Any content of that sort would represent claims Orindle has not verified, which the
 project's content rules forbid.
+
+### 5.1 Rendered reference
+
+The three drawings as implemented, rasterised from the components themselves at 3×:
+
+| | |
+|---|---|
+| 01 Store | ![Store without the clutter](illustrations/feature-store.png) |
+| 02 Access | ![Access from anywhere](illustrations/feature-devices.png) |
+| 03 Share | ![Share with simplicity](illustrations/feature-share.png) |
+
+These are outputs, not sources — `src/components/marketing/feature-art.tsx` is the source,
+and `tests/unit/feature-art.test.ts` renders it and checks the geometry. If a change makes
+a drawing differ from these files, the change is what needs the explanation.

@@ -32,8 +32,11 @@ export async function PATCH(request: Request, { params }: Params) {
     const { grantId } = await params;
     const body = await readJson(request);
 
-    if (body.permission !== "viewer" && body.permission !== "editor") {
-      throw new AppError("validation_failed", "Choose whether they can view or edit.");
+    // `commenter` used to be missing from this list, so changing a grant to "Can
+    // comment" failed while "Can edit" was accepted. Both halves are now the other
+    // way around: comment is a real level and edit no longer exists.
+    if (body.permission !== "viewer" && body.permission !== "commenter") {
+      throw new AppError("validation_failed", "Choose whether they can view or comment.");
     }
 
     const repo = getDriveRepository();

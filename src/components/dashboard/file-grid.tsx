@@ -28,10 +28,16 @@ export function FileGrid({
   onOpen,
   onContext,
   onRowAction,
+  mode = "default",
 }: {
   items: DriveItem[];
   onOpen: (item: DriveItem) => void;
   onContext: (item: DriveItem, anchor: HTMLElement) => void;
+  /**
+   * Where this grid is being shown. It changes what the row menu offers, not how
+   * the grid renders: the bin, for instance, has no star and no share.
+   */
+  mode?: "default" | "trash" | "starred" | "shared";
   /**
    * Runs a row action for one item. Owned by the manager, which is the only place
    * that knows how to talk to the API — the tile asks, it does not act.
@@ -156,6 +162,7 @@ export function FileGrid({
               onContext(item, anchor);
             }}
             view={view}
+            mode={mode}
             folderColour={folderColours.get(item.id)}
           />
         );
@@ -179,10 +186,11 @@ const GridTile = React.forwardRef<
     onAction: (action: string) => void;
     /** Assigned across the listing so neighbouring folders differ. */
     folderColour?: FolderColour;
+    mode: "default" | "trash" | "starred" | "shared";
     view: "grid" | "list";
   }
 >(function GridTile(
-  { item, selected, anySelected, tabIndex, onFocus, onClick, onOpen, onContext, onAction, folderColour },
+  { item, selected, anySelected, tabIndex, onFocus, onClick, onOpen, onContext, onAction, folderColour, mode },
   ref,
 ) {
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -191,35 +199,53 @@ const GridTile = React.forwardRef<
   const [hovered, setHovered] = React.useState(false);
 
   /*
-   * Open, then Select.
+   * The row menu, by location.
    *
-   * The tile menu used to offer "Preview"/"Open" — the same action a click already
-   * performs — and its star, share and trash entries were `() => undefined` stubs
-   * that closed the menu and did nothing. "Select" replaces the redundant open
-   * entry, which is where selection now begins; the destructive and sharing actions
-   * are routed through the manager's row menu, which is one implementation rather
-   * than two that can drift.
+   * Outside the bin: open, then Select — which is where selection begins — then the
+   * actions that make sense on a live item.
+   *
+   * In the bin: exactly three actions, and no open or star at all. Nothing in the
+   * bin is previewable (it is deleted) and nothing in it is starred, because
+   * starring a deleted file is a state that cannot be seen again once the file is
+   * purged. Offering either would put a control on screen that does not correspond
+   * to anything.
    */
-  const items: MenuItem[] = React.useMemo(
-    () => [
+  const items: MenuItem[] = React.useMemo(() => {
+    if (mode === "trash") {
+      return [
+        { key: "restore", label: "Restore", onSelect: () => onAction("restore") },
+        { key: "select", label: "Select", onSelect: () => beginSelection(item.id) },
+        {
+          key: "purge",
+          label: "Delete permanently",
+          destructive: true,
+          separatorBefore: true,
+          onSelect: () => onAction("purge"),
+        },
+      ];
+    }
+
+    const base: MenuItem[] = [
       { key: "open", label: item.kind === "folder" ? "Open" : "Preview", onSelect: onOpen },
-      {
-        key: "select",
-        label: "Select",
-        onSelect: () => beginSelection(item.id),
-      },
-      { key: "star", label: item.starred ? "Remove from Starred" : "Add to Starred", onSelect: () => onAction("star") },
-      { key: "share", label: "Share", onSelect: () => onAction("share") },
-      {
-        key: "trash",
-        label: "Move to Trash",
-        destructive: true,
-        separatorBefore: true,
-        onSelect: () => onAction("trash"),
-      },
-    ],
-    [item, onOpen, beginSelection, onAction],
-  );
+      { key: "select", label: "Select", onSelect: () => beginSelection(item.id) },
+    ];
+
+    if (mode === "default") {
+      base.push(
+        { key: "star", label: item.starred ? "Remove from Starred" : "Add to Starred", onSelect: () => onAction("star") },
+        { key: "share", label: "Share", onSelect: () => onAction("share") },
+        {
+          key: "trash",
+          label: "Move to Trash",
+          destructive: true,
+          separatorBefore: true,
+          onSelect: () => onAction("trash"),
+        },
+      );
+    }
+
+    return base;
+  }, [item, onOpen, beginSelection, onAction, mode]);
 
   return (
     <div
@@ -267,33 +293,17 @@ const GridTile = React.forwardRef<
         !selected && anySelected && "opacity-70",
       )}
     >
-      {/* Selection checkbox: appears on hover or when anything is selected. */}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute left-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-[4px] border transition-opacity",
-          selected
-            ? "border-primary bg-primary opacity-100"
-            : "border-[var(--brand-border-strong)] bg-white",
-          !selected && !hovered && !anySelected && "opacity-0",
-        )}
-      >
-        {selected && (
-          <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 text-white" aria-hidden="true">
-            <path
-              d="M2.5 6.2 4.8 8.5 9.5 3.8"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
-      </span>
+      {/*
+        The overflow menu sits *above* the thumbnail in paint order.
 
-      {/* Overflow menu */}
-      <div ref={menuRef} className="absolute right-1 top-1">
+        It used to be a sibling that relied on DOM order to win the stacking
+        contest — which it did against the plate's own background, but not against
+        a thumbnail that painted its own opaque surface (the image, the PDF frame,
+        the document plate). The dots ended up underneath the preview on exactly the
+        files where a menu is most useful. An explicit z-index fixes the order, and
+        the button gets its own backdrop so it stays legible on top of a photo.
+      */}
+      <div ref={menuRef} className="absolute right-1.5 top-1.5 z-20">
         <button
           type="button"
           onClick={(event) => {
@@ -306,7 +316,12 @@ const GridTile = React.forwardRef<
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           className={cn(
-            "flex h-6 w-6 items-center justify-center rounded-md text-text-subtle transition-[opacity,background-color] hover:bg-white hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            /*
+             * An opaque pill, not a bare glyph. A transparent button over a photo or
+             * a dark PDF page is invisible; the backdrop is what makes it findable
+             * without a hover state to rely on.
+             */
+            "flex h-6 w-6 items-center justify-center rounded-md border border-[var(--brand-border-soft)] bg-white/95 text-text shadow-[0_1px_3px_rgba(16,24,40,0.10)] backdrop-blur-[2px] transition-[opacity,background-color,color] hover:bg-white hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
             menuOpen || hovered ? "opacity-100" : "opacity-0",
           )}
         >
@@ -322,12 +337,17 @@ const GridTile = React.forwardRef<
       </div>
 
       {/*
-        Plate. Square, and showing the file itself wherever the file can be shown —
-        an icon standing in for an image, a PDF or a spreadsheet is a wasted square.
+        The plate.
+        
+        Folders get a landscape card and files get a square one, and that difference
+        is deliberate: a 1:1 thumbnail is right for an image or a page, because those
+        have that shape. A folder glyph does not — it is wide, and putting it in a
+        square leaves a band of empty space above and below it that reads as a bug.
+        The landscape frame is sized so the glyph fills it edge to edge.
       */}
       {item.kind === "folder" ? (
-        <div className="flex aspect-square w-full items-center justify-center">
-          <FolderIcon size="xl" colour={folderColour} id={item.id} />
+        <div className="flex aspect-[16/10] w-full items-center justify-center">
+          <FolderIcon size="xxl" colour={folderColour} id={item.id} />
         </div>
       ) : (
         <FileThumbnail item={item} />
@@ -346,7 +366,15 @@ const GridTile = React.forwardRef<
         </p>
       </div>
 
-      {item.starred && (
+      {/*
+        No star in the bin.
+
+        A trashed row can still carry `starred = true` in the database — trashing does
+        not clear it — but a star in Trash means nothing: nothing there can be
+        un-starred, and the star would invite exactly that attempt. The bin shows a
+        live item's state, not a leftover flag.
+      */}
+      {item.starred && mode !== "trash" && (
         <Star
           className="absolute bottom-2.5 right-2.5 h-3 w-3 fill-[#F9A53B] text-[#F9A53B]"
           aria-label="Starred"

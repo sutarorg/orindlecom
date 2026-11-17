@@ -3,12 +3,13 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
-  Download,
+  CheckSquare,
   FolderInput,
   FolderPlus,
   Info,
   Link2,
   PencilLine,
+  RotateCcw,
   SearchX,
   Share2,
   Star,
@@ -125,6 +126,7 @@ function FileManagerInner({
     openPreview,
     closePreview,
     setSearch,
+    patchItems,
   } = useDrive();
   const { toast } = useToast();
   const router = useRouter();
@@ -291,21 +293,52 @@ function FileManagerInner({
       const itemsById = new Map(items.map((item) => [item.id, item]));
       const starred = desired ?? ids.some((id) => !itemsById.get(id)?.starred);
 
+      /*
+       * Paint first, confirm second.
+       *
+       * The star used to change only after the PATCH *and* a `router.refresh()` of the
+       * whole route — two round trips before a boolean moved, which is why it felt
+       * slow. The optimistic patch is applied immediately, the PATCH confirms it, and
+       * the refresh that used to be unconditional is skipped when every row already
+       * shows the new value.
+       */
+      const undo = patchItems(ids, { starred });
+
       const result = await api.patch<{ updated: number }>("/api/files/star", { ids, starred });
       if (!result.ok) {
+        undo();
         toast({ tone: "error", title: "Nothing changed", description: result.message });
         return;
       }
       if (result.data.updated < ids.length) {
+        /*
+         * A partial write is the one case where the local state is not the truth, so
+         * it is dropped rather than guessed at — leaving the optimistic star on rows
+         * the server refused would be the exact "reports success the server didn't
+         * confirm" failure.
+         */
+        undo();
         toast({
           tone: "error",
           title: `${ids.length - result.data.updated} not updated`,
           description: "The others were saved.",
         });
+        router.refresh();
+        return;
       }
-      router.refresh();
+
+      /*
+       * No refresh on success.
+       *
+       * Nothing else on the page depends on a star: the count in this list, the
+       * route's own filter (this page is not `/dashboard/starred`), and the sidebar
+       * all read either local state or something a star does not touch. The refresh
+       * cost a full server render of the layout and the page to change one icon that
+       * had already changed.
+       */
+      if (mode === "starred") router.refresh();
     },
-    [items, router, toast],
+    [items, mode, patchItems, router, toast],
   );
 
   /**
@@ -372,7 +405,29 @@ function FileManagerInner({
 
   const openItem = React.useCallback(
     (item: DriveItem) => {
+      /*
+       * Selecting never opens.
+       *
+       * The tile decides this already, but the manager is the component that
+       * actually opens a preview, so the rule is enforced here too — otherwise any
+       * new caller (a keyboard handler, a future view) could open the panel while a
+       * selection is on screen and the selection bar would then be sitting over the
+       * file it had just opened.
+       */
+      if (selected.size > 0) return;
+
       if (item.kind === "folder") {
+        /*
+         * In the bin, a folder has nowhere to open.
+         *
+         * `/dashboard/folders/<id>` resolves a live parent, and a deleted folder is
+         * not one — navigating there lands on a not-found page. A click on it
+         * therefore picks it, which is the only thing the bin can do with a folder.
+         */
+        if (mode === "trash") {
+          beginSelection(item.id);
+          return;
+        }
         // A folder is a real route, so opening one is plain navigation — the
         // one action in this manager that works end to end without a backend.
         router.push(`/dashboard/folders/${item.id}`);
@@ -380,7 +435,7 @@ function FileManagerInner({
       }
       openPreview(item.id);
     },
-    [openPreview, router],
+    [beginSelection, mode, openPreview, router, selected.size],
   );
 
   const handleSelectionAction = (action: string) => {
@@ -470,9 +525,25 @@ function FileManagerInner({
           beginSelection(item.id);
           setConfirmTrash(true);
           break;
+        case "restore":
+          // Restoring is not a bulk operation from a row menu: the row is the
+          // subject, so it restores that one item and touches the selection not at
+          // all.
+          void restoreItems([item.id]);
+          break;
+        case "purge":
+          /*
+           * Permanence always goes through the confirmation, and the confirmation
+           * acts on the selection — so the row has to become the selection first.
+           * Without this the dialog asked "delete this item?" while the purge ran
+           * against whatever was selected, which is nobody's intent.
+           */
+          beginSelection(item.id);
+          setConfirmPurge(true);
+          break;
       }
     },
-    [beginSelection, toggleStar],
+    [beginSelection, toggleStar, restoreItems],
   );
 
   const previewItem = previewId ? items.find((item) => item.id === previewId) ?? null : null;
@@ -481,15 +552,21 @@ function FileManagerInner({
   // Which actions the context menu offers depends on where you are.
   const contextItems = (item: DriveItem): MenuItem[] => {
     if (mode === "trash") {
+      // Same three entries as the row's own three-dot menu: Restore, Select,
+      // Delete permanently. Right-clicking should not reveal a different set.
       return [
-        { key: "restore", label: "Restore", icon: Download, onSelect: () => void restoreItems([item.id]) },
+        { key: "restore", label: "Restore", icon: RotateCcw, onSelect: () => void restoreItems([item.id]) },
+        { key: "select", label: "Select", icon: CheckSquare, onSelect: () => beginSelection(item.id) },
         {
           key: "purge",
           label: "Delete permanently",
           icon: Trash2,
           destructive: true,
           separatorBefore: true,
-          onSelect: () => setConfirmPurge(true),
+          onSelect: () => {
+            beginSelection(item.id);
+            setConfirmPurge(true);
+          },
         },
       ];
     }
@@ -552,7 +629,7 @@ function FileManagerInner({
       {/* The toolbar sticks under the topbar so sort and view stay reachable
           while scrolling a long folder. */}
       <div className="sticky top-[60px] z-20 -mx-1 bg-[var(--brand-canvas)] px-1 pt-1">
-        <SelectionBar onAction={handleSelectionAction} star={selectionStar} />
+        <SelectionBar onAction={handleSelectionAction} star={selectionStar} mode={mode} />
         {selected.size === 0 && (
           <FileToolbar
             showFilters={showFilters}
@@ -591,6 +668,7 @@ function FileManagerInner({
       ) : view === "grid" ? (
         <FileGrid
           items={items}
+          mode={mode}
           onOpen={openItem}
           onContext={(item, anchor) => setContext({ item, anchor })}
           onRowAction={handleRowAction}
@@ -598,6 +676,7 @@ function FileManagerInner({
       ) : (
         <FileList
           items={items}
+          mode={mode}
           onOpen={openItem}
           onContext={(item, anchor) => setContext({ item, anchor })}
           onRowAction={handleRowAction}

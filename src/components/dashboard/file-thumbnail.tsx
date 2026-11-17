@@ -127,12 +127,19 @@ export function FileThumbnail({ item, className }: { item: DriveItem; className?
 
 function DirectPreview({ item, url }: { item: DriveItem; url: string }) {
   if (item.category === "image") {
+    /*
+     * The tile asks for a thumbnail, not the original.
+     *
+     * `url` here is the full-size object. Rendering it meant downloading and decoding
+     * megabytes to paint a 200-pixel square — the reason a folder of photos took
+     * seconds to show. `/api/thumbnails/:id/image` downscales server-side to a square
+     * WebP that matches this tile exactly, and the browser caches it for a year. The
+     * original URL is still used by the preview panel, where full size is the point.
+     */
     return (
-      // The signed URL is short-lived and already authorised; next/image would need
-      // a remote pattern for the bucket and cannot know the URL at build time.
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={url}
+        src={`/api/thumbnails/${encodeURIComponent(item.id)}/image`}
         alt=""
         loading="lazy"
         decoding="async"

@@ -31,7 +31,7 @@ export interface PublicLinkItem {
   size: number | null;
   mimeType: string | null;
   category: string;
-  permission: "viewer" | "commenter" | "editor";
+  permission: "viewer" | "commenter";
   ownerName: string;
   expiresAt: string | null;
 }
@@ -91,8 +91,12 @@ export async function resolvePublicLink(token: string): Promise<PublicLinkItem |
     size: row.size_bytes === null ? null : Number(row.size_bytes),
     mimeType: row.mime_type,
     category: row.category ?? "other",
-    permission:
-      row.permission === "editor" ? "editor" : row.permission === "commenter" ? "commenter" : "viewer",
+    /*
+     * Only two values are possible now that 0025 has narrowed the column, but the
+     * fallback stays: a row written before that migration ran — or by hand — must
+     * resolve to the *least* privileged level rather than being coerced upward.
+     */
+    permission: row.permission === "commenter" ? "commenter" : "viewer",
     ownerName: row.owner_name ?? "",
     expiresAt: row.expires_at,
   };

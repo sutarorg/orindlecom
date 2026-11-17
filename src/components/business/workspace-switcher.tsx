@@ -63,7 +63,19 @@ export function WorkspaceSwitcher({
             : "Organization"
           : "Create one to start",
       }
-    : { label: "Personal", sub: "Your own files" };
+    : {
+        label: "Personal",
+        /*
+         * The organization's own name, not a nudge to create one.
+         *
+         * The card used to read "Personal / Your own files" no matter what, and the
+         * only way to find the other workspace was to open the menu — where, if the
+         * personal layout had not loaded the organization, the entry said "Create a
+         * workspace" for a workspace that already existed. Naming it here means the
+         * card answers "which workspaces do I have" at a glance: Personal | Orindle.
+         */
+        sub: orgName ?? "Your own files",
+      };
 
   return (
     <>
@@ -71,6 +83,19 @@ export function WorkspaceSwitcher({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
+        /*
+         * Warm both workspace roots before the menu is even opened.
+         *
+         * Switching workspaces is a full-route navigation to a `force-dynamic` page;
+         * without a prefetch the click sits on the old screen until the server
+         * answers. Both destinations are known and fixed, so both are fetched in the
+         * background once this card renders — the same reasoning as the sidebar
+         * links' explicit `prefetch`.
+         */
+        onPointerEnter={() => {
+          router.prefetch("/dashboard");
+          router.prefetch("/business");
+        }}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Workspace: ${active.label}. Switch workspace.`}
@@ -131,6 +156,7 @@ export function WorkspaceSwitcher({
             shortcut: inBusiness ? undefined : "Current",
             onSelect: () => {
               setOpen(false);
+              // `prefetch` below warms the one route almost every switch lands on.
               router.push("/dashboard");
             },
           },

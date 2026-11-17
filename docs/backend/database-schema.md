@@ -345,7 +345,7 @@ create table public.share_grants (
   folder_id   uuid references public.folders(id) on delete cascade,
   grantee_id  uuid not null references auth.users(id) on delete cascade,
   granted_by  uuid not null references auth.users(id) on delete cascade,
-  permission  text not null check (permission in ('viewer','commenter','editor')),
+  permission  text not null check (permission in ('viewer','commenter')),
   expires_at  timestamptz,
   created_at  timestamptz not null default now(),
   constraint grant_target_exclusive check (
@@ -362,7 +362,7 @@ create table public.share_links (
   -- Unguessable. Not a sequential id, not derived from the file name.
   token       text not null unique,
   permission  text not null default 'viewer'
-              check (permission in ('viewer','commenter','editor')),
+              check (permission in ('viewer','commenter')),
   -- Links expire. A permanent public link is exactly what the requirements forbid.
   expires_at  timestamptz not null,
   revoked_at  timestamptz,
@@ -371,9 +371,11 @@ create table public.share_links (
 );
 ```
 
-Only `viewer` links may be redeemed by an anonymous visitor, and only while
-`expires_at` is in the future and `revoked_at` is null. `commenter`/`editor` links
-require an authenticated user with a matching grant.
+Both levels may be redeemed by an anonymous visitor, and only while `expires_at` is
+in the future and `revoked_at` is null. A `commenter` link additionally allows
+comments (and reading the comments others left, through `link_comments`). The
+`editor` level no longer exists: migration 0025 converts existing rows to
+`commenter` and narrows both check constraints to the two values above.
 
 ---
 

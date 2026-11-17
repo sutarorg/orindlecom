@@ -28,12 +28,8 @@ export async function PUT(
     if (typeof body.openToOrganization !== "boolean") {
       throw new AppError("validation_failed", "Specify whether the folder is open to the organization.");
     }
-    if (
-      body.defaultAccess !== "viewer" &&
-      body.defaultAccess !== "commenter" &&
-      body.defaultAccess !== "editor"
-    ) {
-      throw new AppError("validation_failed", "Choose viewer, commenter, or editor.");
+    if (body.defaultAccess !== "viewer" && body.defaultAccess !== "commenter") {
+      throw new AppError("validation_failed", "Choose viewer or commenter.");
     }
 
     const rawGrants = Array.isArray(body.grants) ? body.grants : [];
@@ -44,8 +40,7 @@ export async function PUT(
           entry !== null &&
           typeof (entry as Record<string, unknown>).memberId === "string" &&
           ((entry as Record<string, unknown>).access === "viewer" ||
-            (entry as Record<string, unknown>).access === "commenter" ||
-            (entry as Record<string, unknown>).access === "editor"),
+            (entry as Record<string, unknown>).access === "commenter"),
       )
       .map((entry) => ({ memberId: entry.memberId, access: entry.access }));
 

@@ -41,7 +41,7 @@ import {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const ACCESS_LEVELS = new Set<FolderAccess>(["viewer", "commenter", "editor"]);
+const ACCESS_LEVELS = new Set<FolderAccess>(["viewer", "commenter"]);
 const INVALID_FOLDER_CHARS = /[\\/:*?"<>|]/;
 
 interface OrgRow {
@@ -402,7 +402,7 @@ export async function updateOrganization(
 
   if (input.defaultFolderAccess !== undefined) {
     if (!ACCESS_LEVELS.has(input.defaultFolderAccess)) {
-      throw new AppError("validation_failed", "Choose viewer, commenter, or editor.");
+      throw new AppError("validation_failed", "Choose viewer or commenter.");
     }
     patch.default_folder_access = input.defaultFolderAccess;
     changes.push(`default folder access set to ${input.defaultFolderAccess}`);
@@ -1370,7 +1370,7 @@ export async function setFolderAccess(
     throw new AppError("not_found", "That folder wasn't found.");
   }
   if (!ACCESS_LEVELS.has(input.defaultAccess)) {
-    throw new AppError("validation_failed", "Choose viewer, commenter, or editor.");
+    throw new AppError("validation_failed", "Choose viewer or commenter.");
   }
 
   const db = getServiceClient();

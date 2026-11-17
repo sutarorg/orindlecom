@@ -45,7 +45,7 @@ export function InviteDialog({
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState<Exclude<BusinessRole, "owner">>("member");
   const [folderId, setFolderId] = React.useState<string>("");
-  const [access, setAccess] = React.useState<FolderAccess>("editor");
+  const [access, setAccess] = React.useState<FolderAccess>("commenter");
   const [error, setError] = React.useState<string | undefined>();
   const [pending, setPending] = React.useState(false);
   const emailId = React.useId();
@@ -56,7 +56,7 @@ export function InviteDialog({
       setEmail("");
       setRole("member");
       setFolderId(defaultFolderId ?? "");
-      setAccess("editor");
+      setAccess("commenter");
       setError(undefined);
       setPending(false);
     }

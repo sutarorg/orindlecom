@@ -20,7 +20,7 @@ const POINTS = [
   {
     icon: Share2,
     title: "Sharing on your terms",
-    body: "Invite specific people or send a link, with view or edit access that you can revoke.",
+    body: "Invite specific people or send a link, with view or comment access you can revoke.",
   },
   {
     icon: History,
