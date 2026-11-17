@@ -86,6 +86,28 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang={SITE_LANGUAGE}>
+      <head>
+        {/*
+          * The brand font is render-critical: every heading and almost every label
+          * on the site uses it, so the first paint waits on it either way. Without
+          * this it was discovered only after the stylesheet had parsed and applied,
+          * which put the request at the end of a waterfall rather than alongside it.
+          *
+          * `crossOrigin` is required even though the file is same-origin: font
+          * requests are made in CORS mode, and a preload without it is fetched
+          * twice — once discarded, once real.
+          *
+          * `font-display: swap` is set on the @font-face, so a slow font degrades
+          * to the fallback face instead of blocking the paint.
+          */}
+        <link
+          rel="preload"
+          href="/fonts/plus-jakarta-sans-latin.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body>
         <ScrollToTop />
         {children}

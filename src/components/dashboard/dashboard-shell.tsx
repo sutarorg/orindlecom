@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, X } from "lucide-react";
 import { ToastProvider } from "@/components/ui/toast";
@@ -236,7 +237,23 @@ function ShellInner({
           {/* Bottom padding on small screens keeps the last row of content
               clear of the floating upload button. */}
           <main id="dashboard-main" className="min-w-0 flex-1 pb-24 lg:pb-0">
-            <DeletionCancelledNotice />
+            {/*
+              * Suspense is mandatory here, not cosmetic.
+              *
+              * `DeletionCancelledNotice` reads `useSearchParams`, which opts its
+              * enclosing tree into client-side rendering. Next.js requires a
+              * Suspense boundary above any such component inside a statically
+              * prerenderable route; without one the prerender is cancelled and the
+              * route throws at runtime, unmounting the tree. That is a blank page
+              * with a correct document title — exactly the symptom this fixes.
+              *
+              * `fallback={null}` is right because the banner is absent from almost
+              * every visit: there is nothing to reserve space for, and rendering a
+              * placeholder would shift the page.
+              */}
+            <Suspense fallback={null}>
+              <DeletionCancelledNotice />
+            </Suspense>
             {children}
           </main>
         </div>

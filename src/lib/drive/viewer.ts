@@ -11,6 +11,7 @@
  * "Your account" reads as a placeholder at a glance.
  */
 
+import { cache } from "react";
 import { getAuthService } from "@/lib/auth/service";
 
 export interface Viewer {
@@ -28,7 +29,20 @@ const PLACEHOLDER: Viewer = {
   authenticated: false,
 };
 
-export async function getViewer(): Promise<Viewer> {
+/**
+ * The signed-in viewer, resolved at most once per request.
+ *
+ * `getCurrentSession()` validates the token with the auth server (`getUser()`),
+ * which is a real network round trip — it is not a local cookie read. Because both
+ * the dashboard layout and the dashboard page call this, an uncached version made
+ * every dashboard navigation wait on two identical auth round trips in series
+ * before any content could render.
+ *
+ * React's `cache` keys on the request, so the second caller in the same render
+ * gets the first result for free. This is the same treatment `resolveActor` already
+ * gets, for the same reason.
+ */
+export const getViewer = cache(async (): Promise<Viewer> => {
   const session = await getAuthService().getCurrentSession();
   if (!session) return PLACEHOLDER;
 
@@ -45,4 +59,4 @@ export async function getViewer(): Promise<Viewer> {
     initials,
     authenticated: true,
   };
-}
+});
