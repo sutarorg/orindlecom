@@ -355,3 +355,17 @@ describe("the feature illustrations", () => {
     }
   });
 });
+
+describe("marketing copy about sharing", () => {
+  const copy = read("src/components/marketing/product-preview.tsx");
+
+  it("offers the access levels that exist, and only those", () => {
+    /*
+     * The product has two levels: view and comment. "Edit" was removed from the model
+     * in migration 0025, so copy promising it is a promise the shared link cannot keep —
+     * and the marketing page is exactly where that promise gets made.
+     */
+    expect(copy).not.toMatch(/edit access|can edit|edit or view/i);
+    expect(copy).toMatch(/view or comment access/);
+  });
+});
