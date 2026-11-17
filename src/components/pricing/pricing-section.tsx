@@ -75,8 +75,7 @@ export function PricingSection({
         </ul>
 
         <p className="mt-5 text-center text-[11.5px] leading-relaxed text-text-subtle">
-          Storage is shared across every device you sign in on. Prices are shown automatically for
-          your location. Save 20% with annual billing. No credit card required to start.
+          Save 20% with annual billing. No credit card required.
         </p>
       </div>
     </section>

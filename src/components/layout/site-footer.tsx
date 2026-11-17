@@ -52,15 +52,6 @@ export function SiteFooter() {
           <p className="text-[11px] tracking-[-0.005em] text-text-subtle">
             © {new Date().getFullYear()} Orindle. All rights reserved.
           </p>
-          <p className="text-[11px] tracking-[-0.005em] text-text-subtle">
-            Support:{" "}
-            <a
-              href={`mailto:${SITE.supportEmail}`}
-              className="underline decoration-[var(--brand-border-strong)] underline-offset-2 transition-colors hover:text-ink"
-            >
-              {SITE.supportEmail}
-            </a>
-          </p>
         </div>
       </div>
     </footer>

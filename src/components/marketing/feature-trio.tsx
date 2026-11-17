@@ -35,8 +35,24 @@ export function FeatureTrio() {
                 {body}
               </p>
 
-              <div className="mt-7 h-[170px] w-full max-w-[290px] sm:h-[180px] lg:mt-8 lg:h-[200px]">
-                <Art />
+              {/*
+                The three drawings share one horizontal line.
+
+                Each card is its own flex column, and the heading and body above the art
+                are different lengths ("Store without the clutter" wraps to two lines at
+                some widths, "Access from anywhere" does not). Stacked normally, that
+                pushed the plates to three different heights. `mt-auto` puts each plate at
+                the bottom of its own column instead, and because the columns in a grid
+                row are the same height, that is one line for all three — with the plates
+                the same fixed height, so their tops line up too.
+
+                The `mt-*` values live on the wrapper's margin, so the gap above a pushed
+                plate is still 28px when nothing was pushed.
+              */}
+              <div className="flex flex-1 items-end">
+                <div className="mt-7 h-[170px] w-full max-w-[290px] sm:h-[180px] lg:mt-8 lg:h-[200px]">
+                  <Art />
+                </div>
               </div>
             </div>
           ))}

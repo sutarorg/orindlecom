@@ -101,7 +101,7 @@ Notes that drove the implementation:
 | Gap body → CTA | 29px |
 | Secondary button | x 191 – 300 (**109 × 44**), y 335 – 379, 1px border `#E1E5F0`, white fill, radius 14px, label "Explore Plans" 15px/600 ink |
 | Gutter between CTAs | 14px |
-| Assurance line | "No credit card required", y ≈ 402, 13px, colour `#8B90A8`, preceded by a 14px crossed-circle glyph |
+| Assurance line | "No credit card required", y ≈ 402, 13px, colour `#8B90A8`, preceded by a 14px crossed-circle glyph. Desktop only: hidden below `sm`, where it displaced the mockup |
 | Gap CTA → assurance | 22px |
 
 ### 4.2 Hero backdrop

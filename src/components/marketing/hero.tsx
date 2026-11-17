@@ -59,7 +59,15 @@ export function Hero() {
               </Button>
             </div>
 
-            <p className="mt-[20px] flex items-center gap-[6px] text-[length:var(--brand-text-caption-size)] text-text-subtle sm:mt-6">
+            {/*
+              Desktop only.
+
+              On a phone this line sat directly under the two stacked buttons and pushed
+              the mockup — the one thing that shows what the product is — below the fold.
+              The same reassurance is on the pricing page and in the signup form, so
+              nothing is lost that a phone visitor cannot find two taps away.
+            */}
+            <p className="mt-[20px] hidden items-center gap-[6px] text-[length:var(--brand-text-caption-size)] text-text-subtle sm:mt-6 sm:flex">
               <CircleSlash
                 className="h-[13px] w-[13px] shrink-0"
                 strokeWidth={1.8}
