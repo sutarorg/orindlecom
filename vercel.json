@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/expire-reservations",
-      "schedule": "*/10 * * * *"
+      "path": "/api/cron/dispatch",
+      "schedule": "0 1 * * *"
     },
     {
       "path": "/api/cron/trash-cleanup",
@@ -11,31 +11,23 @@
     },
     {
       "path": "/api/cron/subscription-sweep",
-      "schedule": "30 2 * * *"
-    },
-    {
-      "path": "/api/cron/email-retry",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/reconcile-storage",
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/orphan-sweep",
+      "path": "/api/cron/reconcile-storage",
       "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/cron/account-purge",
+      "path": "/api/cron/orphan-sweep",
       "schedule": "0 5 * * *"
     },
     {
-      "path": "/api/cron/abuse-maintenance",
-      "schedule": "*/10 * * * *"
+      "path": "/api/cron/account-purge",
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/domain-intel",
-      "schedule": "0 6 * * *"
+      "schedule": "0 7 * * *"
     }
   ]
 }

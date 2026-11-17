@@ -76,9 +76,18 @@ describe("vercel.json", () => {
     }
   });
 
-  it("schedules every cron route the codebase provides", async () => {
-    // The inverse check: a job that exists but is never scheduled is dead code
-    // that looks like a working feature in the docs.
+  it("runs every cron route, directly or through the dispatcher", async () => {
+    /*
+     * The inverse check: a job that exists but never runs is dead code that looks
+     * like a working feature in the docs.
+     *
+     * "Runs" now has two legitimate forms, because Vercel's Hobby plan allows only
+     * one run per job per day. A frequency-sensitive job is listed in
+     * `/api/cron/dispatch` and invoked from there, and the dispatcher is what
+     * `vercel.json` schedules. Treating a dispatched job as unscheduled would be a
+     * false failure; treating it as scheduled without checking the dispatcher
+     * actually names it would be a false pass. So: parse the dispatcher.
+     */
     const raw = await readFile(path.join(ROOT, "vercel.json"), "utf8");
     const config = JSON.parse(raw) as { crons: { path: string }[] };
     const scheduled = new Set(config.crons.map((c) => c.path));
@@ -86,8 +95,58 @@ describe("vercel.json", () => {
     const cronRoutes = (await listRoutePaths()).filter((r) => r.startsWith("/api/cron/"));
     expect(cronRoutes.length).toBeGreaterThan(0);
 
+    expect(scheduled.has("/api/cron/dispatch"), "the dispatcher must itself be scheduled").toBe(
+      true,
+    );
+    const dispatcher = await readFile(
+      path.join(ROOT, "src/app/api/cron/dispatch/route.ts"),
+      "utf8",
+    );
+
     for (const route of cronRoutes) {
-      expect(scheduled, `${route} is not scheduled in vercel.json`).toContain(route);
+      const viaDispatcher = dispatcher.includes(`"${route}"`);
+      expect(
+        scheduled.has(route) || viaDispatcher,
+        `${route} is neither scheduled in vercel.json nor dispatched`,
+      ).toBe(true);
+    }
+  });
+
+  it("never schedules a job more than once per day", async () => {
+    /*
+     * Vercel's Hobby plan rejects any expression that runs more than once per day,
+     * and the failure is a deploy-time error rather than a runtime one — which is
+     * how a schedule like `*\/10 * * * *` took the whole deployment down.
+     *
+     * The rule is enforced here rather than remembered. A sub-daily expression must
+     * fail this test before it reaches a deploy.
+     */
+    const raw = await readFile(path.join(ROOT, "vercel.json"), "utf8");
+    const config = JSON.parse(raw) as { crons: { path: string; schedule: string }[] };
+
+    for (const cron of config.crons) {
+      const [minute, hour] = cron.schedule.trim().split(/\s+/);
+
+      /*
+       * "More than once per day" means the hour field can match several hours, or
+       * the minute field is a wildcard (which runs in every hour).
+       *
+       *   `0 1 * * *`     once, at 01:00          → allowed
+       *   `0 * * * *`     once per hour           → refused
+       *   `*\/10 * * * *`  every ten minutes      → refused
+       *   `0 1,13 * * *`  twice a day             → refused
+       *
+       * A minute list (`0,30 1 * * *`) is still one hour, so it stays allowed.
+       */
+      const hourRepeats = /[*,\-]/.test(hour) || hour.includes("/");
+      const minuteWildcard = minute === "*" || minute.startsWith("*/");
+      const subDaily = hourRepeats || minuteWildcard;
+
+      expect(
+        subDaily,
+        `${cron.path} schedule "${cron.schedule}" would run more than once per day, ` +
+          "which Vercel Hobby refuses at deploy time",
+      ).toBe(false);
     }
   });
 });

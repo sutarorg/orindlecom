@@ -148,7 +148,7 @@ email_log (to_address, template, status, provider_message_id, error, attempts, n
 ```
 
 - Every send appends a row. `status` starts `queued` and moves to `sent` or `failed`.
-- `email-retry` runs every 15 minutes: `failed AND attempts < 5 AND next_attempt_at <=
+- `email-retry` runs daily, through `/api/cron/dispatch`: `failed AND attempts < 5 AND next_attempt_at <=
   now()`, with exponential backoff (1 m, 5 m, 30 m, 2 h, 12 h).
 - After 5 attempts it stays `failed` and is surfaced in the daily reconciliation, not
   deleted. A permanently failing address is information.

@@ -1,9 +1,15 @@
 /**
  * Releases reservations and sessions that were never confirmed.
  *
- * Runs every 15 minutes. Without it, a customer who closes the tab mid-upload
- * would have their quota held until the 24-hour expiry — which looks like a bug
- * and is indistinguishable from one in the customer's eyes.
+ * Runs daily, through `/api/cron/dispatch`, because Vercel's free plan allows one
+ * run per job per day.
+ *
+ * This job used to be load-bearing for correctness and no longer is: a customer who
+ * closes the tab mid-upload would otherwise have their quota held until the 24-hour
+ * expiry, which looks like a bug and is indistinguishable from one. `reserve_storage`
+ * therefore reclaims lapsed reservations inline (migration `0020`), so the customer's
+ * next upload is the thing that frees the bytes. What is left here is bookkeeping —
+ * marking the rows `expired` and counting them — which can safely be a day late.
  *
  * Idempotent and safe to run concurrently: release_reservation() is a no-op on a
  * reservation that is no longer `reserved`.

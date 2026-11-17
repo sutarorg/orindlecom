@@ -50,7 +50,7 @@ New test files:
 | 15 | Optional TOTP 2FA works | ✅ Enrol, challenge, AAL1→AAL2, multiple factors, removal. **Integration unverified** |
 | 16 | Users without 2FA sign in normally | ✅ No factor → `nextLevel` is `aal1` → no redirect |
 | 17 | Enrolled users complete the challenge | ✅ Redirected to `/auth/mfa`; AAL2 re-confirmed before proceeding |
-| 18 | False-positive restrictions expire | ✅ `release_expired_restrictions()` every 10 minutes, idempotent |
+| 18 | False-positive restrictions expire | ✅ `release_expired_restrictions()` daily via `/api/cron/dispatch`, idempotent |
 | 19 | No data deleted on an uncertain score | ✅ No delete branch in the enforcement path; asserted in `security.test.ts` |
 | 20 | All security and automated tests pass | ✅ 265 / 265 |
 
