@@ -473,6 +473,40 @@ describe("account deletion", () => {
 
 /* ── Client-side rendering boundaries ─────────────────────────────────────── */
 
+/* ── Request-scoped auth client ───────────────────────────────────────────── */
+
+describe("auth service lifetime", () => {
+  it("is request-scoped, so it never reuses another request's cookie jar", async () => {
+    /*
+     * The bug this pins: `getAuthService()` was a module-level singleton, and the
+     * Supabase server client inside it awaits `cookies()` exactly once. So the
+     * first request to touch it pinned its cookie jar for every request after.
+     *
+     * The symptom was a sign-in loop, not an error page: the sign-in action wrote
+     * the session cookie correctly, middleware admitted `/dashboard`, and then the
+     * dashboard layout's `getViewer()` read the *stale* jar, saw no user and
+     * redirected to `/login?next=/dashboard`. That page read the stale jar too, so
+     * it rendered a form instead of continuing on — the visitor was signed in and
+     * unable to get in. A black render is the same fault with no session at all.
+     *
+     * `cache()` is the fix: per-request sharing, not per-process.
+     */
+    const service = await readStripped("src/lib/auth/service.ts");
+    expect(service).toContain("cache(");
+    // The singleton is what made this a process-wide cache.
+    expect(service).not.toMatch(/^let cached/m);
+    expect(service).not.toMatch(/cached \?\?=/);
+  });
+
+  it("documents why the client cannot outlive a request", async () => {
+    const server = await readStripped("src/lib/auth/supabase/server.ts");
+    // The client captures the awaited cookie store; that closure is the binding
+    // that must not be shared across requests.
+    expect(server).toContain("await cookies()");
+    expect(server).toContain("createServerClient");
+  });
+});
+
 describe("useSearchParams boundaries", () => {
   it("every component reading useSearchParams sits under a Suspense boundary", async () => {
     /*

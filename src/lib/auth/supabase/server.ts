@@ -37,6 +37,14 @@ export function isAuthConfigured() {
  *
  * A fresh client per request is required: the SSR helper caches cookie writes
  * on the instance, so reusing one across requests could drop a session.
+ *
+ * This is not hypothetical. `getAuthService()` used to hold one of these in a
+ * module-level singleton; `cookies()` was awaited during the *first* request and
+ * that captured store was reused forever after. Where a Server Component tried to
+ * write a refreshed session cookie the call threw, the `catch` below swallowed it
+ * (correctly — a Server Component cannot set cookies), and the source of truth for
+ * that request could never be updated. Callers must go through
+ * `getAuthService()`, which is `cache()`d per request rather than per process.
  */
 export async function createSupabaseServerClient(): Promise<SupabaseClient> {
   const cookieStore = await cookies();
@@ -52,8 +60,13 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient> {
             cookieStore.set(name, value, options);
           }
         } catch {
-          // Server Components cannot mutate cookies. The middleware refreshes
-          // the session on the next request, so this is safe to ignore.
+          /*
+           * Expected in a Server Component, which may not mutate cookies. It is
+           * only safe to ignore there: a Route Handler and a Server Action *can*
+           * set cookies, and swallowing a failure in one of those silently drops
+           * a new session. Middleware re-writes the session cookie on the next
+           * request, which is what covers the Server Component case.
+           */
         }
       },
     },
