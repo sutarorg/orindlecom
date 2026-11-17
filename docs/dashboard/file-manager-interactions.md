@@ -24,6 +24,14 @@ only the layout changes. The choice persists to `localStorage` under
 Narrow screens drop columns rather than shrinking them. A 60px "Size" column
 holding "175 MB" is not an adapted layout.
 
+**One plate shape, 16:10, for both kinds.** Grid tiles used to be square for files and
+landscape for folders, so a mixed grid had two card heights and its rows stepped
+wherever the two met. The square was also the wrong crop for the commonest content —
+screenshots, photos and landscape phone shots all lost their sides to it. Everything is
+16:10 now, the server thumbnail is cropped to the same shape (a square thumbnail under
+a landscape plate is cropped twice), and the folder glyph is sized by the plate's
+height rather than to a fixed 70 × 58 sticker that floated in the middle of a big card.
+
 ---
 
 ## 2. Keyboard model
@@ -76,11 +84,28 @@ Items, by mode:
 
 | Mode | Menu |
 | --- | --- |
-| Default (files) | Preview · Add to Starred · Rename · Share · Copy link · Move to Trash |
-| Default (folders) | Open · Add to Starred · Rename · Share · Copy link · Move to Trash |
-| Starred | Open · Remove from Starred · Share · Copy link · Move to Trash |
-| Shared | Open · Share · Copy link · Move to Trash |
-| Trash | Restore · Delete permanently |
+| Default (files) | Preview · Select · Add to Starred · Share · Move to Trash |
+| Default (folders) | Open · Select · Add to Starred · Share · Move to Trash |
+| Starred | Open · Select · Remove from Starred · Share · Move to Trash |
+| Shared | Open · Select · Share · Move to Trash |
+| Trash | Restore · Select · Delete permanently |
+
+Every entry carries an icon. "Preview" did not, so it read as a heading above a list
+of icons rather than as something you could press.
+
+**Two rules the menu learned the hard way.**
+
+*No item is highlighted on open.* The first entry used to receive focus, and the
+focus background then painted it — which reads as "already chosen". In the bin that
+made "Restore" look like the default action on a deleted file. The panel itself takes
+focus now (`tabIndex={-1}`), and `ArrowDown` moves into the list from there.
+
+*A menu click stops at the menu.* The panel is a portal, and a portal changes where
+its children paint, not who their React parent is: a click on "Share" bubbled through
+the component tree to the tile that owned the trigger and ran the tile's `onClick`,
+opening the preview behind the menu. `event.stopPropagation()` on the item is the fix
+at the source — a menu action answers "what may I do with this row", it is not a click
+*on* the row.
 
 Each menu dismisses on `Escape`, on outside click, on scroll, and returns focus to
 its trigger when it closes.
@@ -136,6 +161,17 @@ Clicking a file, or `Enter` on a focused one, opens the preview panel.
   is the wrong shape.
 - **Below 1024px:** a bottom sheet with a scrim and scroll lock, because there is
   no room for both.
+
+**Opening it costs one round trip, and usually none.** A preview needs a signed URL
+before it can request a single byte, so the panel keeps the minted URL for four
+minutes (inside the five-minute life of the signature) and reuses it: reopening a file
+you just looked at paints with no request. The neighbouring files in the folder are
+prefetched while you read, so arrow-key stepping has nothing to wait for.
+
+The stage also used to sit on "Loading preview…" forever. `setLoading(false)` was
+called only on the error branch, and the render checks `loading` before anything else —
+so a *successful* load left the spinner up while the image had already arrived. The
+flag now means "waiting for an address" and is cleared as soon as one is known.
 
 The panel shows a stage per category (image, PDF, text, video, audio, and a
 designed "no source" state for the rest), then metadata — type, size, modified,

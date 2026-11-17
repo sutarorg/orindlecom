@@ -12,9 +12,12 @@
  *
  * Decisions worth stating:
  *
- *   - **Square, cover-cropped.** The tile is `aspect-square` with `object-cover`, so
- *     the crop has to be identical to what the browser would have done; producing a
- *     square server-side means the CSS no longer scales anything.
+ *   - **Landscape, cover-cropped.** The tile is `aspect-[16/10]` with `object-cover`,
+ *     so the crop here has to be the one the browser would otherwise do. Producing the
+ *     final shape server-side means the CSS is no longer scaling or re-cropping
+ *     anything — and a square here would be cropped a second time by a landscape tile,
+ *     throwing away the sides of every screenshot after already having thrown away
+ *     both ends.
  *   - **WebP, quality 72.** Visually indistinguishable at tile size, and roughly half
  *     the bytes of JPEG at the same quality.
  *   - **Cached hard.** The bytes for a given object version never change, so the
@@ -40,14 +43,15 @@ import { isStorageConfigured } from "@/lib/r2/client";
 export const runtime = "nodejs";
 
 /**
- * The widest a grid tile gets.
+ * The plate's shape, and the widest a grid tile gets.
  *
- * The grid is at most four columns inside a 1180px content column, so a tile is
- * ~280 CSS pixels; at 2× device pixel ratio that is 560. 480 is the compromise — the
- * difference at 2× on a 280px tile is not visible after WebP, and it keeps the bytes
- * in the tens of kilobytes.
+ * The grid is at most five columns inside a 1180px content column, so a tile is
+ * ~215 CSS pixels wide and — at the 16:10 plate ratio — ~134 tall. At 2× device pixel
+ * ratio that is 430. 480 keeps a little headroom without inflating the bytes: the
+ * difference at 2× is not visible after WebP, and this stays in the tens of kilobytes.
  */
-const TILE_PX = 480;
+const TILE_W = 480;
+const TILE_H = 300;
 
 /** Quality for the WebP. 72 is where artefacts stop being visible at tile size. */
 const TILE_QUALITY = 72;
@@ -119,7 +123,7 @@ export async function GET(
         // `cover` with a centre gravity is exactly what `object-cover` does in CSS,
         // so the server's crop and the browser's would agree — and now the browser is
         // not doing one at all.
-        .resize(TILE_PX, TILE_PX, { fit: "cover", position: "centre", withoutEnlargement: true })
+        .resize(TILE_W, TILE_H, { fit: "cover", position: "centre", withoutEnlargement: true })
         .webp({ quality: TILE_QUALITY, effort: 4 })
         // Metadata is stripped: EXIF can carry GPS coordinates, and a thumbnail is
         // not a place to republish somebody's location.

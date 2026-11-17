@@ -9,7 +9,7 @@ import { FileTypeIcon } from "./file-icon";
 import { cn } from "@/lib/utils";
 
 /**
- * The 1:1 plate on a grid tile.
+ * The landscape plate on a grid tile.
  *
  * Square, and filled with the best thing available for the file rather than an
  * icon standing in for all of them:
@@ -100,10 +100,17 @@ export function FileThumbnail({ item, className }: { item: DriveItem; className?
   return (
     <div
       ref={ref}
-      // aspect-square is the requirement: the plate is 1:1 regardless of column
-      // width, so tiles line up on a grid instead of stepping with their content.
+      /*
+       * Landscape, 16:10 — the same plate a folder card uses.
+       *
+       * It was `aspect-square`. A grid that holds both files and folders then had two
+       * card heights in it, so rows stepped wherever the two kinds met, and a square
+       * crop threw away the sides of every screenshot and landscape photo to fill the
+       * top and bottom with background. Matching the folder card means one consistent
+       * row height and a crop that keeps more of the picture.
+       */
       className={cn(
-        "relative aspect-square w-full overflow-hidden rounded-lg",
+        "relative aspect-[16/10] w-full overflow-hidden rounded-lg",
         className,
       )}
       style={{ backgroundColor: tint.bg }}

@@ -44,7 +44,14 @@ export function FolderDetail({
                 href={`/dashboard/folders/${ancestor.id}`}
                 className="inline-flex min-h-[28px] max-w-[140px] items-center truncate rounded px-1 py-0.5 font-medium text-text-muted transition-colors hover:bg-[var(--brand-surface-muted)] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                {ancestor.name}
+                {/*
+                  A crumb whose name could not be resolved still works as a link —
+                  the id came from the path column, so the destination is known even
+                  when the label is not. "Untitled folder" says that honestly; a
+                  blank crumb would look like a rendering bug and a uuid would leak
+                  the database into the breadcrumb.
+                */}
+                {ancestor.name || "Untitled folder"}
               </Link>
             </li>
           ))}

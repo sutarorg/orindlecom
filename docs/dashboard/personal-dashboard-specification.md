@@ -24,7 +24,7 @@ The product lives at `/dashboard` and eleven routes below it:
 | --- | --- | --- |
 | `/dashboard` | Overview: greeting, storage, recent, activity | `usage()`, `list({scope:"recent"})`, `activity()`, `list({scope:"starred"})` |
 | `/dashboard/files` | The canonical file manager | `list({scope:"files", parentId:null})` |
-| `/dashboard/folders` | Folder-only listing | `list({scope:"folders"})` |
+| `/dashboard/folders` | Top level of the folder tree | `list({scope:"folders", rootOnly:true})` |
 | `/dashboard/folders/[id]` | One folder, with breadcrumbs | `get(id)`, `list({scope:"files", parentId:id})` |
 | `/dashboard/recent` | Recently opened files | `list({scope:"recent"})` |
 | `/dashboard/starred` | Starred files and folders | `list({scope:"starred"})` |
@@ -37,6 +37,29 @@ The product lives at `/dashboard` and eleven routes below it:
 
 Every route is `force-dynamic` and `noindex`. A dashboard behind auth has no
 business in a search index, and its content is per-request by definition.
+
+### Folder nesting
+
+A folder created inside a folder belongs *there* and nowhere else. Three things have
+to agree for that to be true, and two of them did not:
+
+1. **Creation** passes the parent (`DashboardActions parentId={folder.id}`), so the
+   row is written with the right `parent_id`.
+2. **The Folders page** lists the top of the tree only. Asking for
+   `list({ scope: "folders" })` with no parent meant *no filter*, so the page rendered
+   every folder at every depth, flat — a nested folder appeared inside its parent *and*
+   here, and neither list showed the shape of the tree. `rootOnly: true` is the explicit
+   request, and it is distinct from `parentId: null` so a caller can never accidentally
+   ask for "everything".
+3. **The breadcrumb** is built from the folder's own `path` column, which the
+   `folders_path` trigger maintains as `/id/id/id/`. The repository used to drop it
+   (`path: []`), so a folder three levels deep rendered a one-crumb trail. The ids are
+   mapped to names from one read of the folder table, and a name that cannot be resolved
+   renders as "Untitled folder" — never as a uuid.
+
+The path terminates at the folder itself, so the last segment is dropped when it
+becomes a breadcrumb. That parsing lives in `src/lib/drive/folder-path.ts`, where it is
+tested directly rather than through a database.
 
 ---
 

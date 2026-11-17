@@ -18,12 +18,17 @@ export const dynamic = "force-dynamic";
 /**
  * Folders.
  *
- * Lists folders only — the one structural difference from My Files. Nested
- * navigation lives at /dashboard/folders/[id], which shows a breadcrumb trail
- * and the folder's contents.
+ * Lists the **top level** of the folder tree — the one structural difference from My
+ * Files. Nested navigation lives at /dashboard/folders/[id], which shows a breadcrumb
+ * trail and that folder's contents.
+ *
+ * "Top level" has to be asked for explicitly. `list({ scope: "folders" })` with no
+ * parent means *no filter*, so this page used to render every folder in the account,
+ * flat: a folder created inside another one appeared here as well as inside its parent,
+ * and neither list showed the nesting. `rootOnly` is the explicit request.
  */
 export default async function FoldersPage() {
-  const result = await getDriveRepository().list({ scope: "folders" });
+  const result = await getDriveRepository().list({ scope: "folders", rootOnly: true });
   const items = result.ok ? result.data.items : [];
 
   return (

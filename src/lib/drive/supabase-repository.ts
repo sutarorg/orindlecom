@@ -22,6 +22,7 @@ import { createSupabaseServerClient } from "@/lib/auth/supabase/server";
 import { resolveActor } from "@/domain/auth/actor";
 import { isSupportedCurrency, planById, type CurrencyCode } from "@/config/pricing";
 import { resolveRequestCurrency } from "@/lib/geo/currency";
+import { ancestorCrumbs } from "./folder-path";
 import { TRASH_RETENTION } from "./types";
 import { isStorageConfigured, presignGet } from "@/lib/r2/client";
 import {
@@ -102,7 +103,31 @@ function fileToItem(row: FileRow): DriveItem {
   };
 }
 
-function folderToItem(row: FolderRow): DriveItem {
+/**
+ * Every folder's id and name, for turning a `path` into breadcrumbs.
+ *
+ * One query for the whole tree rather than a walk up the chain: the chain is a list of
+ * ids and the answers are all in one table, so N round trips to label N crumbs would be
+ * the slow way to do something the database can do in one read. Folders per account are
+ * a small, bounded set, and this is a project of two columns.
+ *
+ * Returns an empty map when the read fails, so a breadcrumb degrades to unlabelled
+ * crumbs instead of turning the page into an error.
+ */
+async function folderNames(
+  supabase: Client,
+  ownerId: string,
+): Promise<Map<string, string>> {
+  const { data } = await supabase
+    .from("folders")
+    .select("id, name")
+    .eq("owner_id", ownerId)
+    .is("deleted_at", null);
+
+  return new Map(((data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]));
+}
+
+function folderToItem(row: FolderRow, names?: Map<string, string>): DriveItem {
   return {
     id: row.id,
     kind: "folder" as ItemKind,
@@ -111,7 +136,15 @@ function folderToItem(row: FolderRow): DriveItem {
     size: null,
     mimeType: "inode/directory",
     parentId: row.parent_id,
-    path: [],
+    /*
+     * The ancestry, without this folder itself.
+     *
+     * The trigger's path ends with the row's own id; a breadcrumb trail wants the
+     * chain that leads *to* it. Names come from `names` when the caller loaded them,
+     * and fall back to an empty label rather than to an id, because an id in a
+     * breadcrumb is a database detail leaking into the UI.
+     */
+    path: names ? ancestorCrumbs(row.path, names) : [],
     createdAt: row.created_at,
     modifiedAt: row.updated_at,
     openedAt: null,
@@ -338,6 +371,8 @@ export function createSupabaseDriveRepository(): DriveRepository {
         let q = supabase.from("folders").select("*").eq("owner_id", actor.userId).is("deleted_at", null);
         if (starredOnly) {
           q = q.eq("starred", true);
+        } else if (query.rootOnly) {
+          q = q.is("parent_id", null);
         } else if (query.parentId !== undefined) {
           q = query.parentId === null ? q.is("parent_id", null) : q.eq("parent_id", query.parentId);
         }
@@ -345,7 +380,7 @@ export function createSupabaseDriveRepository(): DriveRepository {
 
         const { data, error } = await q.order("name", { ascending: true });
         if (error) return toDriveError(error);
-        items.push(...(data as FolderRow[]).map(folderToItem));
+        items.push(...(data as FolderRow[]).map((row) => folderToItem(row)));
       }
 
       if (wantsFiles) {
@@ -387,7 +422,7 @@ export function createSupabaseDriveRepository(): DriveRepository {
         .eq("owner_id", c.actor.userId)
         .is("deleted_at", null)
         .maybeSingle();
-      if (folder) return { ok: true, data: folderToItem(folder as FolderRow) };
+      if (folder) return { ok: true, data: folderToItem(folder as FolderRow, await folderNames(c.supabase, c.actor.userId)) };
 
       const { data: file } = await c.supabase
         .from("files")
