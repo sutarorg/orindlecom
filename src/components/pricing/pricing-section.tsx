@@ -9,7 +9,7 @@ import {
   type CurrencyCode,
 } from "@/config/pricing";
 import { PlanCard } from "./plan-card";
-import { BillingToggle, CurrencyBadge, CurrencyNotice } from "./pricing-controls";
+import { BillingToggle, CurrencyNotice } from "./pricing-controls";
 import { SectionHeading } from "@/components/marketing/section-heading";
 import { cn } from "@/lib/utils";
 
@@ -45,21 +45,22 @@ export function PricingSection({
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
           <BillingToggle value={billing} onChange={setBilling} />
-          <CurrencyBadge currency={currency} />
         </div>
 
         <CurrencyNotice currency={currency} />
 
         {/*
-          Two columns from `sm` upward, which on desktop gives three rows of two
-          rather than a single horizontal strip of six. Six cards in one row forced
-          every price onto one line at ~150px wide; at two across the card has room
-          for the capacity and the annual equivalent to sit on their own baselines.
-          Below `sm` it stays one column, because a two-column grid of these cards at
-          360px is unreadable, and below `sm` the longest card content ("Premium",
-          "$59.99 /mo", a full-width CTA) needs roughly 300px to avoid wrapping.
+          Three across from `md` upward, which puts six cards in two rows of three.
+          Two columns gave three rows of two instead; three across is the requested
+          arrangement and keeps each card wide enough (~380px at 1440, ~330px at
+          1024) for the capacity and the price to sit on one baseline without the
+          price wrapping under the storage figure.
+
+          Below `md` it steps down to two columns, then to one below `sm`. That is not
+          a compromise on the desktop layout — it is the same six cards at widths
+          where three across would be ~110px each and unreadable.
         */}
-        <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:mt-10 lg:gap-5">
+        <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:mt-10 lg:gap-5">
           {PLANS.map((plan) => (
             <li key={plan.id} className="flex">
               <PlanCard
