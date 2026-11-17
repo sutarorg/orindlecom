@@ -289,7 +289,12 @@ describe("sitemap and robots source", () => {
     // Belt and braces: robots.txt stops discovery, noindex stops indexing of a URL
     // that leaked from somewhere else. Neither is sufficient alone.
     expect(PRIVATE_ROUTE_PREFIXES).toContain("/dashboard");
-    expect(PRIVATE_ROUTE_PREFIXES).toContain("/account");
+    /*
+     * Replaces the `/account` assertion. That route is gone, so listing it in
+     * robots.txt would describe a page that does not exist; `/business` is the
+     * private area that now needs the same treatment.
+     */
+    expect(PRIVATE_ROUTE_PREFIXES).toContain("/business");
   });
 });
 

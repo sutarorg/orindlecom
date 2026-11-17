@@ -253,6 +253,24 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
+      /*
+       * Reclaim lapsed reservations before reporting, so the figure on screen is the
+       * figure that is true now.
+       *
+       * `storage_usage.reserved_bytes` is documented as an *upper bound* between
+       * sweeps — it can still include bytes from a reservation whose `expires_at`
+       * has passed. That is fine for the quota check, which reclaims inline under
+       * its lock, but it is not fine for a number shown to a customer: an upload
+       * that died in the browser left its bytes reserved, and this read surfaced
+       * them as usage ("107 MB of 10 GB" with no file to show for it).
+       *
+       * The RPC is idempotent and scoped to this owner, and it is a no-op in the
+       * common case where nothing has lapsed. Failing it is not fatal — the old
+       * upper-bound number is what we would have shown anyway — so the error is
+       * swallowed deliberately rather than turning the storage page into an error.
+       */
+      await c.supabase.rpc("release_expired_reservations_for", { p_owner: c.actor.userId });
+
       const [{ data: usage }, { data: subscription }] = await Promise.all([
         c.supabase
           .from("storage_usage")

@@ -94,6 +94,21 @@ export function Sidebar({
   const pathname = usePathname();
   const inBusiness = workspace.kind === "business";
 
+  /*
+   * Whether the workspace exists yet.
+   *
+   * On `/business` with no organization, only Overview is meaningful — it is the page
+   * that offers to create one. Every other entry would open a page that can only say
+   * "no organization", so they are rendered disabled and non-clickable instead of
+   * leading somewhere useless.
+   *
+   * This is a navigation affordance, not a permission check: the server authorizes
+   * every business route itself, and reaching one without an organization fails there
+   * regardless of what the sidebar shows.
+   */
+  const hasOrganization = workspace.organization !== null;
+  const businessNavDisabled = inBusiness && !hasOrganization;
+
   return (
     <div
       className={cn(
@@ -189,6 +204,7 @@ export function Sidebar({
                         item={item}
                         active={isActive(pathname, item.href)}
                         collapsed={collapsed}
+                        disabled={businessNavDisabled && item.href !== "/business"}
                       />
                     </li>
                   ))}
@@ -281,7 +297,19 @@ export function Sidebar({
 }
 
 function isActive(pathname: string, href: string) {
-  if (href === "/dashboard") return pathname === "/dashboard";
+  /*
+   * A root route must match exactly, or it claims every child.
+   *
+   * This used to special-case only `/dashboard`. When the workspace moved to
+   * `/business`, its Overview entry became `/business` — and since every workspace
+   * page (`/business/members`, `/business/folders`, …) starts with `/business`, the
+   * fallback `startsWith` below marked Overview as the current page on all of them.
+   * Overview was permanently highlighted, including while standing on Members.
+   *
+   * The list is explicit rather than "any href with no second segment" so adding a
+   * root route is a deliberate act.
+   */
+  if (href === "/dashboard" || href === "/business") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -343,12 +371,43 @@ function BusinessNavItem({
   item,
   active,
   collapsed,
+  disabled = false,
 }: {
   item: BusinessNavEntry;
   active: boolean;
   collapsed: boolean;
+  /** No organization yet: render inert rather than linking to a dead end. */
+  disabled?: boolean;
 }) {
   const Icon = BUSINESS_ICONS[item.icon];
+
+  /*
+   * A real `<span>`, not a Link with `pointer-events-none` or `aria-disabled`.
+   *
+   * Those leave the element focusable and activatable by keyboard and by
+   * middle-click, so "disabled" would only be true for mouse users. No anchor means
+   * nothing to click, nothing to focus, and nothing to open in a new tab. The reason
+   * is exposed through `title` and the visually hidden suffix so the state is not a
+   * colour-only signal.
+   */
+  if (disabled) {
+    return (
+      <span
+        aria-disabled
+        title={collapsed ? `${item.label} — create an organization first` : undefined}
+        className={cn(
+          "relative flex cursor-not-allowed items-center rounded-lg text-[12.5px] font-medium",
+          collapsed ? "h-9 w-9 justify-center" : "h-8 gap-2.5 px-2",
+          "text-text-subtle/45",
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0 opacity-50" strokeWidth={1.9} aria-hidden />
+        {!collapsed && <span className="truncate">{item.label}</span>}
+        <span className="sr-only"> (create an organization first)</span>
+      </span>
+    );
+  }
+
   return (
     <Link
       href={item.href}

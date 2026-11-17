@@ -52,6 +52,24 @@ function s3(): S3Client {
     region: "auto",
     endpoint: ENDPOINT,
     credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY },
+    /*
+     * Path-style URLs. This is a correctness requirement, not a preference.
+     *
+     * Without it the SDK signs every presigned URL against the *virtual-hosted*
+     * form, `<bucket>.<account>.r2.cloudflarestorage.com`, while `ENDPOINT` (and
+     * therefore the CSP's `connect-src`) names only `<account>.r2.cloudflarestorage.com`.
+     * The browser then refuses the PUT as a cross-origin request to a host that is
+     * not in the policy, and reports it as `xhr.onerror` with status 0 — indistinguishable
+     * from a dropped connection, and fatal to every upload.
+     *
+     * It fails in the most confusing way possible: R2 itself is configured correctly,
+     * the bucket CORS rule lists the right origin, and the presigned URL works when
+     * pasted into curl, because curl enforces no CSP. Only the browser refuses it.
+     *
+     * R2 supports both forms, so pinning path-style keeps every object URL on the
+     * single origin the deployment already knows about.
+     */
+    forcePathStyle: true,
     // R2 does not support the SDK's checksum-trailer behaviour, which otherwise
     // breaks presigned PUTs with an unexpected header.
     requestChecksumCalculation: "WHEN_REQUIRED",

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Menu as ActionMenu, type MenuItem } from "@/components/ui/menu";
+import { signOutAction } from "@/app/(auth)/actions";
 import { useSearchBridge } from "./search-bridge";
 import { cn } from "@/lib/utils";
 
@@ -98,7 +99,17 @@ export function Topbar({
       icon: LogOut,
       destructive: true,
       separatorBefore: true,
-      onSelect: () => router.push("/login"),
+      /*
+       * This used to be `router.push("/login")`, which navigates to the login page
+       * while leaving the session cookie intact — the customer "signs out" and is
+       * still signed in, so the next page they open lets them straight back in. The
+       * only working sign-out was on `/account`, a page this change removes.
+       *
+       * The server action tears down the provider session and then redirects.
+       */
+      onSelect: () => {
+        void signOutAction();
+      },
     },
   ];
 

@@ -57,6 +57,21 @@ const r2Host = (() => {
   return account ? `https://${account}.r2.cloudflarestorage.com` : "";
 })();
 
+/**
+ * The virtual-hosted origin, `<bucket>.<account>.r2.cloudflarestorage.com`.
+ *
+ * Not used for uploads — `src/lib/r2/client.ts` pins path-style so every object
+ * URL stays on `r2Host`. It is here because it is the form the old code silently
+ * produced, and a CSP that omits it turns that mistake into "network error" in the
+ * browser rather than an obvious failure. Allowing both means a future change to
+ * the SDK's URL style degrades to still-working rather than to every upload failing.
+ */
+const r2VirtualHostedOrigin = (() => {
+  const bucket = process.env.R2_BUCKET?.trim();
+  const account = process.env.R2_ACCOUNT_ID?.trim();
+  return bucket && account ? `https://${bucket}.${account}.r2.cloudflarestorage.com` : "";
+})();
+
 const r2PublicHost = (() => {
   const raw = process.env.R2_PUBLIC_BASE_URL?.trim();
   if (!raw) return "";
@@ -72,6 +87,7 @@ const connectSrc = [
   supabaseHost,
   supabaseHost ? supabaseHost.replace("https://", "wss://") : "",
   r2Host,
+  r2VirtualHostedOrigin,
   r2PublicHost,
   "https://api.razorpay.com",
   "https://checkout.razorpay.com",
@@ -80,7 +96,7 @@ const connectSrc = [
   .filter(Boolean)
   .join(" ");
 
-const r2Origins = [r2PublicHost, r2Host].filter(Boolean).join(" ");
+const r2Origins = [r2PublicHost, r2Host, r2VirtualHostedOrigin].filter(Boolean).join(" ");
 
 const csp = [
   "default-src 'self'",
@@ -116,6 +132,20 @@ const nextConfig: NextConfig = {
      * imports. Left out rather than kept as a plausible-looking no-op, because a
      * config line that does nothing is a claim that it does something.
      */
+  },
+
+  /**
+   * `/account` is gone. It was the four-option chooser shown after sign-in, and the
+   * only reason to keep it would be to serve a page this change exists to remove.
+   *
+   * Bookmarks, old emails and documents still point at it, so it redirects rather
+   * than 404s. `permanent: false` on purpose: this is a routing decision that may
+   * be revisited, and a 308 would be cached by browsers indefinitely.
+   */
+  async redirects() {
+    return [
+      { source: "/account", destination: "/dashboard", permanent: false },
+    ];
   },
 
   async headers() {

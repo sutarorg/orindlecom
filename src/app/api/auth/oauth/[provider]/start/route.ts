@@ -33,7 +33,7 @@ export async function POST(
   }
 
   const body = (await request.json().catch(() => ({}))) as { next?: string };
-  const next = safeRedirectPath(body.next, "/account");
+  const next = safeRedirectPath(body.next, "/dashboard");
 
   const origin = resolveOrigin(request.headers);
   const callbackUrl = new URL("/auth/callback", origin);

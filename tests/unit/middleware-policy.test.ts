@@ -30,10 +30,17 @@ function arrayLiteral(text: string, name: string): string[] {
 }
 
 describe("protected prefixes", () => {
-  it("covers the dashboard and account areas", async () => {
+  it("covers the dashboard and workspace areas", async () => {
     const prefixes = arrayLiteral(await source(), "PROTECTED_PREFIXES");
     expect(prefixes).toContain("/dashboard");
-    expect(prefixes).toContain("/account");
+    /*
+     * `/business` is the team workspace. This assertion replaces the old `/account`
+     * one: that page no longer exists (it redirects to /dashboard), and the
+     * guarantee worth keeping — "the signed-in product is not reachable
+     * anonymously" — now applies to `/business`, which moved out from under the
+     * `/dashboard` prefix and would otherwise be unprotected.
+     */
+    expect(prefixes).toContain("/business");
   });
 
   it("does not protect public marketing pages", async () => {
