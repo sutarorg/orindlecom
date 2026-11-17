@@ -534,7 +534,11 @@ Expected verification output:
      seconds after the email arrived.
 4. Click **Save**.
 
-> **Why `/auth/callback`?** Every Orindle auth flow (`signUpAction`, `resendVerificationAction`, `requestPasswordResetAction`, and `/api/auth/oauth/google/start`) redirects back through `/auth/callback`, which exchanges either `?code=...` (PKCE) or `?token_hash=...&type=...` (OTP/email confirmation/recovery).
+> **Why both `/auth/verify` and `/auth/callback`?** Email links (`signUpAction`,
+> `resendVerificationAction`, `requestPasswordResetAction`) redirect back through
+> `/auth/verify`, which verifies `?token_hash=...&type=...` server-side. Google OAuth
+> (`/api/auth/oauth/google/start`) returns through `/auth/callback`, which handles
+> `?code=...`. Both paths are on the allow-list above because both are reachable.
 
 #### Step E — Configure Email Sign-Up, Confirmation & Email Templates
 
@@ -545,17 +549,35 @@ Expected verification output:
    - **Secure password change:** **ON** (recommended)
    - Click **Save**.
 2. Left sidebar → **Authentication** → **Notifications** → **Email** (or **Email Templates**):
-   - Orindle's `/auth/callback/route.ts` supports **both** standard Supabase PKCE links (`?code=...`) **and** SSR `token_hash` links (`?token_hash=...&type=...`).
-   - For the most reliable cross-browser/cross-device confirmation & password-reset links in Next.js SSR, update the two main templates to point directly at `/auth/callback`:
-     - **Confirm signup** link href:
+   - **Point every template at `/auth/verify`, built from `{{ .TokenHash }}`.** The full
+     HTML for all four templates is in `docs/deployment/email-templates.md`; the links are:
+     - **Confirm signup**
        ```html
-       {{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/account
+       {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=signup&next=/dashboard
        ```
-     - **Reset password** link href:
+     - **Invite user**
        ```html
-       {{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password
+       {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=invite&next=/dashboard
+       ```
+     - **Change email address**
+       ```html
+       {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=email_change&next=/dashboard
+       ```
+     - **Reset password**
+       ```html
+       {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password
        ```
    - Click **Save** on each edited template.
+   - **Why not `{{ .ConfirmationURL }}`?** That is the stock link, and it produces
+     `…supabase.co/auth/v1/verify?token=pkce_…`, which confirms the address and then
+     redirects back with a PKCE `?code=`. Redeeming that code needs a code-verifier
+     cookie from the browser that signed up, and GoTrue expires its PKCE flow state
+     after **300 seconds**, counted from signup. So the stock link fails on another
+     device, and fails after five minutes on the same one — while the email says the
+     link is good for longer. `token_hash` is verified server-side by
+     `verifyOtp({ token_hash, type })`, needs neither cookie nor flow state, and so
+     works from any inbox on any device. `/auth/verify` still accepts `?token=` and
+     `?code=` for links already in flight.
 
 #### Step F — Configure Custom SMTP (Required for Real Users — Using Resend)
 

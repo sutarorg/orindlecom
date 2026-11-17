@@ -16,24 +16,46 @@ Two things worth knowing before pasting:
 
 ## Which URL variable to use
 
-Use `{{ .ConfirmationURL }}`. It is the one Supabase fills for every template, and this
-app's `/auth/verify` route accepts both shapes it can contain (`?token_hash=` or
-`?token=`).
+**Build the link from `{{ .TokenHash }}`. Do not use `{{ .ConfirmationURL }}`.**
 
-`{{ .TokenHash }}` is available if you prefer to build the link yourself:
+This is not a style preference; with `{{ .ConfirmationURL }}` the confirmation link
+stops working minutes after signup. That template produces Supabase's own link:
+
+```
+https://<project>.supabase.co/auth/v1/verify?token=pkce_<hash>&type=signup&redirect_to=…
+```
+
+`/auth/v1/verify` confirms the address there, then redirects to `/auth/verify?code=…`.
+Redeeming that code needs the PKCE **code-verifier** cookie that the signing-up browser
+wrote when the flow began, and two things routinely break the exchange:
+
+| What went wrong | Auth's error | Reality |
+| --- | --- | --- |
+| Link opened on another device, in a mail app's in-app browser, in a private window, or on a different origin (e.g. signed up on `www.`, link to the apex) | `pkce_code_verifier_not_found` | The address is confirmed; no session could be created on *that* browser. |
+| Link opened more than **5 minutes** after signing up | `flow_state_expired` | GoTrue expires PKCE flow state after `300s`, counted from signup — not from the click. The emailed token is still good for its own window; the code exchange is what expired. |
+
+The 300-second rule is why a link reported as "expired or already used" had in fact
+been issued minutes earlier, well inside the 24-hour window shown in the email.
+
+`{{ .TokenHash }}` avoids both. It goes straight to this app's own route, which calls
+`verifyOtp({ token_hash, type })` on the server — no verifier cookie, no flow state, so
+it verifies on any device and at any point inside the token's own lifetime:
 
 ```
 {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=signup&next=/dashboard
 ```
 
-That form is slightly better because it skips the auth server's own redirect hop, but
-both work. `{{ .Token }}` is the raw 6-digit OTP and is **not** a link — it is only
-useful if you also turn on "email OTP" sign-in.
+`type` must match the template: `signup`, `invite`, `email_change` or `recovery`. The
+`next` value is validated by `safeRedirectPath`, so keep it to an internal path.
 
-`{{ .RedirectTo }}` is the `redirect_to` this app requested, and it is already a safe
-internal URL (validated by `safeRedirectPath`). Redirecting to `{{ .ConfirmationURL }}`
-and letting `/auth/verify` decide is the intended flow, so you do not need it in these
-templates.
+`{{ .Token }}` is the raw 6-digit OTP and is **not** a link — it is only useful if you
+also turn on "email OTP" sign-in. `{{ .RedirectTo }}` is the `redirect_to` this app
+requested; it is not needed in these templates.
+
+`/auth/verify` still accepts `?token=` and `?code=` so links already sitting in inboxes
+work, but a project using `{{ .ConfirmationURL }}` will keep hitting the two failures
+above. When the code exchange fails the visitor is told their address is most likely
+confirmed and sent to sign in — never that their link expired.
 
 ---
 
@@ -83,7 +105,7 @@ templates.
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td style="border-radius:10px;background:#3178fb;">
-                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Confirm email address</a>
+                      <a href="{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=signup&next=/dashboard" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Confirm email address</a>
                     </td>
                   </tr>
                 </table>
@@ -95,7 +117,7 @@ templates.
                   If the button doesn&rsquo;t work, copy this address into your browser:
                 </p>
                 <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.6;color:#3178fb;word-break:break-all;">
-                  {{ .ConfirmationURL }}
+                  {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=signup&next=/dashboard
                 </p>
               </td>
             </tr>
@@ -164,7 +186,7 @@ templates.
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td style="border-radius:10px;background:#3178fb;">
-                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Accept invitation</a>
+                      <a href="{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=invite&next=/dashboard" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Accept invitation</a>
                     </td>
                   </tr>
                 </table>
@@ -176,7 +198,7 @@ templates.
                   If the button doesn&rsquo;t work, copy this address into your browser:
                 </p>
                 <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.6;color:#3178fb;word-break:break-all;">
-                  {{ .ConfirmationURL }}
+                  {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=invite&next=/dashboard
                 </p>
               </td>
             </tr>
@@ -248,7 +270,7 @@ templates.
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td style="border-radius:10px;background:#3178fb;">
-                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Confirm new email</a>
+                      <a href="{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=email_change&next=/dashboard" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Confirm new email</a>
                     </td>
                   </tr>
                 </table>
@@ -260,7 +282,7 @@ templates.
                   If the button doesn&rsquo;t work, copy this address into your browser:
                 </p>
                 <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.6;color:#3178fb;word-break:break-all;">
-                  {{ .ConfirmationURL }}
+                  {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=email_change&next=/dashboard
                 </p>
               </td>
             </tr>
@@ -329,7 +351,7 @@ templates.
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <td style="border-radius:10px;background:#3178fb;">
-                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Choose a new password</a>
+                      <a href="{{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password" style="display:inline-block;padding:13px 22px;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Choose a new password</a>
                     </td>
                   </tr>
                 </table>
@@ -341,7 +363,7 @@ templates.
                   If the button doesn&rsquo;t work, copy this address into your browser:
                 </p>
                 <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.6;color:#3178fb;word-break:break-all;">
-                  {{ .ConfirmationURL }}
+                  {{ .SiteURL }}/auth/verify?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password
                 </p>
               </td>
             </tr>

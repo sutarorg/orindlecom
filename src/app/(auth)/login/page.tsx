@@ -27,7 +27,7 @@ const CALLBACK_ERRORS: Record<string, string> = {
   mfa_required: "Enter the code from your authenticator app to finish signing in.",
   callback_failed: "That sign-in link didn’t work. Please sign in again below.",
   link_expired: "That link has expired. Sign in below, or request a new one.",
-  session_missing: "We couldn’t confirm that session. Please sign in again.",
+  session_missing: "Your address is most likely confirmed already — the link just couldn’t sign you in on this device. Sign in below.",
   network: "We couldn’t reach the server. Check your connection and try again.",
   rate_limited: "Too many attempts just now. Wait a minute and try again.",
   not_configured: "Accounts aren’t connected on this deployment yet.",
