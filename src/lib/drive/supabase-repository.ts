@@ -124,7 +124,9 @@ function folderToItem(row: FolderRow): DriveItem {
 }
 
 /** Translate a Postgres/Supabase error into the contract's codes. */
-function toDriveError(error: { message?: string; code?: string } | null): DriveResult<never> {
+function toDriveError(
+  error: { message?: string; code?: string; details?: string; hint?: string } | null,
+): DriveResult<never> {
   const message = error?.message ?? "";
   if (message.includes("quota_exceeded")) {
     return {
@@ -140,7 +142,20 @@ function toDriveError(error: { message?: string; code?: string } | null): DriveR
   if (error?.code === "PGRST116") {
     return { ok: false, code: "not_found", message: "That item doesn't exist any more." };
   }
-  console.error("[drive] supabase error", { message, code: error?.code });
+  /*
+   * Includes `details` and `hint`. Postgres puts the failing constraint name and the
+   * offending row in `details`, and the diagnostic sentence in `hint` — neither of
+   * which was being logged, so "Something went wrong on our side" was all anyone
+   * had to work with for a failure Postgres had already explained.
+   *
+   * The customer still sees the generic sentence; the specifics stay in the log.
+   */
+  console.error("[drive] supabase error", {
+    code: error?.code,
+    message,
+    details: error?.details,
+    hint: error?.hint,
+  });
   return {
     ok: false,
     code: "unknown",
@@ -378,10 +393,20 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
+      /*
+       * Through the `create_folder` RPC, not `insert(...).select()`.
+       *
+       * PostgREST implements `.select()` on a write as `RETURNING`, which is filtered by
+       * the table's SELECT policy. `folders_select` calls `has_folder_access()`, a STABLE
+       * function: it reads the snapshot from the start of the statement and therefore
+       * cannot see the row that statement just inserted. Every folder creation failed
+       * with a generic "Something went wrong" and no Postgres detail worth the name.
+       *
+       * The function takes `owner_id` from `auth.uid()`, so ownership is not something
+       * the client can assert.
+       */
       const { data, error } = await c.supabase
-        .from("folders")
-        .insert({ owner_id: c.actor.userId, name, parent_id: parentId })
-        .select()
+        .rpc("create_folder", { p_name: name, p_parent_id: parentId ?? null })
         .single();
 
       if (error) return toDriveError(error);

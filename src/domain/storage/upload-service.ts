@@ -396,47 +396,54 @@ export async function completeUpload(
   const scanEnabled = process.env.MALWARE_SCAN_ENABLED === "true";
 
   // ── Step 12: commit metadata and accounting ───────────────────────────────
-  const reservationId = await findReservation(supabase, taskId);
-
+  /*
+   * One RPC, not four writes.
+   *
+   * This was previously an UPDATE on `files` followed by `commit_reservation`, an
+   * `upload_sessions` confirm and an `activity_events` insert. The first of those could
+   * never work: `files_select` requires `status = 'available'`, so a `pending` row is
+   * invisible to its own owner — deliberately, because an unverified upload must not be
+   * listed or downloaded. Postgres applies SELECT policies to an UPDATE's row selection,
+   * so flipping pending -> available matched zero rows and silently left the file pending
+   * forever, surfacing to the customer as "Something went wrong on our side."
+   *
+   * `finalize_upload` runs the whole commit as its definer, in one transaction, taking
+   * the caller from `auth.uid()` and verifying that the upload session belongs to them
+   * and is still in flight. The SELECT policy is not widened: a pending file remains
+   * unreadable to its owner through the API.
+   */
   const { data: file, error: fileError } = await supabase
-    .from("files")
-    .update({
-      size_bytes: head.size,
-      status: scanEnabled ? "quarantined" : "available",
+    .rpc("finalize_upload", {
+      p_task_id: taskId,
+      p_actual_bytes: head.size,
+      p_status: scanEnabled ? "quarantined" : "available",
     })
-    .eq("storage_key", session.storage_key)
-    .eq("owner_id", actor.userId)
-    .select()
-    .maybeSingle();
+    .single();
 
   if (fileError || !file) {
+    /*
+     * Log before unwinding. This branch used to throw the generic message with nothing
+     * recorded, so the only symptom was "we've recorded it" while nothing had been — the
+     * Postgres code, which is the one fact needed to diagnose it, died here.
+     *
+     * `!file` with no `fileError` is its own case: the function returned no row. That is
+     * a different bug from a raised exception, so it stays a separate field.
+     */
+    console.error("[upload] metadata commit failed", {
+      taskId,
+      storageKey: session.storage_key,
+      ownerId: actor.userId,
+      pgCode: fileError?.code,
+      pgMessage: fileError?.message,
+      pgDetails: fileError?.details,
+      pgHint: fileError?.hint,
+      // Distinguishes "the commit errored" from "the commit returned nothing".
+      matchedNoRow: !fileError && !file,
+    });
     await deleteObject(session.storage_key).catch(() => {});
     await failUpload(supabase, session, "metadata-commit-failed");
     throw new AppError("unknown", USER_MESSAGES.unknown);
   }
-
-  if (!scanEnabled && reservationId) {
-    const { error: commitError } = await supabase.rpc("commit_reservation", {
-      p_reservation: reservationId,
-      p_actual_bytes: head.size,
-    });
-    if (commitError) console.error("[upload] commit_reservation failed", { taskId });
-  }
-
-  // ── Step 13: mark upload session confirmed ────────────────────────────────
-  await supabase
-    .from("upload_sessions")
-    .update({ status: "confirmed" })
-    .eq("id", taskId);
-
-  await supabase.from("activity_events").insert({
-    actor_id: actor.userId,
-    organization_id: file.organization_id ?? null,
-    subject_type: "file",
-    subject_id: file.id,
-    kind: "file.uploaded",
-    metadata: { size: head.size, multipart: session.multipart, name: file.name },
-  });
 
   return file;
 }
