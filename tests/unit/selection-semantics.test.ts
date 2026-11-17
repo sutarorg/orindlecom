@@ -331,8 +331,9 @@ describe("the feature illustrations", () => {
   });
 
   it("derive every figure from one constant, so the drawing cannot contradict itself", () => {
-    // The donut's arc, its label and the usage bar all read from `usedFraction`.
-    expect(art).toMatch(/const usedFraction = 0\.24/);
+    // The donut's arc, its label and the usage bar all read from `usedFraction`; the
+    // number itself is asserted in feature-art.test.ts against the rendered text.
+    expect(art).toMatch(/const usedFraction = 0\.6/);
     expect(art).toMatch(/circumference \* usedFraction/);
     expect(art).toMatch(/CONTENT_W \* usedFraction/);
     // And the bar's segments are the legend's own colours, in order.

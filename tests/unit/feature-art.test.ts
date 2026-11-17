@@ -86,11 +86,11 @@ describe("feature illustrations", () => {
     const values = [...markup.matchAll(/<text[^>]*>([^<]*)</g)].map((m) => m[1]);
     // The panel must not claim two different used-amounts.
     const used = values.filter((v) => /GB used/.test(v));
-    expect(used).toEqual(["2.4 GB used"]);
-    expect(values).toContain("2.4 GB");
+    expect(used).toEqual(["6 GB used"]);
+    expect(values).toContain("6 GB");
     expect(values).toContain("of 10 GB");
-    // 7.6 + 2.4 = 10, so the free figure is not a second invention.
-    expect(values).toContain("7.6 GB free");
+    // 6 + 4 = 10, so the free figure is not a second invention.
+    expect(values).toContain("4 GB free");
   });
 
   it("gives the phone a layout of its own, not the laptop's scaled down", () => {
@@ -100,4 +100,36 @@ describe("feature illustrations", () => {
     const tileRects = [...markup.matchAll(/rx="4" fill="#FBFCFE"/g)];
     expect(tileRects).toHaveLength(3 + 2);
   });
+});
+
+describe("the pastel discs", () => {
+  /*
+   * A circle whose centre sits outside the viewBox is cropped into a shape with two
+   * straight sides — a corner, not a circle. It reads as a blobby backdrop rather than
+   * a disc, which is what these are. So every disc must sit wholly inside the 290x200
+   * box: centre minus radius >= 0, centre plus radius <= the edge.
+   */
+  const BOX = { w: 290, h: 200 };
+
+  for (const [name, Art] of ALL) {
+    it(`${name} draws its discs as complete circles`, () => {
+      const markup = renderToStaticMarkup(createElement(Art));
+      const discs = [...markup.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"/g)].map((m) => ({
+        cx: Number(m[1]),
+        cy: Number(m[2]),
+        r: Number(m[3]),
+      }));
+
+      // The pastel backdrops are the large circles; the small marks are icons.
+      const large = discs.filter((d) => d.r >= 18);
+      expect(large.length).toBeGreaterThanOrEqual(2);
+
+      for (const disc of large) {
+        expect(disc.cx - disc.r).toBeGreaterThanOrEqual(0);
+        expect(disc.cy - disc.r).toBeGreaterThanOrEqual(0);
+        expect(disc.cx + disc.r).toBeLessThanOrEqual(BOX.w);
+        expect(disc.cy + disc.r).toBeLessThanOrEqual(BOX.h);
+      }
+    });
+  }
 });

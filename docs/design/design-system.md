@@ -267,7 +267,14 @@ slot size, and each device screen can be laid out for its own proportions.
 
 Every figure an illustration shows must derive from one constant, so the drawing cannot
 contradict itself — the storage illustration's donut arc, its centre label, its legend and
-its usage bar all read from the same 24%.
+its usage bar all read from the same 60% (6 GB of 10 GB).
+
+The pastel discs behind each illustration are drawn as **complete circles inside the
+canvas**, never centred past an edge. A circle whose centre is outside the viewBox is
+rendered as a shape with two straight sides, and read at card size that is a corner, not
+a circle. Keeping two whole discs in a 290 × 200 box costs the card some size, which is
+why each composition is scaled to 87% and offset — the discs are the reason, and the
+`transform` group is what pays for them.
 
 ---
 

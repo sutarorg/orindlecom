@@ -88,7 +88,7 @@ This is the "showcase" variant. A **real** file-manager component
 `/features` and in the authenticated shell later.
 
 Content policy: the mockup shows an **empty-state library** (folders only, no files, no
-user names, no timestamps). The storage caption reads `2.4 GB / 10 GB` only inside the
+user names, no timestamps). The storage caption reads `6 GB / 10 GB` only inside the
 decorative hero composition, which is labelled as illustrative; the `/features` preview
 uses a true empty state with `0 B / 10 GB`.
 

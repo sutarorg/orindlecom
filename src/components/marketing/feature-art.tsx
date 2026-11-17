@@ -116,7 +116,7 @@ export function StorePanelArt({ className }: { className?: string }) {
 
   const radius = 26;
   const circumference = 2 * Math.PI * radius;
-  const usedFraction = 0.24;
+  const usedFraction = 0.6;
   const DONUT_CX = CONTENT_X + radius + 4; // 110
 
   /*
@@ -154,9 +154,23 @@ export function StorePanelArt({ className }: { className?: string }) {
         </linearGradient>
       </defs>
 
-      <PastelCircle cx={247} cy={20} r={52} fill="#DFF4F2" />
-      <PastelCircle cx={268} cy={182} r={43} fill="#FFE6DC" opacity={0.92} />
+      {/*
+        The pastel discs, whole and inside the frame.
 
+        They used to be centred past the canvas edges, so the viewBox cut them into
+        shapes with two straight sides — a "corner blob" rather than a circle. A circle
+        that is only ever seen quartered stops reading as a circle at all.
+
+        Fitting two complete discs in a 290x200 box means the panel has to give some
+        room back, hence the scale group below: the drawing is 87% of its old size and
+        the discs sit in the margins it frees. The discs are still behind the panel —
+        that is the point of a background shape — but each now has a continuous
+        silhouette, so what shows is an arc of a circle instead of a corner of a blob.
+      */}
+      <PastelCircle cx={258} cy={48} r={30} fill="#DFF4F2" />
+      <PastelCircle cx={262} cy={170} r={21} fill="#FFE6DC" opacity={0.92} />
+
+      <g transform="translate(6.08 11.56) scale(0.87)">
       {/* Panel */}
       <g filter="url(#store-shadow)">
         <rect
@@ -261,7 +275,7 @@ export function StorePanelArt({ className }: { className?: string }) {
           fontWeight={800}
           letterSpacing="-0.5"
         >
-          2.4 GB
+          6 GB
         </text>
         <text
           textAnchor="middle"
@@ -313,7 +327,7 @@ export function StorePanelArt({ className }: { className?: string }) {
         The bottom of the panel was two grey pills that stood for nothing — decoration
         in the shape of data, which is the one thing an illustration of a storage
         product must not do. This is the same split the legend above describes, drawn
-        as one bar: the three segments sum to 24% of the track, which is the 2.4 GB of
+        as one bar: the three segments sum to 60% of the track, which is the 6 GB of
         10 GB the donut already shows. The two numbers underneath are that same fact
         stated in words, and they agree with it because they are computed from it.
       */}
@@ -352,7 +366,7 @@ export function StorePanelArt({ className }: { className?: string }) {
         fontSize={8}
         fontWeight={600}
       >
-        2.4 GB used
+        6 GB used
       </text>
       <text
         x={RIGHT}
@@ -363,8 +377,9 @@ export function StorePanelArt({ className }: { className?: string }) {
         fontSize={8}
         fontWeight={500}
       >
-        7.6 GB free
+        4 GB free
       </text>
+      </g>
     </svg>
   );
 }
@@ -555,9 +570,11 @@ export function DevicesArt({ className }: { className?: string }) {
         </linearGradient>
       </defs>
 
-      <PastelCircle cx={176} cy={44} r={58} fill="#DFF4F2" />
-      <PastelCircle cx={56} cy={148} r={32} fill="#E3E6FE" opacity={0.7} />
+      {/* Complete discs, in the margins freed by the 87% scale group below. */}
+      <PastelCircle cx={244} cy={48} r={40} fill="#DFF4F2" />
+      <PastelCircle cx={42} cy={150} r={32} fill="#E3E6FE" opacity={0.7} />
 
+      <g transform="translate(6.08 11.56) scale(0.87)">
       {/* tabletop — one cast shadow the three devices share */}
       <ellipse cx={146} cy={189} rx={112} ry={7.5} fill="#E9EDF8" opacity={0.8} />
 
@@ -597,6 +614,7 @@ export function DevicesArt({ className }: { className?: string }) {
         <clipPath id="phone-clip">
           <rect x={249} y={107} width={32} height={64} rx={4} />
         </clipPath>
+      </g>
       </g>
     </svg>
   );
@@ -643,9 +661,11 @@ export function ShareCardArt({ className }: { className?: string }) {
         </linearGradient>
       </defs>
 
-      <PastelCircle cx={252} cy={26} r={50} fill="#FFE6DC" />
-      <PastelCircle cx={30} cy={178} r={37} fill="#F1ECFE" />
+      {/* Complete discs, in the margins freed by the 87% scale group below. */}
+      <PastelCircle cx={246} cy={44} r={38} fill="#FFE6DC" />
+      <PastelCircle cx={46} cy={166} r={30} fill="#F1ECFE" />
 
+      <g transform="translate(6.08 11.56) scale(0.87)">
       <g filter="url(#share-shadow)">
         <rect
           x={26}
@@ -811,6 +831,7 @@ export function ShareCardArt({ className }: { className?: string }) {
           strokeLinecap="round"
           fill="none"
         />
+      </g>
       </g>
     </svg>
   );
