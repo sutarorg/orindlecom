@@ -521,22 +521,31 @@ function DangerZone({ user }: { user: { name: string; email: string } }) {
     setOpen(false);
     setPending(true);
 
-    const result = await api.post<{ purgeOn: string; note: string }>("/api/users/me/delete", {
-      confirmation: user.email,
-    });
-
-    setPending(false);
+    const result = await api.post<{ purgeOn: string; note: string; signedOut: boolean }>(
+      "/api/users/me/delete",
+      { confirmation: user.email },
+    );
 
     if (!result.ok) {
+      setPending(false);
       toast({ tone: "error", title: "Account wasn't scheduled", description: result.message });
       return;
     }
 
+    /*
+     * The request revoked every session, including this one, so the only honest
+     * thing to do is leave. Showing a toast here and staying on a page whose
+     * session is already dead would be the same lie the endpoint used to tell.
+     * A full navigation, not a client route change, so the cleared cookies are
+     * definitely gone and no cached shell remains.
+     */
     toast({
       tone: "success",
       title: "Deletion scheduled",
       description: result.data.note,
     });
+
+    window.location.assign("/login?deleted=1");
   };
 
   return (
@@ -550,9 +559,9 @@ function DangerZone({ user }: { user: { name: string; email: string } }) {
           <div className="min-w-0">
             <p className="text-[12.5px] font-medium text-ink">Delete account</p>
             <p className="mt-0.5 max-w-[420px] text-[10.5px] leading-relaxed text-text-subtle">
-              Schedules your profile and every file, folder and share for deletion. Your account
-              becomes read-only now and is permanently removed after the 7-day grace period. Signing
-              in before then cancels it.
+              Schedules every file, folder, share and your profile for deletion. You are signed out
+              everywhere now, and everything is permanently removed after the 7-day grace period.
+              Signing in before then cancels it.
             </p>
           </div>
           <button
@@ -575,9 +584,10 @@ function DangerZone({ user }: { user: { name: string; email: string } }) {
         destructive
         requireTyping={user.email}
       >
-        This schedules every file, folder, share and your profile for deletion after the 7-day grace
-        period. <strong className="font-semibold text-ink">After 7 days it cannot be undone.</strong>{" "}
-        Type your email address to confirm.
+        This signs you out on every device and schedules every file, folder, share and your profile
+        for permanent deletion after the 7-day grace period.{" "}
+        <strong className="font-semibold text-ink">After 7 days it cannot be undone.</strong> Signing
+        in before then cancels it. Type your email address to confirm.
       </ConfirmDialog>
     </>
   );

@@ -48,9 +48,17 @@ export default async function SetPasswordPage({
 
   const session = await getAuthService().getCurrentSession();
   if (!session) {
-    // Not an error page: someone who closes the browser mid-onboarding and comes
-    // back later should simply land on sign-in and then be returned here.
-    redirect(`/login?next=${encodeURIComponent("/auth/set-password")}`);
+    /*
+     * Not an error page: someone who closes the browser mid-onboarding and comes
+     * back later should simply land on sign-in and then be returned here.
+     *
+     * The inner `next` is carried through as well as the outer one, so a visitor
+     * who was on their way to `/dashboard/files` finishes onboarding and lands
+     * there rather than at the dashboard root. Both are validated by
+     * `safeRedirectPath` on the way back in, and `/auth` is an allowed prefix.
+     */
+    const back = `/auth/set-password?next=${encodeURIComponent(next)}`;
+    redirect(`/login?next=${encodeURIComponent(back)}`);
   }
 
   const security = await readOwnSecurity();

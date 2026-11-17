@@ -26,11 +26,14 @@ export const dynamic = "force-dynamic";
 export default async function VerifyEmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; error?: string }>;
+  searchParams: Promise<{ email?: string; error?: string; resent?: string }>;
 }) {
   const params = await searchParams;
   const email = typeof params.email === "string" ? params.email.slice(0, 254) : "";
   const expired = params.error === "link_expired" || params.error === "session_missing";
+  // Set when sign-in was refused because the address was never confirmed. The link
+  // has just been re-sent, so the card says so instead of leaving them to guess.
+  const resent = params.resent === "1";
 
   return (
     <AuthLayout
@@ -65,6 +68,15 @@ export default async function VerifyEmailPage({
             </p>
           </div>
         </div>
+
+        {resent && (
+          <div className="mb-5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-primary-soft)] px-3.5 py-3 text-[12px] leading-relaxed text-[var(--brand-primary-ink)]">
+            <p className="font-semibold">A new confirmation link is on its way.</p>
+            <p className="mt-1">
+              Your previous link no longer works. Open the newest one to finish signing in.
+            </p>
+          </div>
+        )}
 
         {expired && (
           <div className="mb-5 rounded-xl border border-[#F3DFB8] bg-[#FEF9EE] px-3.5 py-3 text-[12px] leading-relaxed text-[#8A5A12]">

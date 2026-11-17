@@ -78,7 +78,27 @@ export function mapProviderError(error: ProviderErrorLike | null | undefined): A
     });
   }
 
-  if (raw.includes("flow_state") || raw.includes("code verifier") || raw.includes("expired")) {
+  /*
+   * `flow_state` / "code verifier" means the PKCE *code exchange* could not complete
+   * — almost always because the link was opened in a browser that never held the
+   * code-verifier cookie, which is the normal case for a link opened from an inbox.
+   * The token itself may be perfectly valid.
+   *
+   * It must not be reported as `link_expired`: that told people a 24-hour link had
+   * expired seconds after it arrived, and sent them to request a replacement for a
+   * link that was not the problem. Email links now verify server-side through
+   * `verifyEmailLink`, so this path should not be reached from a confirmation link
+   * at all; if it is reached, the honest message is that the browser that opened
+   * the link is the issue.
+   */
+  if (raw.includes("flow_state") || raw.includes("code verifier")) {
+    return failure(
+      "session_missing",
+      "That link has to be opened in the same browser you signed up in. Sign in below, or request a fresh link.",
+    );
+  }
+
+  if (raw.includes("expired") || raw.includes("otp_expired") || raw.includes("token has expired")) {
     return failure(
       "link_expired",
       "That link has expired or was already used. Request a new one below.",

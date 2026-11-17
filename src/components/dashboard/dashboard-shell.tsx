@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { usePathname } from "next/navigation";
-import { X } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ShieldCheck, X } from "lucide-react";
 import { ToastProvider } from "@/components/ui/toast";
 import { SearchBridgeProvider } from "./search-bridge";
 import { Sidebar } from "./sidebar";
@@ -236,6 +236,7 @@ function ShellInner({
           {/* Bottom padding on small screens keeps the last row of content
               clear of the floating upload button. */}
           <main id="dashboard-main" className="min-w-0 flex-1 pb-24 lg:pb-0">
+            <DeletionCancelledNotice />
             {children}
           </main>
         </div>
@@ -317,5 +318,61 @@ function FilePickerHost({
         onClose();
       }}
     />
+  );
+}
+
+/**
+ * "Your account was saved from deletion."
+ *
+ * Shown once, on the redirect that follows a sign-in which cancelled a pending
+ * deletion. That event is exactly the kind of thing a person needs confirming —
+ * the alternative is silence after an irreversible request, which reads as "it is
+ * still scheduled".
+ *
+ * Reads the flag from the query string rather than the database so it is a
+ * one-shot message: dismissing it strips the parameter, and a reload does not
+ * resurrect it. `router.replace` is used deliberately so the back button does not
+ * return to a URL that re-shows the banner.
+ */
+function DeletionCancelledNotice() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const cancelled = searchParams.get("deletion_cancelled") === "1";
+
+  const dismiss = React.useCallback(() => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("deletion_cancelled");
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  }, [pathname, router, searchParams]);
+
+  if (!cancelled) return null;
+
+  return (
+    <div className="px-4 pt-4 sm:px-6">
+      <div className="flex items-start gap-2.5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-primary-soft)] px-3.5 py-3">
+        <ShieldCheck
+          className="mt-px h-4 w-4 shrink-0 text-[var(--brand-primary-ink)]"
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+        <div className="min-w-0 flex-1 text-[12px] leading-relaxed text-text">
+          <p className="font-semibold text-ink">Your account was saved from deletion</p>
+          <p className="mt-0.5 text-text-muted">
+            Signing in cancelled the deletion request. Nothing was removed, and your
+            account is back to normal.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Dismiss"
+          className="shrink-0 rounded-md p-1 text-text-subtle transition-colors hover:bg-white/60 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
   );
 }

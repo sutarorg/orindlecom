@@ -91,6 +91,46 @@ export async function signInAction(
   const result = await getAuthService().signIn({ email, password, remember });
   if (!result.ok) return toFormState(result);
 
+  /*
+   * An unconfirmed address may not reach the product.
+   *
+   * Supabase returns a session for an unconfirmed user when the project has
+   * "Confirm email" switched off — so the rule cannot rely on the provider refusing.
+   * Signing in is the moment the person most needs the email, so it is sent again
+   * rather than only being pointed at.
+   *
+   * The session is discarded first: leaving it in the cookie jar would put a
+   * dashboard-reachable token in the browser for an account that is not allowed in.
+   */
+  if (result.data.needsVerification) {
+    await getAuthService().signOut();
+    await getAuthService()
+      .resendVerification({
+        email,
+        emailRedirectTo: `${await origin()}/auth/verify?next=/dashboard`,
+      })
+      .catch(() => {
+        // The card below still explains what to do; a send failure is reported by
+        // the form's own resend button.
+      });
+
+    redirect(`/verify-email?email=${encodeURIComponent(email)}&resent=1`);
+  }
+
+  /*
+   * Signing in during the grace period cancels a pending deletion.
+   *
+   * This was promised in the confirmation email and in Settings, and nothing
+   * implemented it — so a person who changed their mind could still lose the
+   * account. It happens here, after the credential check and before any redirect,
+   * because this is the only point where "they signed in" is known to be true.
+   *
+   * Deliberately not fatal: if the cancel write fails, the sign-in still proceeds
+   * and the customer sees the pending-deletion notice in their settings with the
+   * cancel button, rather than being stuck at the login form.
+   */
+  const deletionCancelled = await cancelPendingDeletion();
+
   // If the account has a verified TOTP factor, the session is only AAL1 and may
   // not proceed. The challenge lives on its own screen; redirecting to `next`
   // here would be the "MFA bypass by sending them straight to the dashboard"
@@ -107,7 +147,58 @@ export async function signInAction(
     redirect(`/auth/set-password?next=${encodeURIComponent(next)}`);
   }
 
+  // Tell them their account was saved from deletion, in the one place they will
+  // definitely look after signing in.
+  if (deletionCancelled) {
+    const target = new URL(next, "https://orindle.invalid");
+    target.searchParams.set("deletion_cancelled", "1");
+    redirect(`${target.pathname}${target.search}`);
+  }
+
   redirect(next);
+}
+
+/**
+ * Clear a pending account deletion, if there is one.
+ *
+ * Returns true when a request was actually cancelled. Reads first so the common
+ * case (nobody is deleting their account) costs one indexed lookup and writes
+ * nothing — a write on every single sign-in would be a pointless amount of churn
+ * on the profiles table.
+ *
+ * Uses the service role because `cancel_account_deletion()` is a definer function
+ * and the caller already has a verified session at this point; the actor id comes
+ * from the session, never from a parameter.
+ */
+async function cancelPendingDeletion(): Promise<boolean> {
+  try {
+    const { getServiceClient, isServiceConfigured } = await import("@/lib/supabase/service");
+    if (!isServiceConfigured()) return false;
+
+    const session = await getAuthService().getCurrentSession();
+    if (!session) return false;
+
+    const supabase = getServiceClient();
+    const { data } = await supabase.rpc("my_deletion_status");
+    const pending = Array.isArray(data) ? data[0] : data;
+    if (!pending?.requested_at) return false;
+
+    const { error } = await supabase.rpc("cancel_account_deletion");
+    if (error) {
+      console.error("[auth] could not cancel a pending deletion at sign-in", {
+        userId: session.user.id,
+        pgCode: error.code,
+        pgMessage: error.message,
+      });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("[auth] pending-deletion check failed at sign-in", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
 }
 
 /**
@@ -206,7 +297,7 @@ export async function signUpAction(
     fullName,
     email,
     password,
-    emailRedirectTo: `${await origin()}/auth/callback?next=/account`,
+    emailRedirectTo: `${await origin()}/auth/verify?next=/dashboard`,
   });
 
   if (!result.ok) {
@@ -274,7 +365,7 @@ export async function requestPasswordResetAction(
   // success for both cases, and this action never branches on it.
   const result = await getAuthService().resetPassword({
     email,
-    redirectTo: `${await origin()}/auth/callback?next=/reset-password`,
+    redirectTo: `${await origin()}/auth/verify?next=/reset-password&type=recovery`,
   });
 
   // Only transport and rate-limit failures are surfaced. Anything else would
@@ -346,7 +437,7 @@ export async function resendVerificationAction(
 
   const result = await getAuthService().resendVerification({
     email,
-    emailRedirectTo: `${await origin()}/auth/callback?next=/account`,
+    emailRedirectTo: `${await origin()}/auth/verify?next=/dashboard`,
   });
   if (!result.ok) return toFormState(result);
 

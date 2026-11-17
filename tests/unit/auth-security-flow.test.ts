@@ -299,3 +299,102 @@ describe("no admin monitoring surface", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/* ── Email links and the onboarding redirect ──────────────────────────────── */
+
+describe("email confirmation links", () => {
+  it("verify through a token_hash route, not a PKCE code exchange", async () => {
+    /*
+     * A confirmation link is opened from an inbox, which is routinely a different
+     * browser from the one that signed up. `exchangeCodeForSession` needs the PKCE
+     * code-verifier cookie that browser never had, so the exchange failed with
+     * `flow_state` — and that was mapped to "link_expired", telling people a
+     * 24-hour link had expired seconds after it arrived.
+     *
+     * `verifyOtp({ token_hash })` needs no verifier cookie. The redirect targets
+     * must point at the route that uses it.
+     */
+    const actions = await read("src/app/(auth)/actions.ts");
+    expect(actions).not.toMatch(/auth\/callback\?next=/);
+    expect(actions).toMatch(/auth\/verify\?next=/);
+
+    const route = await read("src/app/auth/verify/route.ts");
+    expect(route).toContain("verifyEmailLink");
+    // The bare `token` from the stock ConfirmationURL is accepted too.
+    expect(route).toContain("TOKEN_PARAM");
+  });
+
+  it("never reports a code-exchange failure as an expired token", async () => {
+    // The two are different diagnoses and only one of them is worth asking the
+    // person to request a new link for.
+    // Comments are stripped first: the branch explains at length *why* it is not
+    // `link_expired`, and matching the prose would make the test fail on its own
+    // documentation.
+    const errors = await readStripped("src/lib/auth/supabase/errors.ts");
+    const flowStateBranch = errors.slice(errors.indexOf("flow_state"));
+    const upToNextBranch = flowStateBranch.slice(0, flowStateBranch.indexOf("otp_expired"));
+
+    expect(upToNextBranch).not.toContain("link_expired");
+  });
+});
+
+describe("the set-password gate is reachable", () => {
+  it("allows /auth as a redirect target", async () => {
+    /*
+     * Without this, `/login?next=%2Fauth%2Fset-password` silently dropped the
+     * `next` and rendered the sign-in form for an already-signed-in visitor — the
+     * exact "only showing the /login page UI" symptom. The allowlist is what makes
+     * the onboarding gate reachable from a bookmark, an email or a resume.
+     */
+    const redirect = await read("src/lib/auth/redirect.ts");
+    expect(redirect).toContain('"/auth"');
+
+    // And it is still a closed list: an off-site value cannot pass.
+    expect(redirect).toContain("parsed.origin !==");
+  });
+
+  it("sends an already-signed-in visitor onward from /login", async () => {
+    const page = await read("src/app/(auth)/login/page.tsx");
+    expect(page).toContain("getCurrentSession");
+    expect(page).toMatch(/redirect\(next \?\? "\/dashboard"\)/);
+  });
+});
+
+/* ── Account deletion ─────────────────────────────────────────────────────── */
+
+describe("account deletion", () => {
+  it("signs the user out everywhere, rather than only claiming to", async () => {
+    const route = await read("src/app/api/users/me/delete/route.ts");
+    // Revoking the refresh token is the only thing that actually ends a session.
+    expect(route).toContain("admin.signOut");
+    expect(route).toContain('"global"');
+    expect(route).toContain("signOut({ scope: \"local\" })");
+  });
+
+  it("does not claim the account becomes read-only, because nothing enforces it", async () => {
+    /*
+     * The old copy and the old email both said the account "becomes read-only".
+     * No layer enforced that — not middleware, not a policy — so the sentence was
+     * simply false. A half-enforced read-only state would be worse than none,
+     * because the screens that forget to enforce it are the ones that let a
+     * departing account change data.
+     */
+    const settings = await read("src/components/dashboard/settings-view.tsx");
+    const email = await read("src/lib/resend/client.ts");
+
+    expect(settings).not.toContain("becomes read-only");
+    expect(email).not.toContain("now read-only");
+  });
+
+  it("cancels the request when the customer signs in during the grace period", async () => {
+    const actions = await read("src/app/(auth)/actions.ts");
+    expect(actions).toContain("cancelPendingDeletion");
+    expect(actions).toContain("cancel_account_deletion");
+  });
+
+  it("states the real purge date, which comes from the database", async () => {
+    // A date computed in the application can drift from the one the job acts on.
+    const route = await read("src/app/api/users/me/delete/route.ts");
+    expect(route).toContain("request_account_deletion");
+  });
+});

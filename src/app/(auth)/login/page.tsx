@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { AuthCard } from "@/components/auth/auth-card";
@@ -8,7 +9,11 @@ import { SocialSignIn } from "@/components/auth/social-sign-in";
 import { Divider } from "@/components/auth/divider";
 import { AuthAside } from "@/components/auth/auth-aside";
 import { Alert } from "@/components/auth/alert";
-import { enabledOAuthProviders, isAuthConfigured } from "@/lib/auth/service";
+import {
+  enabledOAuthProviders,
+  getAuthService,
+  isAuthConfigured,
+} from "@/lib/auth/service";
 import { safeRedirectPath } from "@/lib/auth/redirect";
 import { pageMetadata } from "@/lib/seo";
 
@@ -41,12 +46,33 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; deleted?: string }>;
 }) {
   const params = await searchParams;
   const next = params.next ? safeRedirectPath(params.next) : undefined;
   const configured = isAuthConfigured();
   const providers = enabledOAuthProviders();
+
+  /*
+   * Already signed in? Go where they were going.
+   *
+   * This is what made `/login?next=/auth/set-password` render a sign-in form for
+   * someone who was already signed in — a dead end, because the form's own submit
+   * would then have to redirect them onward anyway. Their `next` is honoured, and
+   * `/auth/set-password` re-checks the onboarding flag itself, so this cannot be
+   * used to skip the Set Password gate.
+   *
+   * No `next` means the normal post-sign-in destination is resolved on the way out
+   * of the sign-in action, not here; an already-authenticated visitor with no
+   * target goes to `/dashboard`, which is also what that action would choose for a
+   * brand-new account.
+   */
+  if (configured) {
+    const session = await getAuthService().getCurrentSession();
+    if (session) {
+      redirect(next ?? "/dashboard");
+    }
+  }
 
   /**
    * `not_configured` is deliberately not rendered as a callback error here.
@@ -88,6 +114,15 @@ export default async function LoginPage({
               You can fill this form in, but submitting it will tell you the same thing rather than
               pretend to sign you in.
             </p>
+          </div>
+        )}
+
+        {params.deleted === "1" && (
+          <div className="mb-5">
+            <Alert tone="info">
+              Your account is scheduled for deletion. Nothing has been removed, and signing
+              in now cancels it.
+            </Alert>
           </div>
         )}
 

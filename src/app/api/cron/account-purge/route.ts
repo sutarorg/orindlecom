@@ -19,6 +19,7 @@ import { NextResponse } from "next/server";
 import { authoriseCron } from "@/lib/cron/auth";
 import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
 import { deleteObject } from "@/lib/r2/client";
+import { sendEmail } from "@/lib/resend/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,22 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
+
+  /*
+   * Addresses for the "your account is deleted" notice, read BEFORE anything is
+   * removed. Deleting the auth user cascades the profile, so an address looked up
+   * afterwards is gone — which is why `account-deleted` existed as a template and
+   * had never once been sent.
+   */
+  const { data: addresses } = await supabase.rpc("pending_deletion_emails", {
+    p_limit: MAX_ACCOUNTS * 4,
+  });
+  const emailFor = new Map<string, string>(
+    ((addresses ?? []) as Array<{ owner_id: string; email: string }>).map((row) => [
+      row.owner_id,
+      row.email,
+    ]),
+  );
 
   const accounts = (due ?? []).slice(0, MAX_ACCOUNTS);
   let purged = 0;
@@ -115,6 +132,22 @@ export async function GET(request: Request) {
     }
 
     purged += 1;
+
+    /*
+     * The account is gone, so the notice has to be sent now or never. The address
+     * came from the map read before deletion. A send failure is recorded but does
+     * not un-delete anything — there is nothing left to retry against.
+     */
+    const email = emailFor.get(ownerId);
+    if (email) {
+      const sent = await sendEmail({
+        to: email,
+        template: "account-deleted",
+      }).catch(() => ({ ok: false as const, error: "threw", retryable: false }));
+      if (!sent.ok) {
+        failures.push(`${ownerId}: purge done, notice not sent`);
+      }
+    }
   }
 
   return NextResponse.json({
