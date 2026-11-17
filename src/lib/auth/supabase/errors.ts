@@ -79,22 +79,35 @@ export function mapProviderError(error: ProviderErrorLike | null | undefined): A
   }
 
   /*
-   * `flow_state` / "code verifier" means the PKCE *code exchange* could not complete
-   * — almost always because the link was opened in a browser that never held the
-   * code-verifier cookie, which is the normal case for a link opened from an inbox.
-   * The token itself may be perfectly valid.
+   * The stock `{{ .ConfirmationURL }}` produces a `token=pkce_…` link. Supabase's
+   * `/auth/v1/verify` confirms the address, then redirects here with `?code=…`
+   * and expects it to be exchanged against the code-verifier cookie written when
+   * signup started. Two things make that exchange fail, and neither is a 24-hour
+   * expiry:
    *
-   * It must not be reported as `link_expired`: that told people a 24-hour link had
-   * expired seconds after it arrived, and sent them to request a replacement for a
-   * link that was not the problem. Email links now verify server-side through
-   * `verifyEmailLink`, so this path should not be reached from a confirmation link
-   * at all; if it is reached, the honest message is that the browser that opened
-   * the link is the issue.
+   *   `flow_state_expired` — GoTrue keeps the PKCE flow state for 300 seconds
+   *      (`GOTRUE_EXTERNAL_FLOW_STATE_EXPIRY_DURATION`, default `300s`), counted
+   *      from *signup*, not from the click. A link opened more than five minutes
+   *      after signing up cannot be exchanged even though the emailed token is
+   *      still inside its 24-hour window. This is the "expired before 24 hours"
+   *      report: the address is usually already confirmed at this point, because
+   *      `/auth/v1/verify` completed before handing back the code.
+   *
+   *   `pkce_code_verifier_not_found` / "code verifier" — the link was opened in a
+   *      browser that never held the cookie: another device, a mail app's in-app
+   *      browser, a private window, or a different origin from the one that signed
+   *      up.
+   *
+   * Both are reported as `session_missing`, never `link_expired`. Saying "expired"
+   * sends people to request a replacement for a link that was not the problem,
+   * and in the flow-state case the account is already confirmed — what they need
+   * is to sign in. `verifyEmailLink` (token_hash) never reaches this branch; it is
+   * reachable only from the `?code=` shape.
    */
   if (raw.includes("flow_state") || raw.includes("code verifier")) {
     return failure(
       "session_missing",
-      "That link has to be opened in the same browser you signed up in. Sign in below, or request a fresh link.",
+      "That link was already confirmed or has to be opened in the same browser you signed up in. Sign in below — your address is most likely confirmed already.",
     );
   }
 

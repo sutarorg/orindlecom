@@ -16,15 +16,27 @@
  * token was valid; the *code exchange* could not complete. That is why the
  * message said "expired or already used" within seconds of the email arriving.
  *
+ * There is a second, shorter clock behind that failure. GoTrue keeps the PKCE flow
+ * state for 300 seconds (`GOTRUE_EXTERNAL_FLOW_STATE_EXPIRY_DURATION`, default
+ * `300s`), counted from signup rather than from the click. So a link opened more
+ * than five minutes after signing up returns `flow_state_expired` even though the
+ * emailed token is still inside its own 24-hour window — which is how a brand-new
+ * link came to be reported as "expired or already used".
+ *
  * ── What this does instead ──────────────────────────────────────────────────
  * Supabase's own recommended pattern for server-side confirmation is
  * `verifyOtp({ token_hash, type })`, which needs no verifier cookie because there
- * is no PKCE step. This route accepts the token hash and does that, writing the
- * resulting session into the same cookie jar `/auth/callback` uses.
+ * is no PKCE step and no flow state. This route accepts the token hash and does
+ * that, writing the resulting session into the same cookie jar `/auth/callback`
+ * uses.
  *
- * It also accepts the bare `token` that `{{ .ConfirmationURL }}` carries, so the
- * stock template works without the project admin hunting for `{{ .TokenHash }}`
- * in the dashboard.
+ * That shape is only produced by a template built from `{{ .TokenHash }}`; the
+ * stock `{{ .ConfirmationURL }}` never carries one. `docs/deployment/email-templates.md`
+ * carries the templates to paste into the dashboard, and swapping them is what
+ * makes a confirmation link work on a different device.
+ *
+ * The `?token=` and `?code=` shapes are still accepted so links already sitting in
+ * inboxes keep working, but they are the fallback, not the intended path.
  *
  * Every outcome redirects — a verification URL must not stay in history as a page
  * that can be re-opened into an error.
@@ -52,9 +64,12 @@ export const dynamic = "force-dynamic";
  *                   `callback_failed` — the exact error reported.
  *
  * A PKCE `code` normally needs the code-verifier cookie set when the flow began.
- * When it is absent, `exchangeCodeForSession` fails with `flow_state`, so a code is
- * only treated as a last resort: it works for the visitor who started the flow in
- * this browser, and the token shapes above cover everyone else.
+ * When it is absent, `exchangeCodeForSession` fails with `flow_state`; when it is
+ * present but older than 300 seconds, with `flow_state_expired`. Either way the
+ * address has already been confirmed by the time we see the code, so a code is a
+ * last resort: it produces a session only for the visitor who started the flow in
+ * this browser, minutes ago. Everyone else is told to sign in, which needs no
+ * link at all.
  */
 const HASH_PARAM = "token_hash";
 const TOKEN_PARAM = "token";
@@ -135,17 +150,39 @@ export async function GET(request: NextRequest) {
       message: outcome.message,
     });
 
-    if (outcome.code === "not_configured") return fail("not_configured");
-    if (outcome.code === "network") return fail("network", "/verify-email");
-    if (outcome.code === "rate_limited") return fail("rate_limited");
-
-    /*
-     * Every other outcome means the link could not be redeemed. `/verify-email` is
-     * the right destination for all of them because it is the only screen that can
-     * issue a replacement — landing on `/login` with "that sign-in link didn't
-     * work" left the visitor with no action except guessing.
-     */
-    return fail("link_expired", "/verify-email");
+    switch (outcome.code) {
+      case "not_configured":
+        return fail("not_configured");
+      case "network":
+        return fail("network", "/verify-email");
+      case "rate_limited":
+        return fail("rate_limited");
+      /*
+       * Only a token the auth server actually rejected may be called expired.
+       * `mapProviderError` produces `link_expired` from `otp_expired` / "token has
+       * expired" and nothing else, so this branch is the one honest use of the
+       * word. It goes to `/verify-email`, the only screen that can issue a
+       * replacement.
+       */
+      case "link_expired":
+        return fail("link_expired", "/verify-email");
+      /*
+       * `session_missing` covers the PKCE `?code=` shape: the address was
+       * confirmed but the code could not be exchanged — a browser without the
+       * verifier cookie, or a flow state that passed its 300-second window. It
+       * must not borrow the expiry wording. Signing in is the next step, and the
+       * destination says exactly that.
+       */
+      case "session_missing":
+        return fail("session_missing", "/login");
+      default:
+        /*
+         * Anything unmapped is an unexplained failure. It is not evidence of
+         * expiry, so it does not claim to be: `/verify-email` still offers a
+         * replacement, which is the only useful action either way.
+         */
+        return fail("callback_failed", "/verify-email");
+    }
   }
 
   /*

@@ -324,6 +324,78 @@ describe("email confirmation links", () => {
     expect(route).toContain("TOKEN_PARAM");
   });
 
+  it("reports a code-exchange failure as session_missing, not as expiry", async () => {
+    /*
+     * The reported bug: a link issued minutes earlier said "expired or already
+     * used". Two distinct causes produce a failed code exchange, and neither is a
+     * 24-hour expiry — a missing verifier cookie (another device, an in-app
+     * browser, a private window) and `flow_state_expired`, because GoTrue keeps
+     * PKCE flow state for 300 seconds from signup.
+     *
+     * `link_expired` must therefore be reachable only from a token the auth server
+     * genuinely rejected.
+     */
+    const errors = await readStripped("src/lib/auth/supabase/errors.ts");
+    const flowBranch = errors.slice(errors.indexOf('raw.includes("flow_state")'));
+    const flowReturn = flowBranch.slice(0, flowBranch.indexOf("}"));
+    expect(flowReturn).toContain('"session_missing"');
+    expect(flowReturn).not.toContain("link_expired");
+  });
+
+  it("only the verify route's expiry branch may say the link expired", async () => {
+    const route = await readStripped("src/app/auth/verify/route.ts");
+    /*
+     * Exactly two call sites may say it, and both are cases where the auth server
+     * itself rejected the token: the `error`/`error_description` early return, and
+     * the `link_expired` arm. Every other arm carries its own diagnosis.
+     */
+    expect(route.match(/link_expired/g) ?? []).toHaveLength(3); // 2 calls + 1 case label
+    expect(route).toContain("errorDescription");
+
+    // A code-exchange failure has its own destination: signing in, because the
+    // address is already confirmed.
+    expect(route).toMatch(/case "session_missing":\s*return fail\("session_missing", "\/login"\)/);
+    // And the catch-all is not allowed to fall back to the expiry wording again.
+    expect(route).toMatch(/default:[\s\S]{0,200}return fail\("callback_failed", "\/verify-email"\)/);
+  });
+
+  it("does not repeat the 24-hour promise on the confirmation screen", async () => {
+    /*
+     * The email template that ships here uses `{{ .TokenHash }}`, so the token's
+     * own lifetime is the only clock — but the app should not assert a number it
+     * does not control, and under the stock `{{ .ConfirmationURL }}` template it
+     * was plainly false: the flow state died after five minutes.
+     */
+    const page = await read("src/app/(auth)/verify-email/page.tsx");
+    expect(page).not.toContain("expires after 24 hours");
+  });
+
+  it("tells a visitor whose code could not be exchanged that they are already confirmed", async () => {
+    const page = await readStripped("src/app/(auth)/verify-email/page.tsx");
+    // `session_missing` gets its own card; it must not be folded into the expiry one.
+    expect(page).toContain("alreadyConfirmed");
+    expect(page).toContain('params.error === "session_missing"');
+    expect(page).toContain('params.error === "link_expired"');
+  });
+
+  it("ships email templates that use TokenHash rather than the PKCE ConfirmationURL", async () => {
+    /*
+     * This is the actual fix for the cross-device case. `{{ .ConfirmationURL }}`
+     * routes through `/auth/v1/verify` and hands back a PKCE `code`, which cannot
+     * be redeemed without the signup browser's verifier cookie. A `token_hash`
+     * link goes straight to `/auth/verify` and is verified server-side.
+     */
+    const doc = await read("docs/deployment/email-templates.md");
+    const body = doc.slice(doc.indexOf("## 1. Confirm signup"));
+
+    expect(body).not.toContain("{{ .ConfirmationURL }}");
+    expect(body).toContain("token_hash={{ .TokenHash }}");
+    // Each template's type has to match the template it is pasted into.
+    for (const type of ["signup", "invite", "email_change", "recovery"]) {
+      expect(body).toContain(`type=${type}`);
+    }
+  });
+
   it("never reports a code-exchange failure as an expired token", async () => {
     // The two are different diagnoses and only one of them is worth asking the
     // person to request a new link for.
