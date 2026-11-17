@@ -6,7 +6,7 @@
  * pass through here before being used.
  */
 
-const ALLOWED_PREFIXES = ["/", "/pricing", "/features", "/account"];
+const ALLOWED_PREFIXES = ["/", "/pricing", "/features", "/dashboard", "/business"];
 
 /**
  * Returns a safe same-origin path, or the fallback.
@@ -15,7 +15,7 @@ const ALLOWED_PREFIXES = ["/", "/pricing", "/features", "/account"];
  * scheme. The check is on the parsed value, not a string prefix, because
  * `/\\evil.com` and `/%2F%2Fevil.com` both defeat naive prefix matching.
  */
-export function safeRedirectPath(value: string | null | undefined, fallback = "/account"): string {
+export function safeRedirectPath(value: string | null | undefined, fallback = "/dashboard"): string {
   if (!value) return fallback;
 
   // Must be root-relative and must not start a protocol-relative URL.

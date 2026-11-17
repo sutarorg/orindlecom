@@ -40,7 +40,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "
  * This is a coarse gate only — every business route and `/api/organizations/*`
  * still authorizes the actor on the server.
  */
-const PROTECTED_PREFIXES = ["/dashboard", "/account", "/admin", "/business"];
+const PROTECTED_PREFIXES = ["/dashboard", "/admin", "/business"];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(

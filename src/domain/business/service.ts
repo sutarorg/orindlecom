@@ -696,7 +696,10 @@ export async function inviteMember(
       .eq("id", existing.id)
       .select("id")
       .single();
-    if (error || !data) throw new AppError("unknown", "We couldn't update that invitation.");
+    if (error || !data) {
+      logBusinessWriteFailure("updateInvitation", error);
+      throw new AppError("unknown", "We couldn't update that invitation.");
+    }
     savedId = String(data.id);
   } else {
     const { data, error } = await db
@@ -714,7 +717,10 @@ export async function inviteMember(
       })
       .select("id")
       .single();
-    if (error || !data) throw new AppError("unknown", "We couldn't create that invitation.");
+    if (error || !data) {
+      logBusinessWriteFailure("inviteMember", error);
+      throw new AppError("unknown", "We couldn't create that invitation.");
+    }
     savedId = String(data.id);
   }
 
@@ -1175,6 +1181,42 @@ export async function getFolder(
   return match;
 }
 
+/**
+ * Log the real database error behind a generic business failure.
+ *
+ * Business mutations ran `.insert(...)` and collapsed any failure into
+ * `AppError("unknown", ...)`, so the customer saw "Something went wrong on our
+ * side" and the operator saw exactly the same nothing. The most useful fact — the
+ * Postgres error code and constraint name — was discarded at the one point it
+ * existed.
+ *
+ * Creating a shared folder is the case that surfaced this: a duplicate name is a
+ * `23505` on `folders_unique_live_name`, which ought to read as "a folder with that
+ * name already exists", not as an internal error. A `42501` would mean RLS refused
+ * the insert, and a `23503` a bad parent — operating on those needs the code.
+ *
+ * Deliberately logs the code, message and details but returns the caller's own
+ * message unchanged: an internal error must not be rendered to a customer.
+ */
+function logBusinessWriteFailure(operation: string, error: unknown): void {
+  const e = error as { code?: string; message?: string; details?: string; hint?: string } | null;
+  console.error(`[business] ${operation} failed`, {
+    code: e?.code,
+    message: e?.message,
+    details: e?.details,
+    hint: e?.hint,
+  });
+}
+
+/**
+ * Translate a unique-violation on the live-folder index into a conflict the UI can
+ * explain. `folders_unique_live_name` is the only unique constraint on folders.
+ */
+function isDuplicateFolder(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  return e?.code === "23505";
+}
+
 export async function createFolder(
   actor: Actor,
   orgId: string,
@@ -1199,7 +1241,18 @@ export async function createFolder(
     .select("id")
     .single();
 
-  if (error || !data) throw new AppError("unknown", "We couldn't create that shared folder.");
+  if (error || !data) {
+    logBusinessWriteFailure("createFolder", error);
+
+    if (isDuplicateFolder(error)) {
+      throw new AppError(
+        "conflict",
+        `A shared folder named "${name}" already exists in this workspace.`,
+      );
+    }
+
+    throw new AppError("unknown", "We couldn't create that shared folder.");
+  }
 
   await logOrgEvent(ctx.org.id, actor.userId, "folder.created", "folder", String(data.id), {
     targetName: name,

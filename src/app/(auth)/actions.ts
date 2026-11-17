@@ -31,6 +31,7 @@ import { ensureDeviceId } from "@/lib/security/device";
 import { evaluateSignupGate, GATE_MESSAGES } from "@/lib/security/signup-gate";
 import { recordSignupOutcome } from "@/lib/security/risk";
 import { readOwnSecurity } from "@/lib/security/account-security";
+import { destinationFor, readLastWorkspace } from "@/lib/navigation/last-workspace";
 
 async function origin() {
   return resolveOrigin(await headers());
@@ -47,7 +48,19 @@ export async function signInAction(
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const remember = formData.get("remember") === "on";
-  const next = safeRedirectPath(String(formData.get("next") ?? ""));
+
+  /*
+   * No `next` means "take me where I was". Previously this fell back to `/account`,
+   * a chooser screen the customer had to click through on every single sign-in.
+   * A returning customer now lands back in the workspace they last used, and a
+   * brand-new account — which has no stored preference — lands on `/dashboard`.
+   *
+   * An explicit `next` still wins, so a deep link still goes where it promised.
+   */
+  const requestedNext = String(formData.get("next") ?? "").trim();
+  const next = requestedNext
+    ? safeRedirectPath(requestedNext)
+    : destinationFor(await readLastWorkspace());
 
   const fieldErrors: FieldErrors = {};
   const emailError = validateEmail(email);
@@ -228,7 +241,14 @@ export async function signUpAction(
     );
   }
 
-  redirect("/account");
+  /*
+   * Straight into the product after a first signup — no `/account` chooser.
+   *
+   * `/dashboard` is correct rather than a stored preference: this is a brand-new
+   * account, so there is nothing to restore and the drive is where someone who just
+   * created an account expects to arrive.
+   */
+  redirect("/dashboard");
 }
 
 /* ------------------------------------------------------------------ */

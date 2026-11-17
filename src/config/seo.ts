@@ -39,7 +39,9 @@ export const DEFAULT_OG_IMAGE = {
  */
 export const PRIVATE_ROUTE_PREFIXES = [
   "/dashboard",
-  "/account",
+  // The signed-in team workspace. Private like /dashboard, and it sits at a path
+  // that used to be a public marketing page, so it needs saying explicitly.
+  "/business",
   "/login",
   "/signup",
   "/sign-in",

@@ -113,11 +113,25 @@ Completes multipart if needed, then verifies size, commits metadata and accounti
 Returns the created `DriveItem`. Never returns success for an unverified object.
 
 ### `POST /api/uploads/:taskId/cancel`
+### `DELETE /api/uploads/:taskId/cancel`
 Releases the reservation immediately. Idempotent.
+
+Both verbs are accepted because every caller in the browser sends `DELETE`, which the
+route did not export — so each cancel was a 405 that `void api.delete(...)` discarded
+silently. The reservation reserved at `prepare` is only released on complete or cancel,
+so a failed upload held its bytes against quota with no file behind them until the daily
+sweep reclaimed them.
 
 ### `GET /api/uploads`
 Active tasks for the current actor, for the upload manager to restore state after a
 navigation.
+
+### `POST /api/session/last-workspace`
+Records where the customer is (`{ path }`) so sign-in can return them there instead of
+to a chooser page. The path is re-validated server-side: only `/dashboard` and
+`/business` prefixes are stored, so the stored value can never become an open redirect.
+Unauthenticated callers get 401; the write is scoped to the caller's own profile row by
+RLS.
 
 ---
 
