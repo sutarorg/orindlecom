@@ -1,9 +1,15 @@
 /**
  * Automated recovery and retention.
  *
- * Runs every ten minutes. This route is what makes the anti-abuse system
- * *self-healing* rather than merely automatic: nothing here needs a human, and
- * nothing here requires anyone to notice that something is stuck.
+ * Runs daily, through `/api/cron/dispatch`, because Vercel's free plan allows one
+ * run per job per day. This route is what makes the anti-abuse system *self-healing*
+ * rather than merely automatic: nothing here needs a human, and nothing here
+ * requires anyone to notice that something is stuck.
+ *
+ * Daily is a deliberate, stated trade-off: an elapsed cooldown can remain in force
+ * for up to a day after its window ends. It is a delay, never a permanent
+ * restriction — the release is deterministic and needs no one to press anything —
+ * and in exchange the deployment works on the free plan.
  *
  *   1. **Release expired restrictions.** The core recovery path. A cooldown that
  *      has elapsed is closed and logged, in the database, idempotently.

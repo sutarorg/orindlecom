@@ -402,20 +402,59 @@ All cron routes require `Authorization: Bearer ${CRON_SECRET}`, compared in cons
 time. Without it they return `404`, not `401`, so the existence of the job is not
 advertised.
 
-All six are built and scheduled in `vercel.json`. Cadences below are the actual
-schedule, not an intention.
+All nine are built. Cadences below are the actual schedule, not an intention.
 
-| | Path | Cadence (`vercel.json`) | Purpose |
-| --- | --- | --- | --- |
-| ✅ | `/api/cron/expire-reservations` | `*/10 * * * *` | Release reservations never confirmed |
-| ✅ | `/api/cron/trash-cleanup` | `0 2 * * *` | Delete objects past the 30-day retention |
-| ✅ | `/api/cron/subscription-sweep` | `30 2 * * *` | Downgrade lapsed plans, open the recovery window |
-| ✅ | `/api/cron/email-retry` | `*/15 * * * *` | Retry failed sends with bounded backoff |
-| ✅ | `/api/cron/reconcile-storage` | `0 3 * * *` | Report accounting drift; repairs nothing silently |
-| ✅ | `/api/cron/orphan-sweep` | `0 4 * * *` | Delete R2 objects with no row, after a 24-hour grace |
-| ✅ | `/api/cron/account-purge` | `0 5 * * *` | Permanently delete accounts past their 7-day grace period |
-| ✅ | `/api/cron/abuse-maintenance` | `*/10 * * * *` | Release expired restrictions, sweep orphaned blocks, prune risk data |
-| ✅ | `/api/cron/domain-intel` | `0 6 * * *` | Refresh disposable-domain intelligence; validate the retained baseline |
+**Vercel's free plan allows one run per job per day.** Three of these jobs want a
+ten- or fifteen-minute cadence, so `vercel.json` schedules one entry,
+`/api/cron/dispatch`, and the dispatcher invokes those three from a single daily run.
+The two cadence columns are what each job is *scheduled* at and what it *would* run at
+on a plan that permits it.
+
+| | Path | Scheduled (`vercel.json`) | Run through | Purpose |
+| --- | --- | --- | --- | --- |
+| ✅ | `/api/cron/dispatch` | `0 1 * * *` | itself | Invokes the three frequency-sensitive jobs below |
+| ✅ | `/api/cron/expire-reservations` | via `dispatch` | `dispatch`, daily | Mark lapsed reservations `expired` and reclaim their bytes |
+| ✅ | `/api/cron/email-retry` | via `dispatch` | `dispatch`, daily | Retry failed sends with bounded backoff |
+| ✅ | `/api/cron/abuse-maintenance` | via `dispatch` | `dispatch`, daily | Release expired restrictions, sweep orphaned blocks, prune risk data |
+| ✅ | `/api/cron/trash-cleanup` | `0 2 * * *` | direct, daily | Delete objects past the 30-day retention |
+| ✅ | `/api/cron/subscription-sweep` | `0 3 * * *` | direct, daily | Downgrade lapsed plans, open the recovery window |
+| ✅ | `/api/cron/reconcile-storage` | `0 4 * * *` | direct, daily | Report accounting drift; repairs nothing silently |
+| ✅ | `/api/cron/orphan-sweep` | `0 5 * * *` | direct, daily | Delete R2 objects with no row, after a 24-hour grace |
+| ✅ | `/api/cron/account-purge` | `0 6 * * *` | direct, daily | Permanently delete accounts past their 7-day grace period |
+| ✅ | `/api/cron/domain-intel` | `0 7 * * *` | direct, daily | Refresh disposable-domain intelligence; validate the retained baseline |
+
+### Why a dispatcher instead of nine schedules
+
+Vercel rejects a deploy whose cron expression runs more than once per day on Hobby.
+The message names the offending expression, which is how this was found — but moving
+those three jobs to a daily slot on their own would have been wrong, because each is
+time-sensitive: a reservation holds bytes against a customer's quota, an email retry is
+someone waiting for a sign-in link, and an abuse cooldown that has elapsed should stop
+being enforced.
+
+One of those three was also a genuine bug rather than a scheduling problem. Quota
+arithmetic must not depend on a sweep arriving on time, so `reserve_storage` now
+reclaims lapsed reservations inline, under the same row lock that guards the quota
+comparison (`supabase/migrations/0020`). With that fixed, the remaining cost of a daily
+cadence is delay, not incorrectness:
+
+| Was | Now | Consequence |
+| --- | --- | --- |
+| Reservation released within 10 min | Released when the customer next tries to upload, or by the daily sweep | **No** quota impact — the inline reclaim is what the customer hits |
+| `storage_usage.reserved_bytes` exact within 10 min | An upper bound between sweeps | Admin and account screens must treat it as an upper bound, and do |
+| Failed email retried within 15 min | Retried within a day, backoff unchanged | A slow retry; the queue is durable, so nothing is lost |
+| Elapsed abuse cooldown released within 10 min | Released within a day | A cooldown can outlast its window by up to a day. It is a delay, never a permanent restriction |
+
+### Restoring the real cadence
+
+On a Pro plan, put the three sub-routes back in `vercel.json` at `*/10 * * * *`,
+`*/15 * * * *` and `*/10 * * * *`, and remove the dispatcher entry. The sub-routes are
+unchanged; `dispatch` simply becomes unused. There is deliberately no environment flag
+for "we are on Pro" — a flag someone can set wrong fails silently, whereas the schedule
+is visible in one file.
+
+A schedule that runs more than once per day fails the deploy rather than the job, so
+`tests/unit/deployment-config.test.ts` rejects one in CI.
 
 Each returns `{ ok: true, data: { … } }` and is safe to invoke twice concurrently.
 When the database isn't connected on a deployment, a scheduled run returns `200` with

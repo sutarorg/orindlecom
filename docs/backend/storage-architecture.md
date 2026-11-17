@@ -141,7 +141,7 @@ part), the *actual* is committed and the difference released.
 
 ### 13. Release unused reservations
 Any reservation still `reserved` for this upload is released. The sweeper
-(`expire-reservations`, every 15 minutes) does the same for uploads that never came
+(`expire-reservations`, daily via `/api/cron/dispatch`) does the same for uploads that never came
 back, so an abandoned tab cannot hold quota for 24 hours by accident.
 
 ---

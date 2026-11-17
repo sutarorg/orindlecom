@@ -55,7 +55,7 @@ matters, because application-level checks can be forgotten by one route.
 | ✅ | Unclassified domains treated as **no signal**, never as suspicious | `classify_email_domain()` returns null |
 | ✅ | Risk scored from signals with a reasons array naming each factor | `score_signup()`, pure function of its inputs |
 | ✅ | Enforcement is proportionate and **always expires** | `account_restrictions.expires_at`, no permanent column |
-| ✅ | Automatic release without a human | `release_expired_restrictions()`, every 10 minutes |
+| ✅ | Automatic release without a human | `release_expired_restrictions()`, daily via `/api/cron/dispatch` |
 | ✅ | Enforcement never deletes user data | no delete branch exists; asserted in `security.test.ts` |
 | ✅ | Client IP resolved from trusted headers only, never the first XFF entry | `ip.ts`; 5 tests including the spoofing case |
 | ✅ | IP and device values hashed with a server-side salt | `ABUSE_HASH_SALT` |

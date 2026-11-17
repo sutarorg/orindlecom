@@ -258,7 +258,7 @@ Nothing here needs a human, which is the point — there is no dashboard to watc
 
 | Mechanism | How it works |
 | --- | --- |
-| Expiring restrictions | `release_expired_restrictions()`, called every 10 minutes by `/api/cron/abuse-maintenance` |
+| Expiring restrictions | `release_expired_restrictions()`, called daily by `/api/cron/abuse-maintenance` (via `/api/cron/dispatch`). An elapsed cooldown can outlast its window by up to a day — a delay, never a permanent restriction |
 | Release is auditable | Each release writes a `restriction_released` row, so recovery is as traceable as enforcement |
 | Risk decay | Signals are *counted over a window*, not accumulated in a stored score. A device that behaves for 30 days has no signals, which is decay by construction and cannot be miscalculated |
 | Idempotency | Release is guarded by `released_at is null`; running it twice is a no-op |

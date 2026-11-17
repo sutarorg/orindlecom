@@ -160,6 +160,115 @@ describe("reservations", () => {
     expect(u.reserved).toBe(2n * GB);
   });
 
+  /*
+   * ── Lapsed reservations must not hold quota ────────────────────────────────
+   *
+   * On Vercel's free plan the cleanup cron runs once a day rather than every ten
+   * minutes, so a customer who abandons an upload waited up to a day before their
+   * own quota came back — with an error saying their plan was full, which is false
+   * and unfalsifiable from their side.
+   *
+   * The fix is in `reserve_storage`, not in the schedule: quota arithmetic must not
+   * depend on a sweep arriving on time. These tests fail if it ever does again.
+   */
+  it("reclaims a lapsed reservation before deciding the next upload's fit", async () => {
+    /*
+     * A separate account, because the assertions below are about absolute byte
+     * totals and the tests above deliberately share one accumulating `storage_usage`
+     * row. Borrowing their state would make this test depend on their order.
+     */
+    const owner = await t.createUser("lapsed@example.com");
+    await t.verifyUser(owner);
+    const usageOf = async () => {
+      const rows = await t.asService<{ reserved_bytes: string }>(
+        `select reserved_bytes from public.storage_usage where owner_id = $1`,
+        [owner],
+      );
+      return rows.length === 0 ? 0n : BigInt(rows[0].reserved_bytes);
+    };
+
+    // Fill 9 of the 10 GB Free plan with a reservation, then let it lapse.
+    const res = await t.asService<{ id: string }>(
+      `select id from public.reserve_storage($1, $2, gen_random_uuid())`,
+      [owner, (9n * GB).toString()],
+    );
+    expect(await usageOf()).toBe(9n * GB);
+
+    // Age it past its expiry without running any cron.
+    await t.asService(
+      `update public.storage_reservations set expires_at = now() - interval '1 minute'
+        where id = $1`,
+      [res[0].id],
+    );
+
+    // A 5 GB upload would exceed the plan if the lapsed 9 GB still counted. It must
+    // succeed, and `reserved` must end at 5 GB — not 14 GB.
+    await t.asService(`select public.reserve_storage($1, $2, gen_random_uuid())`, [
+      owner,
+      (5n * GB).toString(),
+    ]);
+    expect(await usageOf()).toBe(5n * GB);
+
+    const statuses = await t.asService<{ status: string }>(
+      `select status from public.storage_reservations where id = $1`,
+      [res[0].id],
+    );
+    expect(statuses[0].status, "the lapsed row is marked expired, not released").toBe("expired");
+  });
+
+  it("does not reclaim a reservation that has not expired", async () => {
+    // The mirror case. A live reservation must still count, or the reclaim would be
+    // an oversell bug wearing a fix's clothes.
+    const owner = await t.createUser("live-reservation@example.com");
+    await t.verifyUser(owner);
+
+    await t.asService(`select public.reserve_storage($1, $2, gen_random_uuid())`, [
+      owner,
+      (8n * GB).toString(),
+    ]);
+    await expect(
+      t.asService(`select public.reserve_storage($1, $2, gen_random_uuid())`, [
+        owner,
+        (5n * GB).toString(),
+      ]),
+    ).rejects.toSatisfy((e: unknown) => pgError(e) === "quota_exceeded");
+  });
+
+  it("reclaims a lapsed reservation exactly once", async () => {
+    const owner = await t.createUser("double-reclaim@example.com");
+    await t.verifyUser(owner);
+
+    const res = await t.asService<{ id: string }>(
+      `select id from public.reserve_storage($1, $2, gen_random_uuid())`,
+      [owner, (4n * GB).toString()],
+    );
+    await t.asService(
+      `update public.storage_reservations set expires_at = now() - interval '1 hour'
+        where id = $1`,
+      [res[0].id],
+    );
+
+    const first = await t.asService<{ reclaimed: string }>(
+      `select public.release_expired_reservations_for($1) as reclaimed`,
+      [owner],
+    );
+    expect(BigInt(first[0].reclaimed)).toBe(4n * GB);
+
+    // A second sweep must subtract nothing. Two sweeps double-subtracting would
+    // inflate the customer's apparent free space and oversell the plan.
+    const second = await t.asService<{ reclaimed: string }>(
+      `select public.release_expired_reservations_for($1) as reclaimed`,
+      [owner],
+    );
+    expect(BigInt(second[0].reclaimed)).toBe(0n);
+
+    const rows = await t.asService<{ reserved_bytes: string }>(
+      `select reserved_bytes from public.storage_usage where owner_id = $1`,
+      [owner],
+    );
+    expect(BigInt(rows[0].reserved_bytes)).toBe(0n);
+  });
+
   it("a commit larger than the reservation is refused", async () => {
     const res = await t.asService<{ id: string }>(
       `select id from public.reserve_storage($1, $2, gen_random_uuid())`,

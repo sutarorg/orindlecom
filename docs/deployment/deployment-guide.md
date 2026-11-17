@@ -51,7 +51,7 @@ Vercel dashboard, never in the repository.
 
 ### 3.1 First production deploy checklist
 
-1. Production Supabase project created; all nineteen migrations applied in filename
+1. Production Supabase project created; all twenty migrations applied in filename
    order (`supabase db push`, or the reviewed SQL — `database-schema.md` §11). The
    order is load-bearing: 0001 defines the helper functions every later policy uses.
 2. RLS verified: enable and policies applied table by table in the same migration.
@@ -60,9 +60,23 @@ Vercel dashboard, never in the repository.
 4. Razorpay live keys set; webhook endpoint registered with the live secret.
 5. Resend domain verified; `RESEND_FROM_ADDRESS` points at it.
 6. `NEXT_PUBLIC_SITE_URL` is the production origin (metadata, sitemap, canonical URLs).
-7. `CRON_SECRET` set. The nine jobs are declared in `vercel.json`, so they register
-   themselves on deploy — but confirm on the Vercel dashboard that all seven appear,
-   because a job that fails to register looks identical to one that runs.
+7. `CRON_SECRET` set. There are seven jobs: six scheduled endpoints in `vercel.json`
+   plus `/api/cron/dispatch`, which invokes the three frequency-sensitive jobs from
+   one daily entry. They register themselves on deploy, but confirm on the Vercel
+   dashboard that all seven appear, because a job that fails to register looks
+   identical to one that runs.
+
+   **Hobby and Pro both work; the cadence differs.** Vercel's free plan allows any
+   number of cron jobs but only once per day, so three jobs that want a ten- or
+   fifteen-minute cadence run once daily behind the dispatcher instead. Nothing is
+   lost in correctness — quota no longer depends on a sweep being timely (migration
+   `0020` reclaims lapsed reservations inline) — but a lapsed abuse cooldown is
+   released within a day rather than within minutes. On Pro, restore the real
+   cadences in `vercel.json` and drop the dispatcher entry; §13 of
+   `docs/backend/api-reference.md` lists both schedules.
+
+   A schedule that runs more than once per day **fails the deploy**, not the job.
+   `tests/unit/deployment-config.test.ts` refuses one in CI for that reason.
 8. Health endpoint reports no `mismatch`. It reads configuration presence only and
    never returns a value.
 9. Restore rehearsal completed (`backup-and-recovery.md` §6).
