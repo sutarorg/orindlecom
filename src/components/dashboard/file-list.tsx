@@ -37,6 +37,7 @@ export function FileList({
   onContext,
   onRowAction,
   selectable = true,
+  mode = "default",
 }: {
   items: DriveItem[];
   onOpen: (item: DriveItem) => void;
@@ -44,6 +45,8 @@ export function FileList({
   /** Runs a row action through the manager, which owns the API calls. */
   onRowAction: (item: DriveItem, action: string) => void;
   selectable?: boolean;
+  /** Where the list is shown; the bin has a different, smaller row menu. */
+  mode?: "default" | "trash" | "starred" | "shared";
 }) {
   const { select, isSelected, selected, selectMode, beginSelection, sort, direction, setSort } = useDrive();
   const [focusIndex, setFocusIndex] = React.useState(0);
@@ -167,6 +170,7 @@ export function FileList({
               }}
               onRowAction={(action) => onRowAction(item, action)}
               selectable={selectable}
+              mode={mode}
             />
           );
         })}
@@ -188,9 +192,10 @@ const ListRow = React.forwardRef<
     onOpen: () => void;
     onContext: (anchor: HTMLElement) => void;
     onRowAction: (action: string) => void;
+    mode: "default" | "trash" | "starred" | "shared";
   }
 >(function ListRow(
-  { item, selected, anySelected, tabIndex, selectable, onFocus, onActivate, onOpen, onContext, onRowAction },
+  { item, selected, anySelected, tabIndex, selectable, onFocus, onActivate, onOpen, onContext, onRowAction, mode },
   ref,
 ) {
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -203,26 +208,48 @@ const ListRow = React.forwardRef<
    * where selection begins; the remaining entries route through the manager instead
    * of being the `() => undefined` stubs they were.
    */
-  const items: MenuItem[] = React.useMemo(
-    () => [
+  const items: MenuItem[] = React.useMemo(() => {
+    // In the bin: Restore / Select / Delete, and nothing that implies the file is
+    // still live. See the grid tile for the same rule.
+    if (mode === "trash") {
+      return [
+        { key: "restore", label: "Restore", onSelect: () => onRowAction("restore") },
+        { key: "select", label: "Select", onSelect: () => onRowAction("select") },
+        {
+          key: "purge",
+          label: "Delete permanently",
+          destructive: true,
+          separatorBefore: true,
+          onSelect: () => onRowAction("purge"),
+        },
+      ];
+    }
+
+    const base: MenuItem[] = [
       { key: "open", label: item.kind === "folder" ? "Open" : "Preview", onSelect: onOpen },
       { key: "select", label: "Select", onSelect: () => onRowAction("select") },
-      {
-        key: "star",
-        label: item.starred ? "Remove from Starred" : "Add to Starred",
-        onSelect: () => onRowAction("star"),
-      },
-      { key: "share", label: "Share", onSelect: () => onRowAction("share") },
-      {
-        key: "trash",
-        label: "Move to Trash",
-        destructive: true,
-        separatorBefore: true,
-        onSelect: () => onRowAction("trash"),
-      },
-    ],
-    [item, onOpen, onRowAction],
-  );
+    ];
+
+    if (mode === "default") {
+      base.push(
+        {
+          key: "star",
+          label: item.starred ? "Remove from Starred" : "Add to Starred",
+          onSelect: () => onRowAction("star"),
+        },
+        { key: "share", label: "Share", onSelect: () => onRowAction("share") },
+        {
+          key: "trash",
+          label: "Move to Trash",
+          destructive: true,
+          separatorBefore: true,
+          onSelect: () => onRowAction("trash"),
+        },
+      );
+    }
+
+    return base;
+  }, [item, onOpen, onRowAction, mode]);
 
   return (
     <div
@@ -288,7 +315,8 @@ const ListRow = React.forwardRef<
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 truncate text-[12.5px] font-medium text-ink">
             <span className="truncate">{item.name}</span>
-            {item.starred && (
+            {/* Same rule as the grid: the bin never shows a star. */}
+            {item.starred && mode !== "trash" && (
               <Star className="h-2.5 w-2.5 shrink-0 fill-[#F9A53B] text-[#F9A53B]" aria-label="Starred" />
             )}
             {item.shared && (

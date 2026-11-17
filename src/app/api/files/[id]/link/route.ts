@@ -54,17 +54,15 @@ export async function PUT(request: Request, { params }: Params) {
     const body = await readJson(request);
 
     /*
-     * Three levels, matching the three public pages. `commenter` was missing here
+     * Two levels, matching the two public pages. `commenter` was once missing here
      * even though the dialog offered it, so choosing "Can comment" made the PUT fail
      * and the link stayed on its previous permission — the select moved and nothing
-     * behind it did.
+     * behind it did. `editor` is now the retired one, and it is refused rather than
+     * silently downgraded: a link that quietly changed permission on a request the
+     * caller thought succeeded is exactly the failure this check exists to prevent.
      */
-    if (
-      body.permission !== "viewer" &&
-      body.permission !== "commenter" &&
-      body.permission !== "editor"
-    ) {
-      throw new AppError("validation_failed", "Choose whether the link can view, comment or edit.");
+    if (body.permission !== "viewer" && body.permission !== "commenter") {
+      throw new AppError("validation_failed", "Choose whether the link can view or comment.");
     }
 
     const repo = getDriveRepository();

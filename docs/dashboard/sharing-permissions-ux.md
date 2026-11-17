@@ -7,13 +7,17 @@ those two lists is the point of this document.
 
 ## 1. The permission model
 
-Exactly three levels exist in the contract:
+Exactly two levels exist in the contract:
 
 | Level | Label in UI | What it means |
 | --- | --- | --- |
-| `viewer` | Can view | Open and download. No edits. |
+| `viewer` | Can view | Open and download. No comments, no edits. |
 | `commenter` | Can comment | View, plus leave comments. No edits to the file. |
-| `editor` | Can edit | Modify the file's contents. |
+
+"Can edit" was removed in migration `0025_view_and_comment_only.sql`: existing
+`editor` grants and links were converted to `commenter`, the column constraints
+were narrowed to the two values above, and `/api/s/:token/edit` was deleted. A
+public link may be read and replied to; it may not rewrite the owner's bytes.
 
 `PERMISSION_LABEL` and `PERMISSION_DESCRIPTION` live in
 `src/lib/drive/types.ts`. The dialog iterates those two maps and offers nothing

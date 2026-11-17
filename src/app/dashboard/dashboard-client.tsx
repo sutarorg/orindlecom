@@ -16,10 +16,23 @@ export function DashboardClient({
   children,
   user,
   usage,
+  organization,
 }: {
   children: React.ReactNode;
   user: { name: string; email: string; initials: string };
   usage: { used: number; total: number; label: string } | null;
+  /**
+   * The organization this account belongs to, if any.
+   *
+   * The switcher shows its name beside "Personal" so the card states both workspaces
+   * by name rather than offering to create the one that already exists.
+   */
+  organization: {
+    name: string;
+    shortName: string;
+    initials: string;
+    viewerRole: "owner" | "admin" | "member";
+  } | null;
 }) {
   const pathname = usePathname();
 
@@ -36,6 +49,7 @@ export function DashboardClient({
       crumbs={crumbs}
       user={user}
       usage={usage}
+      workspace={{ kind: "personal", organization, viewerRole: organization?.viewerRole ?? null }}
       // The search field appears only when a list registers itself with the
       // search bridge, so there is never a field with nothing to act on.
     >

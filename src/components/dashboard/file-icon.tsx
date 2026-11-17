@@ -101,7 +101,7 @@ export function FolderIcon({
   colour,
   id,
 }: {
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "xxl";
   className?: string;
   /** Explicit colour pair; otherwise derived from `id`. */
   colour?: FolderColour;
@@ -119,6 +119,9 @@ export function FolderIcon({
     size === "md" && "h-[21px] w-6",
     size === "lg" && "h-7 w-8",
     size === "xl" && "h-10 w-11",
+    // The folder-tile glyph. Sized against the landscape plate it sits in: roughly
+    // 55% of the card's width, which fills the frame without touching the edges.
+    size === "xxl" && "h-[58px] w-[70px]",
   );
 
   return (

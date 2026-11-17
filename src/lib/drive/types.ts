@@ -116,18 +116,25 @@ export interface StorageUsage {
 /* ------------------------------------------------------------------ */
 
 /** Only levels the backend actually enforces. Never display others. */
-export type PermissionLevel = "viewer" | "commenter" | "editor";
+/**
+ * What a share may grant.
+ *
+ * Two levels, not three. "Can edit" is gone: a share link that lets an anonymous
+ * visitor rewrite the owner's file is a different product from one that lets them
+ * read it and respond to it, and only the second belongs in a drive whose sharing
+ * is meant to be safe to send to anyone. Migration 0025 narrows the database to the
+ * same two values, so the removal is enforced rather than merely unrendered.
+ */
+export type PermissionLevel = "viewer" | "commenter";
 
 export const PERMISSION_LABEL: Record<PermissionLevel, string> = {
   viewer: "Can view",
   commenter: "Can comment",
-  editor: "Can edit",
 };
 
 export const PERMISSION_DESCRIPTION: Record<PermissionLevel, string> = {
   viewer: "Open and download, nothing else.",
   commenter: "Read and leave comments.",
-  editor: "Add, rename and delete inside.",
 };
 
 export interface ShareGrant {

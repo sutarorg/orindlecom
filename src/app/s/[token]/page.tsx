@@ -8,11 +8,11 @@ import { CANONICAL_ORIGIN } from "@/config/seo";
 /**
  * A public share link.
  *
- * One route, three permission levels. The link row carries the permission the owner
- * chose, and the page renders exactly that: a viewer page has no comment box and no
- * editor, a commenter page has the comment box and no editor, an editor page has
- * both. Three separate pages that differed only in which panel they hid would drift;
- * one page whose controls come from the resolved permission cannot.
+ * One route, two permission levels. The link row carries the permission the owner
+ * chose, and the page renders exactly that: a viewer page has no comment box, a
+ * commenter page shows the conversation and the box. Two separate pages that differed
+ * only in which panel they hid would drift; one page whose controls come from the
+ * resolved permission cannot. There is no third level — see migration 0025.
  *
  * `noindex` because a share link is private by design. A link that gets indexed
  * becomes a public document, which is the opposite of what "anyone with the link"

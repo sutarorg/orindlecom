@@ -426,19 +426,49 @@ export function createSupabaseDriveRepository(): DriveRepository {
        */
       await c.supabase.rpc("release_expired_reservations_for", { p_owner: c.actor.userId });
 
-      const [{ data: usage }, { data: subscription }] = await Promise.all([
-        c.supabase
-          .from("storage_usage")
-          .select("committed_bytes, reserved_bytes, trash_bytes")
-          .eq("owner_id", c.actor.userId)
-          .maybeSingle(),
-        c.supabase
-          .from("subscriptions")
-          .select("plan_id, status")
-          .eq("owner_id", c.actor.userId)
-          .in("status", ["active", "past_due"])
-          .maybeSingle(),
-      ]);
+      /*
+       * All four reads in one round of concurrency.
+       *
+       * They were two batches and then two sequential queries, so a sidebar figure
+       * cost four serial round trips to Supabase — and the layout fetches this on
+       * *every* dashboard route, which made it part of the cost of changing tabs. The
+       * four queries are independent: none reads a value another produces, so the
+       * only thing the sequencing bought was latency.
+       */
+      const [{ data: usage }, { data: subscription }, { data: files }, { count: folderCount }] =
+        await Promise.all([
+          c.supabase
+            .from("storage_usage")
+            .select("committed_bytes, reserved_bytes, trash_bytes")
+            .eq("owner_id", c.actor.userId)
+            .maybeSingle(),
+          c.supabase
+            .from("subscriptions")
+            .select("plan_id, status")
+            .eq("owner_id", c.actor.userId)
+            .in("status", ["active", "past_due"])
+            .maybeSingle(),
+          /*
+           * Per-category totals.
+           *
+           * This pulls one small row per file to sum on the client side of the
+           * database. It is bounded by the account's file count and only the storage
+           * page renders the breakdown, but the sidebar figure comes from the same
+           * call — a separate cheap path for the shell would be the better shape, and
+           * is noted rather than pretended to be done.
+           */
+          c.supabase
+            .from("files")
+            .select("category, size_bytes")
+            .eq("owner_id", c.actor.userId)
+            .eq("status", "available")
+            .is("deleted_at", null),
+          c.supabase
+            .from("folders")
+            .select("id", { count: "exact", head: true })
+            .eq("owner_id", c.actor.userId)
+            .is("deleted_at", null),
+        ]);
 
       const plan = planById(
         (subscription?.plan_id ?? "free") as Parameters<typeof planById>[0],
@@ -448,24 +478,11 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const reserved = Number(usage?.reserved_bytes ?? 0);
       const trash = Number(usage?.trash_bytes ?? 0);
 
-      const { data: files } = await c.supabase
-        .from("files")
-        .select("category, size_bytes")
-        .eq("owner_id", c.actor.userId)
-        .eq("status", "available")
-        .is("deleted_at", null);
-
       const byCategory: StorageUsage["byCategory"] = {};
       for (const row of (files ?? []) as { category: string; size_bytes: number }[]) {
         const key = row.category as FileCategory;
         byCategory[key] = (byCategory[key] ?? 0) + Number(row.size_bytes);
       }
-
-      const { count: folderCount } = await c.supabase
-        .from("folders")
-        .select("id", { count: "exact", head: true })
-        .eq("owner_id", c.actor.userId)
-        .is("deleted_at", null);
 
       return {
         ok: true,

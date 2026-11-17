@@ -132,13 +132,16 @@ the row shows the level selector and an explicit remove button rather than a
 fourth "No access" option in the list — `No access` is the absence of a grant, and
 listing it beside real levels makes it look like a fourth setting.
 
-### The three levels
+### The two levels
 
 | Level | Label | Description shown |
 | --- | --- | --- |
 | `viewer` | Can view | Open and download. Cannot change anything inside. |
 | `commenter` | Can comment | Open, download, and leave comments on files. |
-| `editor` | Can edit | Add, rename and remove files inside this folder. |
+
+The retired third level (`editor` / "Can edit") was removed with the drive's own
+"Can edit" option in migration `0025_view_and_comment_only.sql`; existing rows were
+converted to `commenter`.
 
 `FOLDER_ACCESS_LABEL` and `FOLDER_ACCESS_DESCRIPTION` in `types.ts` are the only
 place these are written. They appear identically in the folder dialog, the invite

@@ -32,8 +32,10 @@ export const dynamic = "force-dynamic";
 
 
 function readPermission(value: unknown): PermissionLevel {
-  if (value === "viewer" || value === "commenter" || value === "editor") return value;
-  throw new AppError("validation_failed", "Choose whether they can view, comment or edit.");
+  // Two levels. Anything else — including the retired `editor` — is refused here,
+  // so an old client cannot write a value the database no longer accepts.
+  if (value === "viewer" || value === "commenter") return value;
+  throw new AppError("validation_failed", "Choose whether they can view or comment.");
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -119,7 +121,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         email,
         permission,
         delivered: invitation.delivered,
+        /*
+         * The link is returned whenever the mail did not go out, and the reason is
+         * returned with it. The reason is what the dialog shows, because the honest
+         * description of a failed send is the failure — not a guess at its cause.
+         */
         inviteUrl: invitation.delivered ? null : invitation.url,
+        deliveryError: invitation.deliveryError,
         expiresAt: invitation.expiresAt,
       });
     }

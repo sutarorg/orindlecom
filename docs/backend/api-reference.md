@@ -153,6 +153,7 @@ in the current deployment, and the UI says so rather than pretending.
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
 | ✅ | `GET` | `/api/thumbnails/:id` | | What a grid tile should draw: `redirect` (signed URL), `text` (extracted opening), or `icon` |
+| ✅ | `GET` | `/api/thumbnails/:id/image` | | Square 480 px WebP of an image, downscaled server-side with `sharp`; `Cache-Control: private, immutable` + strong ETag. Refused (404) for a file the caller cannot read, and for anything that is not an image |
 | ✅ | `GET` | `/api/trash` | | Items in the bin, with `daysRemaining` |
 | ✅ | `POST` | `/api/trash/restore` | | `{ ids: string[] }` |
 | ✅ | `POST` | `/api/trash/purge` | | `{ ids: string[] }` — only acts on rows already in the bin |
@@ -506,14 +507,15 @@ message would confirm that a guessed token was once real.
 | --- | --- | --- | --- | --- |
 | ✅ | `GET` | `/api/s/:token` | — | Resolved item: name, size, type, permission, owner display name |
 | ✅ | `POST` | `/api/s/:token` | `{ action: "download" }` | `{ url, filename, expiresIn }` — signed URL, 5-minute expiry |
-| ✅ | `POST` | `/api/s/:token` | `{ action: "comment", body, author? }` | `{ posted: true }` — refused unless the link grants `commenter` or `editor` |
+| ✅ | `POST` | `/api/s/:token` | `{ action: "comment", body, author? }` | `{ posted: true }` — refused unless the link grants `commenter` |
 | ✅ | `GET` | `/api/s/:token/content` | — | `{ url, text, previewable }` — a signed URL for media, extracted text for documents |
-| ✅ | `POST` | `/api/s/:token/edit` | `{ body }` | `{ saved: true, bytes, versioned: false }` — refused unless the link grants `editor` and the file is text or code |
+| ✅ | `GET` | `/api/s/:token/comments` | — | `{ comments: [{ id, authorName, body, external, createdAt }] }` — resolved through `link_comments`; a blank author name is returned as `User` |
 
-The page at `/s/:token` renders one of three experiences from the resolved
-permission — view, comment, edit — on the same header and footer as the rest of the
-site. The permission is not a UI gate: `/api/s/:token` refuses a comment from a
-`viewer` link and `/api/s/:token/edit` refuses any write from a non-`editor` link,
+The page at `/s/:token` renders one of **two** experiences from the resolved
+permission — view or comment — on the same header and footer as the rest of the
+site. There is no edit permission: migration 0025 narrows the permission columns to
+`viewer` / `commenter` and converts existing `editor` rows to `commenter`. The
+permission is not a UI gate: `/api/s/:token` refuses a comment from a `viewer` link
 regardless of what the page rendered.
 
 Content types are checked on the way out. Only images, audio, video, PDF and plain

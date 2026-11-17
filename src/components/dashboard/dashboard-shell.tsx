@@ -82,6 +82,24 @@ function ShellInner({
   };
 }) {
   const pathname = usePathname();
+
+  /*
+   * The folder the sidebar's "New folder" creates inside.
+   *
+   * Read from the route rather than passed in, because the shell is the *layout* —
+   * it does not re-render for a navigation between two folder routes with the props
+   * of the page it happens to be wrapping, and the button lives in the shell. It
+   * used to pass no parent at all, so "New folder" while looking at
+   * My Files > folder 1 created a sibling at the top level: the folder appeared to
+   * vanish, because the list on screen is the one it was not put in.
+   *
+   * `/dashboard/folders/<uuid>` is the only route that shows a folder's contents, so
+   * it is the only one where a parent applies. Everywhere else — My Files, Starred,
+   * Shared, Trash — the top level is the honest answer.
+   */
+  const folderMatch = /^\/dashboard\/folders\/([0-9a-f-]{36})\/?$/i.exec(pathname ?? "");
+  const currentFolderId = folderMatch?.[1] ?? null;
+
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [newFolderOpen, setNewFolderOpen] = React.useState(false);
@@ -287,7 +305,11 @@ function ShellInner({
 
       <UploadDropzone />
       <UploadTray />
-      <NewFolderDialog open={newFolderOpen} onClose={() => setNewFolderOpen(false)} />
+      <NewFolderDialog
+        open={newFolderOpen}
+        onClose={() => setNewFolderOpen(false)}
+        parentId={currentFolderId}
+      />
       <FilePickerHost open={pickerOpen} onClose={() => setPickerOpen(false)} onPicked={upload.addFiles} />
     </div>
   );

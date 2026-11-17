@@ -155,19 +155,21 @@ export interface Member {
 /*  Shared folders                                                     */
 /* ------------------------------------------------------------------ */
 
-/** Access level on a shared folder. Mirrors the personal drive's levels. */
-export type FolderAccess = "viewer" | "commenter" | "editor";
+/**
+ * Access level on a shared folder. Mirrors the personal drive's levels — the same
+ * two, for the same reason: a member may read a folder and comment on what is in
+ * it, but changing the contents is the owner's business.
+ */
+export type FolderAccess = "viewer" | "commenter";
 
 export const FOLDER_ACCESS_LABEL: Record<FolderAccess, string> = {
   viewer: "Can view",
   commenter: "Can comment",
-  editor: "Can edit",
 };
 
 export const FOLDER_ACCESS_DESCRIPTION: Record<FolderAccess, string> = {
   viewer: "Open and download. Cannot change anything inside.",
   commenter: "Open, download, and leave comments on files.",
-  editor: "Add, rename and remove files inside this folder.",
 };
 
 export interface BusinessFolder {

@@ -92,12 +92,17 @@ export async function POST(
      * name the visitor gave and no author id. It is marked as external so the
      * dashboard can tell it apart from a comment by a signed-in collaborator — the
      * owner should never mistake an anonymous comment for a colleague's.
+     *
+     * A blank name is stored blank, not as "Guest". "Guest" was a substitute nobody
+     * chose and it made two different situations — no name given, and someone who
+     * signs as Guest — look identical. The display decides what a blank means
+     * ("User"), in `link_comments`, so every surface agrees.
      */
     const supabase = getServiceClient();
     const { error } = await supabase.from("file_comments").insert({
       file_id: item.id,
       author_id: null,
-      author_name: author || "Guest",
+      author_name: author,
       body: message,
       external: true,
     });

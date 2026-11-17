@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Download, FolderInput, Share2, Star, Trash2, X } from "lucide-react";
+import { Download, FolderInput, RotateCcw, Share2, Star, Trash2, X } from "lucide-react";
 import { useDrive } from "./drive-store";
 import { cn } from "@/lib/utils";
 
@@ -22,10 +22,18 @@ import { cn } from "@/lib/utils";
 export function SelectionBar({
   onAction,
   star,
+  mode = "default",
 }: {
   onAction: (action: string) => void;
   /** Aggregate star state of the current selection. */
   star: { state: "all" | "none" | "mixed"; count: number };
+  /**
+   * Where the bar is shown. In the bin the actions are a different set entirely:
+   * there is nothing to move, share or star about a deleted file, so offering
+   * those would be offering controls that cannot mean anything. What is left is
+   * what the bin is actually for — restore, take a copy, or destroy.
+   */
+  mode?: "default" | "trash" | "starred" | "shared";
 }) {
   const { selected, clearSelection, selectAll, items } = useDrive();
 
@@ -64,12 +72,28 @@ export function SelectionBar({
       </button>
 
       <div className="ml-auto flex items-center gap-1">
-        <StarButton state={star.state} onClick={() => onAction("star")} />
-        <ToolbarButton icon={FolderInput} label="Move" onClick={() => onAction("move")} />
-        <ToolbarButton icon={Download} label="Download" onClick={() => onAction("download")} />
-        <ToolbarButton icon={Share2} label="Share" onClick={() => onAction("share")} />
-        <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-primary/20" />
-        <ToolbarButton icon={Trash2} label="Delete" destructive onClick={() => onAction("trash")} />
+        {mode === "trash" ? (
+          <>
+            <ToolbarButton icon={RotateCcw} label="Restore" onClick={() => onAction("restore")} />
+            <ToolbarButton icon={Download} label="Download" onClick={() => onAction("download")} />
+            <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-primary/20" />
+            <ToolbarButton
+              icon={Trash2}
+              label="Delete"
+              destructive
+              onClick={() => onAction("purge")}
+            />
+          </>
+        ) : (
+          <>
+            <StarButton state={star.state} onClick={() => onAction("star")} />
+            <ToolbarButton icon={FolderInput} label="Move" onClick={() => onAction("move")} />
+            <ToolbarButton icon={Download} label="Download" onClick={() => onAction("download")} />
+            <ToolbarButton icon={Share2} label="Share" onClick={() => onAction("share")} />
+            <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-primary/20" />
+            <ToolbarButton icon={Trash2} label="Delete" destructive onClick={() => onAction("trash")} />
+          </>
+        )}
       </div>
     </div>
   );

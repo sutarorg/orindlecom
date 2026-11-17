@@ -151,6 +151,7 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
       invited: boolean;
       delivered: boolean;
       inviteUrl: string | null;
+      deliveryError: string | null;
       expiresAt: string;
     }>(`/api/files/${item.id}/grants`, { email: email.trim().toLowerCase(), permission });
 
@@ -188,12 +189,22 @@ export function ShareDialog({ item, onClose }: { item: DriveItem | null; onClose
       return;
     }
 
-    setError(null as unknown as string);
+    /*
+     * A failed send reports the failure, and says what it was.
+     *
+     * It used to say "Email isn't configured" for every possible cause, which was
+     * wrong in production — the provider was configured and rejecting the message —
+     * and sent anyone reading it looking in the wrong place. The invitation itself
+     * still exists and its link still works, so both facts are given: the mail did not
+     * go, and here is the link to pass on yourself.
+     */
     setInviteUrl(result.data.inviteUrl);
     toast({
       tone: "error",
-      title: "Email wasn't sent",
-      description: "Email isn't configured, so copy the invitation link below and send it yourself.",
+      title: `The invitation email to ${result.data.email} wasn't sent`,
+      description: result.data.deliveryError
+        ? `${result.data.deliveryError}. The invitation is still active — copy the link below and send it yourself.`
+        : "Copy the invitation link below and send it yourself — the invitation is active either way.",
     });
   };
 

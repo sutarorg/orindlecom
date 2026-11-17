@@ -253,10 +253,15 @@ describe("shared", () => {
   });
 
   it("lists an item I granted to somebody", async () => {
+    /*
+     * `commenter`, not `editor`. Migration 0025 removed the edit level: the column's
+     * check constraint now admits only `viewer` and `commenter`, so this insert is
+     * also the regression test for that narrowing — see the dedicated case below.
+     */
     await db.asUser(
       owner,
       `insert into public.share_grants (file_id, grantee_id, granted_by, permission)
-       values ($1, $2, $3, 'editor')`,
+       values ($1, $2, $3, 'commenter')`,
       [ownerFile, stranger, owner],
     );
 
@@ -265,6 +270,17 @@ describe("shared", () => {
       "select name, owned from public.list_shared()",
     );
     expect(rows).toEqual([{ name: "q3.pdf", owned: true }]);
+  });
+
+  it("refuses an `editor` grant: the level no longer exists", async () => {
+    await expect(
+      db.asUser(
+        owner,
+        `insert into public.share_grants (file_id, grantee_id, granted_by, permission)
+         values ($1, $2, $3, 'editor')`,
+        [ownerFile, stranger, owner],
+      ),
+    ).rejects.toThrow(/share_grants_permission_check/);
   });
 
   it("shows nothing to someone who has neither shared nor been shared with", async () => {
@@ -344,6 +360,55 @@ describe("public share links", () => {
 
   it("resolves nothing for a token that never existed", async () => {
     expect(await db.asAnon("select * from public.resolve_share_link('nope')")).toHaveLength(0);
+  });
+
+  it("shows an anonymous visitor the comments on the file it points at", async () => {
+    /*
+     * The regression this guards: a comment could be written through a public link
+     * and then read by nobody — `file_comments` is guarded by `has_file_access`, and
+     * an anonymous visitor has no user id to check. `link_comments` is the read path,
+     * and it is scoped to the token rather than to the table.
+     */
+    await db.asUser(
+      owner,
+      `insert into public.share_links (file_id, token, permission, expires_at, created_by)
+       values ($1, 'comment-token', 'commenter', now() + interval '7 days', $2)`,
+      [ownerFile, owner],
+    );
+    await db.asService(
+      `insert into public.file_comments (file_id, author_id, author_name, body, external)
+       values ($1, null, 'Asha', 'Looks right to me', true),
+              ($1, null, '', 'No name given', true)`,
+      [ownerFile],
+    );
+
+    const rows = await db.asAnon<{ author_name: string; body: string }>(
+      "select author_name, body from public.link_comments('comment-token') order by body",
+    );
+
+    expect(rows).toEqual([
+      { author_name: "Asha", body: "Looks right to me" },
+      // A blank name is shown as "User" — decided on the server, so the dashboard and
+      // the public page cannot disagree about what a nameless comment is called.
+      { author_name: "User", body: "No name given" },
+    ]);
+  });
+
+  it("shows nothing through a revoked link", async () => {
+    await db.asUser(
+      owner,
+      `insert into public.share_links (file_id, token, permission, expires_at, revoked_at, created_by)
+       values ($1, 'dead-comment-token', 'commenter', now() + interval '7 days', now(), $2)`,
+      [ownerFile, owner],
+    );
+    expect(
+      await db.asAnon("select * from public.link_comments('dead-comment-token')"),
+    ).toHaveLength(0);
+  });
+
+  it("names no other file's comments", async () => {
+    // A token resolves to one file. There is no token that returns the table.
+    expect(await db.asAnon("select * from public.link_comments('nope')")).toHaveLength(0);
   });
 });
 

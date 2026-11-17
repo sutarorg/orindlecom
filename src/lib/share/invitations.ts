@@ -40,6 +40,14 @@ export interface InvitationResult {
   url: string;
   /** True when the mail was handed to the provider. Never claimed otherwise. */
   delivered: boolean;
+  /**
+   * Why the send failed, when it did. The provider's own words, not a summary.
+   *
+   * This is what makes the difference between "email is broken, good luck" and a
+   * sentence an operator can act on ("domain is not verified"). It is returned to the
+   * owner of the file — an authorised person — and never logged with the token.
+   */
+  deliveryError: string | null;
   expiresAt: string;
 }
 
@@ -116,6 +124,7 @@ export async function createInvitation(input: InvitationInput): Promise<Invitati
     // Honest: a missing provider or a rejected send is reported as not delivered, and
     // the caller shows the link instead.
     delivered: sent.ok,
+    deliveryError: sent.ok ? null : sent.error,
     expiresAt,
   };
 }

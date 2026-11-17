@@ -112,13 +112,23 @@ export async function sendEmail(input: SendInput): Promise<SendResult | SendFail
         Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
       },
+      /*
+       * No `reply_to`.
+       *
+       * It used to be set to `SUPPORT_INBOX`, which is a *gmail* address while
+       * `from` is `onboarding@resend.dev`. Resend rejects a message whose `reply_to`
+       * domain is not verified on the account, so every share invitation came back
+       * 4xx and was reported to the owner as "email isn't configured". The header
+       * bought nothing — a recipient of a share link does not need to reply to it —
+       * and its cost was the entire invite flow. The support address stays in the
+       * footer, where it is text rather than a deliverability requirement.
+       */
       body: JSON.stringify({
         from: FROM,
         to: [input.to],
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
-        reply_to: [SUPPORT_INBOX],
       }),
       signal: AbortSignal.timeout(10_000),
     });
@@ -127,7 +137,7 @@ export async function sendEmail(input: SendInput): Promise<SendResult | SendFail
       const body = await response.text().catch(() => "");
       return {
         ok: false,
-        error: `Resend ${response.status}: ${body.slice(0, 300)}`,
+        error: describeFailure(response.status, body),
         retryable: response.status === 429 || response.status >= 500,
       };
     }
@@ -145,6 +155,27 @@ export async function sendEmail(input: SendInput): Promise<SendResult | SendFail
       retryable: true,
     };
   }
+}
+
+/**
+ * Turn a provider error into something an operator can act on.
+ *
+ * The raw body is kept whole (truncated) because Resend's `message` field is the only
+ * place the actual reason appears — "domain is not verified", "invalid `to` field",
+ * "you can only send testing emails to your own address". The previous code kept it
+ * too, but nothing surfaced it: every failure reached the customer as the same
+ * sentence about configuration, so the one piece of information that would have
+ * fixed this in a minute never left the server.
+ */
+function describeFailure(status: number, body: string): string {
+  let detail = body.trim();
+  try {
+    const parsed = JSON.parse(detail) as { message?: string; name?: string };
+    if (parsed?.message) detail = parsed.name ? `${parsed.name}: ${parsed.message}` : parsed.message;
+  } catch {
+    // Not JSON — keep the text as-is.
+  }
+  return `Resend ${status}: ${detail.slice(0, 400)}`;
 }
 
 /* ------------------------------------------------------------------ */
