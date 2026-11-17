@@ -146,6 +146,13 @@ That is a write amplification on a deep tree, accepted because reads dominate an
 ancestry breadcrumbs are on every folder page. A trigger keeps it consistent; a
 test proves that a move of a 1,000-folder tree leaves no stale path.
 
+**Creation goes through `create_folder(name, parent_id)`** (0022), a definer function
+rather than an `insert … select()`. `folders_select` calls `has_folder_access()`, which
+is STABLE and therefore reads the snapshot from the start of the statement — so it
+cannot see the row that statement just inserted, and `RETURNING` fails `42501`. The
+function takes `owner_id` from `auth.uid()`, never an argument, so it cannot be used to
+plant a folder in someone else's drive.
+
 ### 3.2 Files
 
 ```sql
@@ -312,6 +319,19 @@ create table public.upload_sessions (
   created_at    timestamptz not null default now()
 );
 ```
+
+**Completion goes through `finalize_upload(task_id, actual_bytes, status)`** (0022), one
+transaction instead of the four separate application writes it replaced (flip the file,
+commit the reservation, confirm the session, log activity). The flip is the part that
+could never work from the client: `files_select` requires `status = 'available'`, so a
+`pending` row is invisible even to its owner, and Postgres applies SELECT policies to an
+UPDATE's row selection — `pending → available` matched zero rows and left the file
+pending forever. The function authorizes on the upload session (owned by the caller and
+still in flight) and on the file row (owned, still pending), so it cannot be used to mark
+an arbitrary file available. A failed `commit_reservation` is downgraded to a warning
+inside the transaction: the object is already verified and the row is already correct, so
+a stale reservation is the sweeper's problem, not a reason to tell the customer the
+upload failed.
 
 ---
 
@@ -669,6 +689,20 @@ Migrations are forward-only and reviewed. Order matters because of foreign keys:
     `effective_plan_bytes`/`reserve_storage`.
 13. 0015 RLS for the anti-abuse tables and the curated domain baseline.
 14. 0016 single-use Turnstile claims.
+15. 0017–0021 platform admin, admin aggregates, approved pricing and business
+    workspaces, and the last-workspace columns.
+16. 0022 `create_folder` and `finalize_upload`.
+
+Migration 0022 exists because of a trap worth stating once. PostgREST implements
+`.select()` on a write as `RETURNING`, and `RETURNING` is filtered by the table's
+SELECT policy; Postgres also applies SELECT policies to an UPDATE's row selection.
+So a write the caller is entitled to make can match zero rows because the result set
+is unreadable. That is what broke folder creation (a STABLE helper in `folders_select`
+cannot see a row inserted by the same statement) and upload completion (a `pending`
+file is invisible even to its owner, so `pending → available` matched nothing). The
+fix is a definer function per write, not a wider SELECT policy: the pending-file rule
+is a real guarantee and both functions still take their identity from `auth.uid()`
+and verify ownership before writing.
 
 Each migration that introduces a table also introduces its policies in the same file.
 A table without policies is a table that is wide open the moment it exists, and
