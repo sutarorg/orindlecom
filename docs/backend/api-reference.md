@@ -46,7 +46,7 @@ apart.
 
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
-| ✅ | `GET` | `/api/files` | | List. Query: `scope`, `parentId`, `search`, `sort`, `direction`, `category[]`, `cursor` |
+| ✅ | `GET` | `/api/files` | | List. Query: `scope`, `parentId`, `withPaths`, `search`, `sort`, `direction`, `category[]`, `cursor` |
 | ✅ | `GET` | `/api/files/:id` | | One file's metadata |
 | ✅ | `PATCH` | `/api/files/:id` | | Rename (`name`) |
 | ✅ | `PATCH` | `/api/files/:id/star` | | `{ starred: boolean }` — one file |
@@ -54,6 +54,18 @@ apart.
 | ✅ | `PATCH` | `/api/files/:id/move` | | `{ parentId: string \| null }` |
 | ✅ | `DELETE` | `/api/files/:id` | | Move to trash (soft) |
 | ✅ | `POST` | `/api/download/:id` | | `{ disposition?: "attachment" \| "inline" }` → signed URL, 5-minute expiry |
+
+`GET /api/files` query semantics — the three parent forms are deliberately distinct:
+
+| `parentId` | Meaning |
+| --- | --- |
+| omitted or empty | every item the caller owns, at any depth — the global My Files view |
+| `root` | the top level only |
+| `<uuid>` | that folder's direct contents |
+
+`scope` is one of `files`, `folders`, `all` (files **and** direct child folders — what a
+folder page shows), `recent`, `starred`, `shared`, `trash`. `withPaths=1` resolves each
+item's ancestor chain so a nested file can say which folder it lives in.
 
 `GET /api/files` returns:
 

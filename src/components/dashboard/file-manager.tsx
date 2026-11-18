@@ -32,6 +32,7 @@ import { UploadZone } from "./upload-zone";
 import { useRegisterSearch } from "./search-bridge";
 import { RenameDialog } from "./rename-dialog";
 import { api, triggerDownload } from "@/lib/drive/client";
+import { folderHrefFromIds } from "@/lib/drive/folder-path";
 
 /**
  * The file manager.
@@ -428,9 +429,16 @@ function FileManagerInner({
           beginSelection(item.id);
           return;
         }
-        // A folder is a real route, so opening one is plain navigation — the
-        // one action in this manager that works end to end without a backend.
-        router.push(`/dashboard/folders/${item.id}`);
+        /*
+         * A folder is a real route, so opening one is plain navigation.
+         *
+         * The address is the folder's *whole* chain, built from the ancestry the
+         * repository resolved. `/dashboard/folders/<id>` still works — the route
+         * redirects it to the canonical form — but pushing the leaf id means every
+         * click costs a redirect round trip and the address bar briefly shows an
+         * address that does not describe where the folder is.
+         */
+        router.push(folderHrefFromIds([...item.path.map((crumb) => crumb.id), item.id]));
         return;
       }
       openPreview(item.id);
@@ -624,7 +632,14 @@ function FileManagerInner({
     <div className="space-y-3" data-drive-surface>
       {leading}
 
-      {showUploadZone && items.length > 0 && <UploadZone compact />}
+      {/*
+        * The destination travels with the zone.
+        *
+        * Without it the zone uploaded to the account root regardless of the folder on
+        * screen — the zone's own copy says "goes into the folder you're viewing", which
+        * was simply false.
+        */}
+      {showUploadZone && items.length > 0 && <UploadZone compact parentId={parentId} />}
 
       {/* The toolbar sticks under the topbar so sort and view stay reachable
           while scrolling a long folder. */}

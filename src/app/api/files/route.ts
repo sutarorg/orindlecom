@@ -16,7 +16,7 @@ import type { FileCategory, ListQuery, SortDirection, SortKey } from "@/lib/driv
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SCOPES = ["files", "folders", "recent", "starred", "shared", "trash"] as const;
+const SCOPES = ["files", "folders", "all", "recent", "starred", "shared", "trash"] as const;
 const SORTS = ["name", "modified", "size", "type"] as const;
 const DIRECTIONS = ["asc", "desc"] as const;
 const CATEGORIES = [
@@ -58,9 +58,31 @@ export async function GET(request: Request) {
         (CATEGORIES as readonly string[]).includes(value),
       );
 
+    /*
+     * Absent, empty and "root" are three different requests.
+     *
+     * `params.get("parentId") || null` turned any of them into the root, which is what
+     * made `/dashboard/files` — which asks for no parent at all, meaning "everything I
+     * own" — come back with only the files sitting at the top level. Files inside
+     * folders were not filtered out downstream; they were filtered out here, before
+     * the query was built.
+     *
+     *   ?parentId absent or empty  → undefined → the whole drive
+     *   ?parentId=root            → null      → the top level only
+     *   ?parentId=<uuid>          → that folder's direct contents
+     */
+    const rawParent = params.get("parentId");
+    const parentId =
+      rawParent === null || rawParent === "" || rawParent === "all"
+        ? undefined
+        : rawParent === "root"
+          ? null
+          : rawParent;
+
     const query: ListQuery = {
       scope: (scope as ListQuery["scope"]) ?? "files",
-      parentId: params.get("parentId") || null,
+      parentId,
+      withPaths: params.get("withPaths") === "1",
       search: params.get("search")?.slice(0, 200) ?? undefined,
       sort: pick(params.get("sort"), SORTS, "name") as SortKey,
       direction: pick(params.get("direction"), DIRECTIONS, "asc") as SortDirection,

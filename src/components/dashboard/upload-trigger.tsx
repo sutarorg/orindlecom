@@ -14,11 +14,20 @@ import { cn } from "@/lib/utils";
  */
 export function UploadTrigger({
   children = "Upload files",
+  parentId = null,
   variant = "primary",
   className,
   icon: Icon = CloudUpload,
 }: {
   children?: React.ReactNode;
+  /**
+   * Where the picked files land.
+   *
+   * Defaults to the root, which is right for the first-use state on a page that shows
+   * the whole drive. The folder page passes its own id so "Upload files" from an empty
+   * folder fills that folder rather than the top of the account.
+   */
+  parentId?: string | null;
   variant?: "primary" | "secondary";
   className?: string;
   icon?: React.ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean }>;
@@ -35,7 +44,7 @@ export function UploadTrigger({
         className="hidden"
         onChange={(event) => {
           const files = Array.from(event.target.files ?? []);
-          if (files.length) addFiles(files);
+          if (files.length) addFiles(files, parentId);
           event.target.value = "";
         }}
       />

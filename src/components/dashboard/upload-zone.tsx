@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CloudUpload } from "lucide-react";
+import { collectDirectory } from "./upload-dropzone";
 import { useUploadManager } from "./upload-manager";
 import { cn } from "@/lib/utils";
 
@@ -16,59 +17,21 @@ import { cn } from "@/lib/utils";
  * The drag state is local here (the window-level overlay is separate) so the
  * zone itself lights up under the pointer.
  */
-/**
- * Walk a dropped directory and produce `File` objects carrying a relative path.
- *
- * `FileSystemEntry` is a non-standard, callback-based API that predates promises and
- * has no TypeScript DOM types for the read methods in all versions, so it is read
- * defensively. Each entry's `fullPath` is rewritten onto a `webkitRelativePath` so
- * the rest of the pipeline sees exactly what a `webkitdirectory` picker produces.
- */
-function collectDirectory(
-  directory: FileSystemDirectoryEntry,
-  path: string,
-  out: File[],
-): Promise<void> {
-  return new Promise((resolve) => {
-    const reader = directory.createReader();
-    // `readEntries` returns at most 100 per call and signals the end with an empty
-    // batch, so it must be called repeatedly.
-    const readBatch = () => {
-      reader.readEntries(async (entries) => {
-        if (entries.length === 0) {
-          resolve();
-          return;
-        }
-
-        for (const entry of entries) {
-          if (entry.isDirectory) {
-            await collectDirectory(entry as FileSystemDirectoryEntry, `${path}/${entry.name}`, out);
-          } else {
-            const file = await new Promise<File | null>((done) => {
-              (entry as FileSystemFileEntry).file(
-                (result) => {
-                  Object.defineProperty(result, "webkitRelativePath", {
-                    value: `${path}/${entry.name}`,
-                    configurable: true,
-                  });
-                  done(result);
-                },
-                () => done(null),
-              );
-            });
-            if (file) out.push(file);
-          }
-        }
-
-        readBatch();
-      }, () => resolve());
-    };
-
-    readBatch();
-  });
-}
-
-export function UploadZone({ compact = false }: { compact?: boolean }) {
+export function UploadZone({
+  compact = false,
+  parentId = null,
+}: {
+  compact?: boolean;
+  /**
+   * The folder this zone uploads into.
+   *
+   * Null is the root, which is right for a page that shows the whole drive. The folder
+   * page passes its own id. This zone previously took no destination at all and
+   * defaulted to `null` everywhere, so the drop target inside a folder said "goes into
+   * the folder you're viewing" and then uploaded to the top level.
+   */
+  parentId?: string | null;
+}) {
   const { addFiles, addFolder } = useUploadManager();
   const [dragging, setDragging] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -93,14 +56,14 @@ export function UploadZone({ compact = false }: { compact?: boolean }) {
       .filter((entry): entry is FileSystemEntry => Boolean(entry));
 
     if (entries.length === 0) {
-      addFiles(Array.from(transfer.files));
+      addFiles(Array.from(transfer.files), parentId);
       return;
     }
 
     const directoryEntries = entries.filter((entry) => entry.isDirectory);
 
     if (directoryEntries.length === 0) {
-      addFiles(Array.from(transfer.files));
+      addFiles(Array.from(transfer.files), parentId);
       return;
     }
 
@@ -112,10 +75,17 @@ export function UploadZone({ compact = false }: { compact?: boolean }) {
       await collectDirectory(entry as FileSystemDirectoryEntry, entry.name, collected);
     }
 
-    // Any loose files dropped alongside the folders still upload, at the top level.
+    /*
+     * Loose files dropped alongside the folders go into the same folder the
+     * directories do, not beside it.
+     *
+     * The old version uploaded the directories through `addFolder` and the loose files
+     * through `addFiles` with no destination, so a mixed drop split itself between two
+     * places — and the files landed at the root.
+     */
     const looseFiles = Array.from(transfer.files).filter((file) => !file.webkitRelativePath);
-    if (collected.length > 0) await addFolder(collected);
-    if (looseFiles.length > 0) addFiles(looseFiles);
+    if (collected.length > 0) await addFolder(collected, parentId);
+    if (looseFiles.length > 0) addFiles(looseFiles, parentId);
   };
 
   return (
@@ -127,7 +97,8 @@ export function UploadZone({ compact = false }: { compact?: boolean }) {
         className="hidden"
         onChange={(event) => {
           const files = Array.from(event.target.files ?? []);
-          if (files.length) addFiles(files);
+          if (files.length) addFiles(files, parentId);
+          // Cleared so re-picking the same selection fires `change` again.
           event.target.value = "";
         }}
       />
@@ -168,7 +139,7 @@ export function UploadZone({ compact = false }: { compact?: boolean }) {
         </span>
         <span className={compact ? "text-left" : "text-center"}>
           <span className={cn("block font-semibold text-ink", compact ? "text-[12.5px]" : "text-[14px]")}>
-            {dragging ? "Drop to upload" : "Drag files here, or click to browse"}
+            {dragging ? "Drop to upload" : "Drag files or folders here, or click to browse"}
           </span>
           {!compact && (
             <span className="mt-1 block text-[11.5px] text-text-muted">

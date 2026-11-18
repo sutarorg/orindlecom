@@ -370,6 +370,28 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
    * name validation is identical and a bad segment fails the same way. A failure
    * part-way through reports how many landed rather than claiming success.
    */
+  /**
+   * Upload a picked (or dropped) directory, recreating its tree.
+   *
+   * The contract is "the folder you picked appears where you are standing, with its
+   * contents inside it". That is two steps, in this order, and both of them used to be
+   * wrong in ways that produced a plausible-looking but incorrect tree:
+   *
+   *   - **Folders are created parents-first, once each.** The map is keyed by the
+   *     relative path, and `ensureFolder` walks the segments in order, so `Research`
+   *     is created before `Research/Reports` and each is created exactly once no matter
+   *     how many files are below it.
+   *   - **`parentId` is the folder on screen**, not the account root. Every folder in
+   *     the tree is created under it, and every file is prepared with the id of its own
+   *     directory — so `Research/Reports/annual.pdf`, uploaded while standing in
+   *     `Archive`, lands at `Archive/Research/Reports/annual.pdf`.
+   *
+   * Failures are reported, not swallowed. A folder that could not be created takes its
+   * own subtree with it (there is nowhere to put the files), the remaining branches
+   * still upload, and the toast states how many files were skipped — the alternative,
+   * which this replaces, was a cheerful "some folders weren't created" over a tree that
+   * had silently lost a whole branch.
+   */
   const addFolder = React.useCallback(
     async (files: File[], parentId: string | null = null) => {
       const withPaths = files.filter((file) => {
@@ -384,9 +406,15 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      // Segment list per folder path, so each folder is created exactly once.
-      const folders = new Map<string, { id: string | null; parentId: string | null }>();
-      const failures: string[] = [];
+      // Relative folder path → the id it was created with. Keyed by the whole path, not
+      // the name, so two directories called `Images` in different branches are two
+      // folders rather than one.
+      const folders = new Map<string, string>();
+      // Folder paths that failed, and why. Kept separately so a failure can be reported
+      // with the name the visitor recognises.
+      const failures: Array<{ name: string; message: string }> = [];
+      const failed = new Set<string>();
+      let skipped = 0;
 
       const ensureFolder = async (segments: string[]): Promise<string | null> => {
         let parent: string | null = parentId;
@@ -394,30 +422,47 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
 
         for (const segment of segments) {
           key = key ? `${key}/${segment}` : segment;
+
+          /*
+           * Once a level has failed, everything below it is unreachable.
+           *
+           * Without this check the loop would try to create `Reports` under a `Research`
+           * that does not exist, producing a second error for the same root cause and a
+           * tree that cannot be explained to the person looking at it.
+           */
+          if (failed.has(key)) return null;
+
           const existing = folders.get(key);
           if (existing) {
-            parent = existing.id;
+            parent = existing;
             continue;
           }
 
+          /*
+           * Created one at a time and *awaited*, because the child's create needs the
+           * parent's id. `/api/folders` decides what a duplicate name means — it does
+           * not merge into an existing folder or overwrite one, it reports a conflict,
+           * which is surfaced here rather than silently resolved.
+           */
           const result = await api.post<{ id: string }>("/api/folders", {
             name: segment,
             parentId: parent,
           });
 
           if (!result.ok) {
-            failures.push(`${segment} — ${result.message}`);
+            failed.add(key);
+            failures.push({ name: segment, message: result.message });
             return null;
           }
 
-          folders.set(key, { id: result.data.id, parentId: parent });
+          folders.set(key, result.data.id);
           parent = result.data.id;
         }
 
         return parent;
       };
 
-      const byTarget = new Map<string | null, File[]>();
+      const byTarget = new Map<string, File[]>();
 
       for (const file of withPaths) {
         const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? "";
@@ -426,24 +471,39 @@ export function UploadManagerProvider({ children }: { children: React.ReactNode 
         const folderSegments = segments.slice(0, -1);
 
         const target = await ensureFolder(folderSegments);
-        if (target === null) continue;
+        if (target === null) {
+          skipped += 1;
+          continue;
+        }
 
         byTarget.set(target, [...(byTarget.get(target) ?? []), file]);
       }
 
+      /*
+       * `addFiles` prepares each file against the id of its own directory — which is the
+       * whole point of having created the tree first. It also owns quota reservation,
+       * multipart and completion, so no upload path bypasses the backend's checks.
+       */
       for (const [target, group] of byTarget) addFiles(group, target);
 
       if (failures.length > 0) {
         toast({
           tone: "error",
-          title: "Some folders weren't created",
-          description: `${failures.slice(0, 2).join(" · ")}${failures.length > 2 ? ` · and ${failures.length - 2} more` : ""}`,
+          title:
+            failures.length === 1
+              ? `Couldn't create ${failures[0].name}`
+              : `${failures.length} folders weren't created`,
+          description: `${failures
+            .slice(0, 2)
+            .map((failure) => `${failure.name} — ${failure.message}`)
+            .join(" · ")}${failures.length > 2 ? ` · and ${failures.length - 2} more` : ""}${
+            skipped > 0 ? `. ${skipped} ${skipped === 1 ? "file was" : "files were"} not uploaded.` : ""
+          }`,
         });
       }
     },
     [addFiles, toast],
   );
-
 
   const cancel = React.useCallback((id: string) => {
     cancelledRef.current.add(id);
