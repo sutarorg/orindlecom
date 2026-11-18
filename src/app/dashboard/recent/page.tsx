@@ -16,15 +16,21 @@ export const metadata: Metadata = pageMetadata({
 export const dynamic = "force-dynamic";
 
 /**
- * Recent.
+ * Recent — files at the top level only.
  *
- * Ordered by open time, which is a different ordering from every other view —
- * so it is the one collection where the default sort is `modifiedAt` desc
- * rather than name.
+ * Two rules, both enforced in the query rather than by filtering rows afterwards:
  *
- * The empty state is honest about the rule: this list is built from files you
- * have actually opened. It cannot be pre-populated, and it should not pretend
- * to be.
+ *   **Files only.** `scope: "recent"` reads the files table and not the folders table.
+ *   It used to read both, so this page listed directory cards under a heading that
+ *   promised "files you've opened" — and a folder has no open event to be recent from.
+ *
+ *   **Root only.** A file inside a folder belongs to that folder. Recent is a shortcut
+ *   to what is sitting in plain sight, not a second unnamed window onto the whole tree;
+ *   nested files stay reachable through the hierarchy they actually live in. Applied as
+ *   `folder_id is null`, so a nested file is never fetched and then discarded.
+ *
+ * Ordering is unchanged: newest first by creation time. The empty state is honest about
+ * the rule — this list is built from real files, and it cannot be pre-populated.
  */
 export default async function RecentPage() {
   const result = await getDriveRepository().list({ scope: "recent", withPaths: true });
@@ -34,7 +40,7 @@ export default async function RecentPage() {
     <div className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6">
       <PageHeader
         title="Recent"
-        description="Files you've opened recently, most recent first."
+        description="Recent files in your top level. Files inside folders stay in those folders."
         className="mb-4"
       />
 
@@ -45,10 +51,10 @@ export default async function RecentPage() {
         empty={{
           variant: "first-use",
           art: <EmptyCollectionArt />,
-          title: "Nothing opened yet.",
+          title: "Nothing here yet.",
           description:
-            "Files you open show up here, newest first. This list is built from your actual activity — it can't be filled in for you.",
-          footnote: "Opening a file doesn't move or copy it.",
+            "Recent lists the files in your top level, newest first. Files you've filed inside a folder stay with that folder — you'll find them from the Folders page.",
+          footnote: "This list never moves or copies a file, and never changes where it lives.",
           action: (
             <a
               href="/dashboard/files"

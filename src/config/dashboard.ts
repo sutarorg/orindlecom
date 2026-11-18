@@ -60,7 +60,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavEntry[] }> = [
   {
     label: "Collections",
     items: [
-      { key: "recent", label: "Recent", href: "/dashboard/recent", icon: "clock", description: "Recently opened" },
+      { key: "recent", label: "Recent", href: "/dashboard/recent", icon: "clock", description: "Recent files" },
       { key: "starred", label: "Starred", href: "/dashboard/starred", icon: "star", description: "Files you've marked" },
       { key: "shared", label: "Shared", href: "/dashboard/shared", icon: "share", description: "Shared with you and by you" },
       { key: "trash", label: "Trash", href: "/dashboard/trash", icon: "trash", description: "Deleted, still recoverable" },

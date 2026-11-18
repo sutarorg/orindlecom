@@ -267,9 +267,24 @@ describe("My Files", () => {
      * files that sat at the top level. Everything inside a folder was invisible there.
      */
     const page = await read("src/app/dashboard/files/page.tsx");
-    expect(page).toMatch(/list\(\{ scope: "all", withPaths: true \}\)/);
-    // The comment above the query names the old call; the call itself must be gone.
+    expect(page).toMatch(/list\(\{ scope: "files", withPaths: true \}\)/);
+    // The comment above the query names the old calls; the calls themselves must be gone.
     expect(page).not.toMatch(/list\(\{ scope: "files", parentId: null \}\)/);
+  });
+
+  it("never asks the listing for folder records", async () => {
+    /*
+     * `scope: "all"` is files *and* folders, so the page that showed too little also
+     * listed directory cards under a heading about files. `files` is the files-only
+     * scope, and it is the one this page must use.
+     */
+    // Assert on the call itself: the comment above it quotes the old scope by name,
+    // and a bare grep for the string would match the explanation rather than the code.
+    const page = await read("src/app/dashboard/files/page.tsx");
+    const call = page.match(/getDriveRepository\(\)\.list\(\{[^}]*\}\)/)?.[0] ?? "";
+    expect(call).toContain('scope: "files"');
+    expect(call).not.toContain('scope: "all"');
+    expect(call).not.toContain('scope: "folders"');
   });
 
   it("distinguishes an omitted parent from the root in the API", async () => {
@@ -418,5 +433,59 @@ describe("item counts", () => {
     // Writing zeroes that were never measured is a false statement about the folder.
     const repo = await read("src/lib/drive/supabase-repository.ts");
     expect(repo).toMatch(/if \(error\) \{[\s\S]{0,400}?return null;/);
+  });
+});
+
+describe("which tables each scope reads", () => {
+  /*
+   * `recent` and `all` both read the folders table, so a page headed "Files you've
+   * opened" listed directory cards and a file browser listed folders as rows. The scope
+   * name is the promise the page heading makes, so it decides which table is read.
+   */
+  it("reads folders for a folder's contents, and files for a files-only view", async () => {
+    const repo = await read("src/lib/drive/supabase-repository.ts");
+    const wantsFolders = repo.match(/const wantsFolders =\s*([\s\S]{0,160}?);/)?.[1] ?? "";
+    expect(wantsFolders).toContain('query.scope === "all"');
+    expect(wantsFolders).toContain('query.scope === "folders"');
+    // Recent is a file list. It must not be one of the scopes that reads folders.
+    expect(wantsFolders).not.toContain('"recent"');
+
+    const wantsFiles = repo.match(/const wantsFiles =\s*([\s\S]{0,220}?);/)?.[1] ?? "";
+    expect(wantsFiles).toContain('"files"');
+    expect(wantsFiles).toContain('"recent"');
+  });
+
+  it("restricts Recent to the root in SQL", async () => {
+    // `folder_id is null` is a predicate on the query, so a nested file is never fetched
+    // and then hidden by the component.
+    const repo = await read("src/lib/drive/supabase-repository.ts");
+    expect(repo).toMatch(/const rootFilesOnly = query\.scope === "recent" && !scopedToParent/);
+    expect(repo).toMatch(/\} else if \(rootFilesOnly\) \{\s*\n\s*q = q\.is\("folder_id", null\)/);
+  });
+
+  it("asks for the files-only scope on My Files", async () => {
+    const page = await read("src/app/dashboard/files/page.tsx");
+    const call = page.match(/getDriveRepository\(\)\.list\(\{[^}]*\}\)/)?.[0] ?? "";
+    expect(call).toContain('scope: "files"');
+    expect(call).toContain("withPaths: true");
+    // No `parentId` at all — that is the difference between the whole drive and the root.
+    expect(call).not.toContain("parentId");
+  });
+});
+
+describe("Recent", () => {
+  it("does not claim to list files from inside folders", async () => {
+    const page = await read("src/app/dashboard/recent/page.tsx");
+    // The page copy has to match the query, or it is describing a different page.
+    expect(page).toMatch(/top level/);
+    expect(page).toMatch(/inside folders stay in those folders/);
+    expect(page).not.toMatch(/Nothing opened yet/);
+  });
+
+  it("stops describing the overview panel as opened files", async () => {
+    // No open event is recorded anywhere, so a heading promising one was not true.
+    const overview = await read("src/components/dashboard/overview.tsx");
+    expect(overview).toMatch(/title="Recent files"/);
+    expect(overview).not.toMatch(/title="Recently opened"/);
   });
 });

@@ -63,9 +63,23 @@ apart.
 | `root` | the top level only |
 | `<uuid>` | that folder's direct contents |
 
-`scope` is one of `files`, `folders`, `all` (files **and** direct child folders — what a
-folder page shows), `recent`, `starred`, `shared`, `trash`. `withPaths=1` resolves each
-item's ancestor chain so a nested file can say which folder it lives in.
+`scope` decides **which tables are read**, not just how the result is presented:
+
+| `scope` | Reads | Used by |
+| --- | --- | --- |
+| `files` | `files` only, at any depth | `/dashboard/files` — every file, no folders |
+| `folders` | `folders` only | `/dashboard/folders` |
+| `all` | `files` **and** `folders`, direct children of `parentId` | a folder page |
+| `recent` | `files` only; `folder_id is null` when no parent is given | `/dashboard/recent` |
+| `starred` | both, starred only | `/dashboard/starred` |
+| `shared` | both, shared with the caller | `/dashboard/shared` |
+| `trash` | both, deleted | `/dashboard/trash` |
+
+`recent` excluding nested files is part of the scope, not a caller's choice: a file
+inside a folder is reachable through that folder, and Recent is the top level.
+
+`withPaths=1` resolves each item's ancestor chain so a nested file can say which folder
+it lives in.
 
 `GET /api/files` returns:
 
