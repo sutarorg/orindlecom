@@ -342,6 +342,18 @@ const ListRow = React.forwardRef<
             {" · "}
             {formatRelative(item.modifiedAt)}
           </p>
+          {/*
+            * The containing folder, for views that span the whole tree.
+            *
+            * Present only when the repository resolved an ancestry — the global My
+            * Files and star/shared views — because inside a folder every row would carry
+            * the same trail, which is the page title repeated once per line.
+            */}
+          {item.path.length > 0 && (
+            <p className="truncate text-[10px] text-text-subtle">
+              {item.path.map((crumb) => crumb.name || "Untitled folder").join(" / ")}
+            </p>
+          )}
         </div>
       </div>
 

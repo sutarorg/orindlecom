@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
  * starred file, so this is the one collection that mixes the two.
  */
 export default async function StarredPage() {
-  const result = await getDriveRepository().list({ scope: "starred" });
+  const result = await getDriveRepository().list({ scope: "starred", withPaths: true });
   const items = result.ok ? result.data.items : [];
 
   return (

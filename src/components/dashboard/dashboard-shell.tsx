@@ -9,7 +9,8 @@ import { SearchBridgeProvider } from "./search-bridge";
 import { Sidebar } from "./sidebar";
 import { Topbar, type Crumb } from "./topbar";
 import { NewFolderDialog } from "./new-folder-dialog";
-import { UploadTray, useUploadManager, UploadManagerProvider } from "./upload-manager";
+import { UploadChooser, useUploadPicker } from "./upload-chooser";
+import { UploadTray, UploadManagerProvider } from "./upload-manager";
 import { UploadDropzone } from "./upload-dropzone";
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from "@/config/dashboard";
 import type { BusinessRole } from "@/lib/business/types";
@@ -97,15 +98,42 @@ function ShellInner({
    * it is the only one where a parent applies. Everywhere else — My Files, Starred,
    * Shared, Trash — the top level is the honest answer.
    */
-  const folderMatch = /^\/dashboard\/folders\/([0-9a-f-]{36})\/?$/i.exec(pathname ?? "");
-  const currentFolderId = folderMatch?.[1] ?? null;
+  /*
+   * The folder being viewed, at any depth.
+   *
+   * The old pattern matched exactly one uuid, so on `/dashboard/folders/a/b` — a
+   * nested folder's canonical URL — it matched nothing and `currentFolderId` was null.
+   * Everything the shell does with that value then silently targeted the account root:
+   * the sidebar's Upload button, New folder, and the mobile button. A nested folder's
+   * own contents could not be added to from the shell at all.
+   *
+   * The last segment is the folder; the earlier ones are its ancestry and are checked
+   * by the page, not here. This is a route-shape read, not an authorization decision.
+   */
+  const currentFolderId = React.useMemo(() => {
+    const match = /^\/dashboard\/folders\/(.+?)\/?$/i.exec(pathname ?? "");
+    if (!match) return null;
+    const ids = match[1].split("/").filter(Boolean);
+    return ids.length > 0 ? ids[ids.length - 1] : null;
+  }, [pathname]);
 
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [newFolderOpen, setNewFolderOpen] = React.useState(false);
-  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [mobileChooserOpen, setMobileChooserOpen] = React.useState(false);
+
+  /*
+   * One picker, two modes, one destination.
+   *
+   * The shell hosts the hidden inputs so the sidebar, the mobile menu and the floating
+   * button share a single code path, and `useUploadPicker` resolves the destination
+   * from `currentFolderId` — the folder this route is showing. There used to be a
+   * file-only picker here, opened by every upload entry point with no parent at all,
+   * which is why "Upload" could neither upload a folder nor add to the folder you were
+   * looking at.
+   */
+  const picker = useUploadPicker(currentFolderId);
   const drawerRef = React.useRef<HTMLDivElement>(null);
-  const upload = useUploadManager();
 
   // Restore the collapse preference. Auto-collapse on tablet widths the first
   // time, then respect whatever the visitor chose.
@@ -197,7 +225,8 @@ function ShellInner({
           <Sidebar
             collapsed={collapsed}
             onToggleCollapsed={toggleCollapsed}
-            onNewUpload={() => setPickerOpen(true)}
+            onUploadFiles={() => picker.openFiles()}
+            onUploadFolder={() => picker.openFolder()}
             onNewFolder={() => setNewFolderOpen(true)}
             usage={usage}
             workspace={workspace}
@@ -230,9 +259,13 @@ function ShellInner({
               <Sidebar
                 collapsed={false}
                 onToggleCollapsed={() => setMobileOpen(false)}
-                onNewUpload={() => {
+                onUploadFiles={() => {
                   setMobileOpen(false);
-                  setPickerOpen(true);
+                  picker.openFiles();
+                }}
+                onUploadFolder={() => {
+                  setMobileOpen(false);
+                  picker.openFolder();
                 }}
                 onNewFolder={() => {
                   setMobileOpen(false);
@@ -277,86 +310,64 @@ function ShellInner({
         </div>
       </div>
 
-      {/* Floating upload button on mobile — the sidebar's primary action isn't
-          visible there, and upload is the one thing that must always be one tap. */}
-      <button
-        type="button"
-        onClick={() => setPickerOpen(true)}
-        className={cn(
-          "fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-50 flex h-13 w-13 items-center justify-center rounded-full",
-          "bg-primary text-white shadow-[0_10px_24px_-6px_rgba(49,120,251,0.55)]",
-          "transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 lg:hidden",
-          // Hide while a dialog is open so it can't sit on top of one.
-          (newFolderOpen || pickerOpen) && "hidden",
-        )}
-        style={{ height: 52, width: 52 }}
-        aria-label="Upload files"
-      >
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-          <path
-            d="M12 16V5m0 0L7.5 9.5M12 5l4.5 4.5M4.5 17.5v1A2.5 2.5 0 0 0 7 21h10a2.5 2.5 0 0 0 2.5-2.5v-1"
-            stroke="currentColor"
-            strokeWidth="2.1"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+      {/*
+        * Mobile upload: the same two choices as the sidebar.
+        *
+        * The button used to open the file picker directly, which on a phone meant a
+        * folder could not be uploaded at all — the sidebar is behind a drawer, and the
+        * FAB was the only upload control in reach. The chooser opens above the button
+        * so the two options are visible without covering the thumb target.
+        */}
+      <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-50 lg:hidden">
+        <UploadChooser
+          open={mobileChooserOpen}
+          onClose={() => setMobileChooserOpen(false)}
+          onPickFiles={() => picker.openFiles()}
+          onPickFolder={() => picker.openFolder()}
+          align="end"
+        />
+        <button
+          type="button"
+          onClick={() => setMobileChooserOpen((value) => !value)}
+          aria-haspopup="menu"
+          aria-expanded={mobileChooserOpen}
+          className={cn(
+            "flex h-13 w-13 items-center justify-center rounded-full",
+            "bg-primary text-white shadow-[0_10px_24px_-6px_rgba(49,120,251,0.55)]",
+            "transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+            // Hidden while a dialog is open so it can't sit on top of one.
+            (newFolderOpen || mobileChooserOpen) && "hidden",
+          )}
+          style={{ height: 52, width: 52 }}
+          aria-label="Upload"
+        >
+          <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+            <path
+              d="M12 16V5m0 0L7.5 9.5M12 5l4.5 4.5M4.5 17.5v1A2.5 2.5 0 0 0 7 21h10a2.5 2.5 0 0 0 2.5-2.5v-1"
+              stroke="currentColor"
+              strokeWidth="2.1"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
 
-      <UploadDropzone />
+      {/* The global overlay targets the folder this route is showing. */}
+      <UploadDropzone parentId={currentFolderId} />
       <UploadTray />
       <NewFolderDialog
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
         parentId={currentFolderId}
       />
-      <FilePickerHost open={pickerOpen} onClose={() => setPickerOpen(false)} onPicked={upload.addFiles} />
+      {/*
+        * The hidden inputs for the desktop sidebar and the mobile menu. Mounted once,
+        * here, so both entry points pick into the folder the shell resolved from the
+        * route — one code path, one destination.
+        */}
+      {picker.inputs}
     </div>
-  );
-}
-
-/**
- * The system file picker, triggered from the shell.
- *
- * Kept as a bare hidden input rather than a styled dropzone because this path
- * is "I know what file I want" — the visual affordance is the drop zone on the
- * files page, and duplicating it in a dialog would be a second way to do the
- * same thing with a different look.
- */
-function FilePickerHost({
-  open,
-  onClose,
-  onPicked,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onPicked: (files: File[]) => void;
-}) {
-  const inputRef = React.useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    inputRef.current?.click();
-    // The change event may not fire if the visitor cancels, so close on the
-    // next focus of the window either way.
-    const onFocus = () => setTimeout(onClose, 400);
-    window.addEventListener("focus", onFocus, { once: true });
-    return () => window.removeEventListener("focus", onFocus);
-  }, [open, onClose]);
-
-  return (
-    <input
-      ref={inputRef}
-      type="file"
-      multiple
-      className="hidden"
-      onChange={(event) => {
-        const files = Array.from(event.target.files ?? []);
-        if (files.length) onPicked(files);
-        event.target.value = "";
-        onClose();
-      }}
-    />
   );
 }
 

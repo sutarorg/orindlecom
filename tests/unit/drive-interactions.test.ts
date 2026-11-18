@@ -180,11 +180,243 @@ describe("opening a folder", () => {
      * The page and its `generateMetadata` each fetched the folder — two identical
      * queries — and the listing was awaited after the folder rather than beside it,
      * even though the listing is scoped by the URL id and does not depend on it.
+     *
+     * The route is a catch-all now: `/dashboard/folders/a/b/c` is a real address, so
+     * one segment is a chain of length one rather than a special case.
      */
-    const page = await read("src/app/dashboard/folders/[id]/page.tsx");
+    const page = await read("src/app/dashboard/folders/[...path]/page.tsx");
     expect(page).toMatch(/const getFolder = cache\(/);
-    expect(page).toMatch(/Promise\.all\(\[/);
     // The 404 check still comes before anything renders.
     expect(page).toMatch(/notFound\(\)/);
+  });
+});
+
+describe("the folder tree in the URL", () => {
+  it("parses every depth, not just one", async () => {
+    /*
+     * The shell matched `/dashboard/folders/<one-uuid>` exactly. On a nested folder's
+     * canonical URL it matched nothing, so `currentFolderId` was null and every shell
+     * action — Upload, New folder, the mobile button, the drop overlay — silently
+     * targeted the account root.
+     */
+    const shell = await read("src/components/dashboard/dashboard-shell.tsx");
+    // A single uuids-only pattern became "any non-empty chain".
+    expect(shell).toContain('const match = /^\\/dashboard\\/folders\\/(.+?)\\/?$/i');
+    expect(shell).toMatch(/ids\[ids\.length - 1\]/);
+  });
+
+  it("threads the active folder into the pickers and the drop overlay", async () => {
+    const shell = await read("src/components/dashboard/dashboard-shell.tsx");
+    expect(shell).toMatch(/useUploadPicker\(currentFolderId\)/);
+    expect(shell).toMatch(/<UploadDropzone parentId=\{currentFolderId\}/);
+    expect(shell).toMatch(/<NewFolderDialog[\s\S]{0,200}parentId=\{currentFolderId\}/);
+  });
+
+  it("keeps the one-id address working by redirecting to the canonical chain", async () => {
+    const page = await read("src/app/dashboard/folders/[...path]/page.tsx");
+    // The chain is compared against the folder's own ancestry, never trusted from the URL.
+    expect(page).toMatch(/matchesChain\(ids, chainIds\(folder\)\)/);
+    expect(page).toMatch(/redirect\(folderHrefFromIds\(chainIds\(resolved\.folder\)\)\)/);
+    // A malformed chain is a 404 before any query runs.
+    expect(page).toMatch(/parseFolderPath\(segments\)/);
+  });
+
+  it("exports a catch-all route so a deep URL is a page, not a 404", async () => {
+    // `[...path]` in the directory name is what makes any depth routable; asserting on
+    // the file's own existence is the check, so the read succeeding is the point.
+    const page = await read("src/app/dashboard/folders/[...path]/page.tsx");
+    expect(page).toMatch(/params: Promise<\{ path: string\[\] \}>/);
+  });
+});
+
+describe("a folder page", () => {
+  it("lists child folders as well as files", async () => {
+    /*
+     * `scope: "files"` means files. The page asked for it, so a folder containing only
+     * subfolders rendered "This folder is empty" while those subfolders existed and were
+     * reachable from Recent. There was no scope that could say "the contents of this
+     * folder"; `all` is it.
+     */
+    const page = await read("src/app/dashboard/folders/[...path]/page.tsx");
+    expect(page).toMatch(/scope: "all", parentId: folder\.id/);
+    expect(page).not.toMatch(/scope: "files", parentId/);
+  });
+
+  it("builds a cumulative URL for every crumb", async () => {
+    const detail = await read("src/components/dashboard/folder-detail.tsx");
+    expect(detail).toMatch(/folderHrefFromIds\(trail\.slice\(0, index \+ 1\)/);
+    // The old form linked each crumb to its own bare id.
+    expect(detail).not.toMatch(/href=\{`\/dashboard\/folders\/\$\{ancestor\.id\}`\}/);
+  });
+
+  it("uploads into itself", async () => {
+    // The page's drop zone and toolbar used to default to the root, so the copy
+    // "goes into the folder you're viewing" was false.
+    const detail = await read("src/components/dashboard/folder-detail.tsx");
+    expect(detail).toMatch(/<FileManager[\s\S]{0,120}parentId=\{folder\.id\}/);
+    const zone = await read("src/components/dashboard/upload-zone.tsx");
+    expect(zone).toMatch(/addFiles\(files, parentId\)/);
+    expect(zone).toMatch(/addFolder\(collected, parentId\)/);
+  });
+});
+
+describe("My Files", () => {
+  it("asks for the whole drive rather than the root", async () => {
+    /*
+     * `parentId: null` is the root, so the page named after "My Files" showed only the
+     * files that sat at the top level. Everything inside a folder was invisible there.
+     */
+    const page = await read("src/app/dashboard/files/page.tsx");
+    expect(page).toMatch(/list\(\{ scope: "all", withPaths: true \}\)/);
+    // The comment above the query names the old call; the call itself must be gone.
+    expect(page).not.toMatch(/list\(\{ scope: "files", parentId: null \}\)/);
+  });
+
+  it("distinguishes an omitted parent from the root in the API", async () => {
+    // `params.get("parentId") || null` collapsed "everywhere" into "the root".
+    const route = await read("src/app/api/files/route.ts");
+    expect(route).toMatch(/rawParent === null \|\| rawParent === ""/);
+    expect(route).toMatch(/: rawParent === "root"\s*\n?\s*\? null/);
+    expect(route).not.toMatch(/parentId: params\.get\("parentId"\) \|\| null/);
+    expect(route).toMatch(/"all",/);
+  });
+});
+
+describe("the sidebar upload control", () => {
+  it("offers files and folders through an accessible menu", async () => {
+    const sidebar = await read("src/components/dashboard/sidebar.tsx");
+    expect(sidebar).toMatch(/aria-haspopup="menu"/);
+    expect(sidebar).toMatch(/aria-expanded=\{uploadOpen\}/);
+    const chooser = await read("src/components/dashboard/upload-chooser.tsx");
+    expect(chooser).toMatch(/role="menu"/);
+    expect(chooser).toMatch(/label: "Upload files"/);
+    expect(chooser).toMatch(/label: "Upload folder"/);
+    // The directory picker is a second input, not a modifier on the first.
+    expect(chooser).toMatch(/webkitdirectory: ""/);
+  });
+
+  it("sends both actions to the folder being viewed", async () => {
+    const chooser = await read("src/components/dashboard/upload-chooser.tsx");
+    expect(chooser).toMatch(/addFiles\(files, parentId\)/);
+    expect(chooser).toMatch(/addFolder\(files, parentId\)/);
+  });
+
+  it("clears the picker so re-picking the same directory works", async () => {
+    // A file input keeps its selection, so a second pick of the same directory fires no
+    // change event — the button appears dead.
+    const chooser = await read("src/components/dashboard/upload-chooser.tsx");
+    const valueResets = chooser.match(/event\.target\.value = ""/g) ?? [];
+    expect(valueResets.length).toBe(2);
+  });
+
+  it("collapses the upload control to a blue circle", async () => {
+    /*
+     * The collapsed sidebar is a 68px rail of circular buttons — the profile avatar, the
+     * workspace badge. The upload button was a 40px rounded rectangle in the middle of
+     * them, which read as a different kind of control.
+     */
+    const sidebar = await read("src/components/dashboard/sidebar.tsx");
+    expect(sidebar).toMatch(/h-10 w-10 justify-center rounded-full/);
+  });
+
+  it("collapses the new-folder control to a light grey circle", async () => {
+    const sidebar = await read("src/components/dashboard/sidebar.tsx");
+    expect(sidebar).toMatch(/rounded-full bg-\[var\(--brand-surface-muted\)\]/);
+  });
+
+  it("leaves the expanded look alone", async () => {
+    // A circle in a 248px column would be a different design, not a fix.
+    const sidebar = await read("src/components/dashboard/sidebar.tsx");
+    expect(sidebar).toMatch(/\?\s*"h-10 w-10 justify-center rounded-full"\s*:\s*"h-10 gap-2 rounded-xl px-3\.5"/);
+  });
+});
+
+describe("the global drop overlay", () => {
+  it("recreates dropped directories instead of flattening them", async () => {
+    /*
+     * `dataTransfer.files` refuses to expose a directory's contents, so a dropped folder
+     * arrived as zero files and vanished behind a message claiming it had uploaded.
+     */
+    const overlay = await read("src/components/dashboard/upload-dropzone.tsx");
+    expect(overlay).toMatch(/webkitGetAsEntry/);
+    expect(overlay).toMatch(/collectDirectory/);
+    expect(overlay).toMatch(/await addFolder\(collected, target\)/);
+  });
+
+  it("targets the open folder rather than the root", async () => {
+    const overlay = await read("src/components/dashboard/upload-dropzone.tsx");
+    expect(overlay).toMatch(/const target = parentRef\.current/);
+    expect(overlay).toMatch(/addFiles\(looseFiles, target\)/);
+  });
+
+  it("names the real destination in its own copy", async () => {
+    // The overlay said "files go into the folder you're viewing" while sending them to
+    // the root — the copy was the bug, stated confidently.
+    const overlay = await read("src/components/dashboard/upload-dropzone.tsx");
+    expect(overlay).toMatch(/folder you're viewing/);
+    expect(overlay).toMatch(/go into My Files/);
+  });
+});
+
+describe("folder uploads", () => {
+  it("creates each folder once, parents first", async () => {
+    const manager = await read("src/components/dashboard/upload-manager.tsx");
+    expect(manager).toMatch(/const folders = new Map<string, string>\(\)/);
+    expect(manager).toMatch(/for \(const segment of segments\)/);
+    expect(manager).toMatch(/folders\.set\(key, result\.data\.id\)/);
+  });
+
+  it("prepares each file against its own directory", async () => {
+    // The tree is created first, then each group is uploaded with the id of the folder
+    // it belongs in — which is why a nested file lands where it was on disk.
+    const manager = await read("src/components/dashboard/upload-manager.tsx");
+    expect(manager).toMatch(/byTarget\.set\(target, \[\.\.\.\(byTarget\.get\(target\) \?\? \[\]\), file\]\)/);
+    expect(manager).toMatch(/for \(const \[target, group\] of byTarget\) addFiles\(group, target\)/);
+  });
+
+  it("does not silently merge or overwrite on a name conflict", async () => {
+    /*
+     * A conflict is the server's decision and it is surfaced. Abandoning the subtree is
+     * the honest outcome: there is nowhere to put the files, and merging into an
+     * existing folder of the same name would mix two directories nobody asked to mix.
+     */
+    const manager = await read("src/components/dashboard/upload-manager.tsx");
+    expect(manager).toMatch(/if \(!result\.ok\) \{[\s\S]{0,220}?failures\.push/);
+    expect(manager).toMatch(/if \(failed\.has\(key\)\) return null/);
+    expect(manager).toMatch(/skipped \+= 1/);
+  });
+
+  it("reports how many files a failure cost", async () => {
+    const manager = await read("src/components/dashboard/upload-manager.tsx");
+    expect(manager).toMatch(/\$\{skipped\} \$\{skipped === 1 \? "file was" : "files were"\} not uploaded/);
+  });
+
+  it("falls back to plain files when the browser ignored the directory attribute", async () => {
+    // Uploading them is the closest honest behaviour; silently dropping them is not.
+    const manager = await read("src/components/dashboard/upload-manager.tsx");
+    expect(manager).toMatch(/if \(withPaths\.length === 0\) \{[\s\S]{0,200}?addFiles\(files, parentId\)/);
+  });
+});
+
+describe("item counts", () => {
+  it("fills the folder count in rather than leaving the placeholder", async () => {
+    // Both mappers returned `childCount: 0` and nothing replaced it, so every folder
+    // card claimed to be empty. The mapper still starts from zero — it cannot know the
+    // count — but `list` now overwrites it from the aggregate.
+    const repo = await read("src/lib/drive/supabase-repository.ts");
+    expect(repo).toMatch(/childCount: countsResult\.get\(item\.id\) \?\? 0/);
+  });
+
+  it("counts in one batched call rather than per folder", async () => {
+    const repo = await read("src/lib/drive/supabase-repository.ts");
+    expect(repo).toMatch(/folder_child_counts/);
+    // The count is fetched once for the whole set of folders on the page.
+    expect(repo).toMatch(/folderChildCounts\(supabase, items\.filter/);
+  });
+
+  it("leaves counts alone when they could not be measured", async () => {
+    // Writing zeroes that were never measured is a false statement about the folder.
+    const repo = await read("src/lib/drive/supabase-repository.ts");
+    expect(repo).toMatch(/if \(error\) \{[\s\S]{0,400}?return null;/);
   });
 });

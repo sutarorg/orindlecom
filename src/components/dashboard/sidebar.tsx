@@ -17,13 +17,14 @@ import {
   Share2,
   Star,
   Trash2,
-  Plus,
+  FolderPlus,
   Building2,
   Users,
   ShieldCheck,
   Activity,
 } from "lucide-react";
 import { CloudGlyph } from "@/components/brand/logo";
+import { UploadChooser } from "./upload-chooser";
 import { NAV_GROUPS, type NavEntry } from "@/config/dashboard";
 import { BUSINESS_NAV_GROUPS, type BusinessNavEntry, type BusinessNavIcon } from "@/config/business";
 import { formatPercent } from "@/lib/drive/format";
@@ -69,14 +70,23 @@ const BUSINESS_ICONS: Record<BusinessNavIcon, React.ComponentType<{ className?: 
 export function Sidebar({
   collapsed,
   onToggleCollapsed,
-  onNewUpload,
+  onUploadFiles,
+  onUploadFolder,
   onNewFolder,
   usage,
   workspace,
 }: {
   collapsed: boolean;
   onToggleCollapsed: () => void;
-  onNewUpload: () => void;
+  /**
+   * The two halves of the primary action.
+   *
+   * Both are required and both take no argument: the shell resolves "which folder am I
+   * in" once, from the route, and hands the same answer to both. A single
+   * `onNewUpload` used to open a file-only picker that ignored the open folder.
+   */
+  onUploadFiles: () => void;
+  onUploadFolder: () => void;
   onNewFolder: () => void;
   usage: { used: number; total: number; label: string } | null;
   /**
@@ -93,6 +103,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const inBusiness = workspace.kind === "business";
+  const [uploadOpen, setUploadOpen] = React.useState(false);
 
   /*
    * Whether the workspace exists yet.
@@ -146,35 +157,77 @@ export function Sidebar({
 
       {/* Primary actions */}
       <div className={cn("shrink-0 pt-3", collapsed ? "px-2" : "px-3")}>
-        <button
-          type="button"
-          onClick={onNewUpload}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-xl bg-primary text-white shadow-[var(--brand-shadow-primary)]",
-            "text-[13px] font-semibold transition-[background-color,transform] duration-150",
-            "hover:bg-primary-hover active:translate-y-px",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-            collapsed ? "h-10 justify-center" : "h-10 px-3.5",
-          )}
-          aria-label="Upload files"
-        >
-          <CloudUpload className="h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
-          {!collapsed && <span>Upload</span>}
-        </button>
+        {/*
+          * The button and its two options are one relative container, so the panel
+          * opens from the button rather than floating somewhere in the page.
+          *
+          * `aria-haspopup`/`aria-expanded` on the trigger and `role="menu"` on the
+          * panel are what make this usable without a mouse — the old button was a
+          * plain file picker and the only way to upload a folder was a page-level
+          * control that not every route had.
+          */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setUploadOpen((value) => !value)}
+            aria-haspopup="menu"
+            aria-expanded={uploadOpen}
+            title={collapsed ? "Upload" : undefined}
+            className={cn(
+              "flex w-full items-center bg-primary text-white shadow-[var(--brand-shadow-primary)]",
+              "text-[13px] font-semibold transition-[background-color,transform] duration-150",
+              "hover:bg-primary-hover active:translate-y-px",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+              /*
+               * Collapsed, the control is a circle — the same geometry as the profile
+               * avatar in the sidebar footer and the mobile upload button. It used to
+               * be a 40px rounded rectangle, which sat next to a circular avatar and a
+               * circular workspace badge in a 68px rail and read as a different
+               * species of control.
+               */
+              collapsed
+                ? "h-10 w-10 justify-center rounded-full"
+                : "h-10 gap-2 rounded-xl px-3.5",
+            )}
+            aria-label={collapsed ? "Upload" : undefined}
+          >
+            <CloudUpload className="h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
+            {!collapsed && <span>Upload</span>}
+          </button>
 
-        {/* Secondary action sits under the primary, quieter. */}
+          <UploadChooser
+            open={uploadOpen}
+            onClose={() => setUploadOpen(false)}
+            onPickFiles={onUploadFiles}
+            onPickFolder={onUploadFolder}
+            collapsed={collapsed}
+          />
+        </div>
+
+        {/*
+          Secondary action: quieter, and collapsed it is a light grey circle to match
+          the blue one above — same size, same centring, so the rail reads as a column
+          of equal circles rather than a mixed bag of shapes.
+        */}
         <button
           type="button"
           onClick={onNewFolder}
+          title={collapsed ? "New folder" : undefined}
           className={cn(
-            "mt-1.5 flex w-full items-center gap-2 rounded-xl border border-transparent text-text",
-            "text-[12.5px] font-medium transition-colors hover:border-[var(--brand-border)] hover:bg-[var(--brand-surface-muted)]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-            collapsed ? "h-9 justify-center" : "h-9 px-3",
+            "flex w-full items-center border border-transparent text-text",
+            "text-[12.5px] font-medium transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+            collapsed
+              ? "mt-2 h-10 w-10 justify-center rounded-full bg-[var(--brand-surface-muted)] text-text-muted hover:bg-[var(--brand-border-soft)]"
+              : "mt-1.5 h-9 gap-2 rounded-xl px-3 hover:border-[var(--brand-border)] hover:bg-[var(--brand-surface-muted)]",
           )}
           aria-label="New folder"
         >
-          <Plus className="h-4 w-4 shrink-0 text-text-subtle" strokeWidth={2.2} aria-hidden="true" />
+          <FolderPlus
+            className={cn("h-4 w-4 shrink-0", collapsed ? "text-text-muted" : "text-text-subtle")}
+            strokeWidth={2.2}
+            aria-hidden="true"
+          />
           {!collapsed && <span>New folder</span>}
         </button>
       </div>

@@ -26,9 +26,9 @@ export default async function DashboardOverviewPage() {
   const [viewer, usage, recent, activity, starred] = await Promise.all([
     getViewer(),
     repo.usage(),
-    repo.list({ scope: "recent" }),
+    repo.list({ scope: "recent", withPaths: true }),
     repo.activity(8),
-    repo.list({ scope: "starred" }),
+    repo.list({ scope: "starred", withPaths: true }),
   ]);
 
   // A real account greets by first name; the placeholder identity is used whole

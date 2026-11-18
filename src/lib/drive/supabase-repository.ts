@@ -22,7 +22,7 @@ import { createSupabaseServerClient } from "@/lib/auth/supabase/server";
 import { resolveActor } from "@/domain/auth/actor";
 import { isSupportedCurrency, planById, type CurrencyCode } from "@/config/pricing";
 import { resolveRequestCurrency } from "@/lib/geo/currency";
-import { ancestorCrumbs } from "./folder-path";
+import { ancestorCrumbs, pathIds, type FolderCrumb } from "./folder-path";
 import { TRASH_RETENTION } from "./types";
 import { isStorageConfigured, presignGet } from "@/lib/r2/client";
 import {
@@ -96,6 +96,7 @@ function fileToItem(row: FileRow): DriveItem {
     // The UI derives "days left" from the retention setting; computing a purge
     // date here would duplicate that rule in two places.
     purgeAt: null,
+    // A file has no children. Zero is a measured answer here, not a placeholder.
     childCount: 0,
     shared: false,
     owned: true,
@@ -117,14 +118,78 @@ function fileToItem(row: FileRow): DriveItem {
 async function folderNames(
   supabase: Client,
   ownerId: string,
-): Promise<Map<string, string>> {
+): Promise<Map<string, { name: string; path: string }>> {
   const { data } = await supabase
     .from("folders")
-    .select("id, name")
+    .select("id, name, path")
     .eq("owner_id", ownerId)
     .is("deleted_at", null);
 
-  return new Map(((data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]));
+  return new Map(
+    ((data ?? []) as Array<{ id: string; name: string; path: string }>).map((row) => [
+      row.id,
+      { name: row.name, path: row.path },
+    ]),
+  );
+}
+
+/**
+ * Direct child counts for a set of folders, in one query.
+ *
+ * `childCount` used to be the literal 0 in both row mappers, so every folder card
+ * said "0 items" regardless of its contents — a number the UI displayed with
+ * confidence and never computed. Counting per card would be one round trip per card,
+ * which is a page whose cost grows with the number of folders on it, so this asks the
+ * database once for the whole set.
+ *
+ * A folder with no children is simply absent from the result; the caller defaults the
+ * missing ones to zero.
+ */
+async function folderChildCounts(
+  supabase: Client,
+  ids: string[],
+): Promise<Map<string, number> | null> {
+  if (ids.length === 0) return new Map();
+
+  const { data, error } = await supabase.rpc("folder_child_counts", { p_folder_ids: ids });
+  if (error) {
+    /*
+     * A failed count is not a failed listing.
+     *
+     * The files and folders themselves were read successfully; showing them with a
+     * missing badge is a cosmetic loss, and turning the whole page into an error
+     * because a badge could not be counted would be much worse. `null` tells the
+     * caller to leave the counts alone rather than to write zeroes it did not measure.
+     */
+    console.warn("[drive] child counts unavailable", { message: error.message });
+    return null;
+  }
+
+  return new Map(
+    ((data ?? []) as Array<{ folder_id: string; child_count: number }>).map((row) => [
+      row.folder_id,
+      Number(row.child_count),
+    ]),
+  );
+}
+
+/**
+ * An item's ancestry, from its own row and one map of folder names.
+ *
+ * `path` is derived from the stored path column, which is why a file's location can be
+ * shown at all: a file stores only its `folder_id`, and the chain above that folder
+ * lives on the folder row.
+ */
+function crumbsFor(item: DriveItem, names: Map<string, { name: string; path: string }>): FolderCrumb[] {
+  if (item.kind === "folder") {
+    const row = names.get(item.id);
+    return row ? ancestorCrumbs(row.path, new Map([...names].map(([id, value]) => [id, value.name]))) : [];
+  }
+  if (!item.parentId) return [];
+  const parent = names.get(item.parentId);
+  if (!parent) return [];
+  // A file's trail is its parent's chain, all the way up.
+  return pathIds(parent.path).map((id) => ({ id, name: names.get(id)?.name ?? "" }));
 }
 
 function folderToItem(row: FolderRow, names?: Map<string, string>): DriveItem {
@@ -151,6 +216,15 @@ function folderToItem(row: FolderRow, names?: Map<string, string>): DriveItem {
     starred: Boolean(row.starred),
     trashed: row.deleted_at !== null,
     purgeAt: null,
+    /*
+     * Filled in by `list` from one batched aggregate.
+     *
+     * This was the literal 0, so every folder card said "0 items" whatever it held. The
+     * placeholder is needed because the row mapper cannot know the count; the difference
+     * is that `list` now *replaces* it rather than leaving it. `get` keeps the
+     * placeholder, because a single folder's own card is not rendered before its
+     * contents are listed anyway.
+     */
     childCount: 0,
     shared: false,
     owned: true,
@@ -346,8 +420,8 @@ export function createSupabaseDriveRepository(): DriveRepository {
 
       /*
        * `trash`, `shared` and `starred` are not "all the items, filtered in the
-       * browser". Each is a distinct question the database has to answer, and two
-       * of them were answering it wrongly:
+       * browser". Each is a distinct question the database has to answer, and two of
+       * them were answering it wrongly:
        *
        *   trash  — went through the ordinary SELECT policy, which required
        *            `deleted_at is null`. Asking for trashed rows therefore matched
@@ -361,9 +435,22 @@ export function createSupabaseDriveRepository(): DriveRepository {
       if (query.scope === "trash") return listTrash(supabase);
       if (query.scope === "shared") return listShared(supabase);
 
-      const wantsFolders = query.scope !== "files";
-      const wantsFiles = query.scope !== "folders";
+      /*
+       * Which tables this scope reads, and what it filters on.
+       *
+       *   all     files + folders, direct children of `parentId`   ← a folder's contents
+       *   files   files only
+       *   folders folders only
+       *
+       * The parent filter is applied only when a parent was *asked for*: `undefined`
+       * means "anywhere in the account", `null` means the root. Conflating those two
+       * is exactly why `/dashboard/files` showed only files that sat at the top level
+       * while everything inside a folder was invisible there.
+       */
+      const wantsFolders = query.scope === "all" || query.scope === "folders" || query.scope === "starred" || query.scope === "recent";
+      const wantsFiles = query.scope === "all" || query.scope === "files" || query.scope === "starred" || query.scope === "recent";
       const starredOnly = query.scope === "starred";
+      const scopedToParent = query.parentId !== undefined && !starredOnly;
 
       const items: DriveItem[] = [];
 
@@ -373,7 +460,7 @@ export function createSupabaseDriveRepository(): DriveRepository {
           q = q.eq("starred", true);
         } else if (query.rootOnly) {
           q = q.is("parent_id", null);
-        } else if (query.parentId !== undefined) {
+        } else if (scopedToParent) {
           q = query.parentId === null ? q.is("parent_id", null) : q.eq("parent_id", query.parentId);
         }
         if (query.search) q = q.ilike("name", `%${query.search}%`);
@@ -395,7 +482,7 @@ export function createSupabaseDriveRepository(): DriveRepository {
         q = q.is("deleted_at", null);
         if (starredOnly) {
           q = q.eq("starred", true);
-        } else if (query.parentId !== undefined) {
+        } else if (scopedToParent) {
           q = query.parentId === null ? q.is("folder_id", null) : q.eq("folder_id", query.parentId);
         }
         if (query.search) q = q.ilike("name", `%${query.search}%`);
@@ -406,9 +493,33 @@ export function createSupabaseDriveRepository(): DriveRepository {
         items.push(...(data as FileRow[]).map(fileToItem));
       }
 
+      /*
+       * Counts and ancestry, in one round of concurrency.
+       *
+       * Both are enrichment of rows that were already fetched. The counts come from a
+       * single grouped aggregate over the whole visible set rather than a query per
+       * folder, and the ancestry from one read of the folder table. Running them in
+       * parallel keeps the listing at three round trips no matter how many cards the
+       * page renders.
+       */
+      const [countsResult, names] = await Promise.all([
+        folderChildCounts(supabase, items.filter((item) => item.kind === "folder").map((item) => item.id)),
+        // A breadcrumb is only shown where an item's location matters, so it is only
+        // resolved when asked for. The folder page builds its own trail from the
+        // folder's row; the global view asks here.
+        query.withPaths ? folderNames(supabase, actor.userId) : Promise.resolve(null),
+      ]);
+
+      const enriched = items.map((item) => {
+        const withCount =
+          item.kind === "folder" && countsResult ? { ...item, childCount: countsResult.get(item.id) ?? 0 } : item;
+        if (!names) return withCount;
+        return { ...withCount, path: crumbsFor(withCount, names) };
+      });
+
       // Sorting is applied server-side per table above; the merged list keeps a
       // stable order so the grid does not reshuffle between renders.
-      return { ok: true, data: { items, total: items.length } };
+      return { ok: true, data: { items: enriched, total: enriched.length } };
     },
 
     async get(id: string): Promise<DriveResult<DriveItem>> {
@@ -422,7 +533,16 @@ export function createSupabaseDriveRepository(): DriveRepository {
         .eq("owner_id", c.actor.userId)
         .is("deleted_at", null)
         .maybeSingle();
-      if (folder) return { ok: true, data: folderToItem(folder as FolderRow, await folderNames(c.supabase, c.actor.userId)) };
+      if (folder) {
+        const names = await folderNames(c.supabase, c.actor.userId);
+        return {
+          ok: true,
+          data: folderToItem(
+            folder as FolderRow,
+            new Map([...names].map(([id, value]) => [id, value.name])),
+          ),
+        };
+      }
 
       const { data: file } = await c.supabase
         .from("files")

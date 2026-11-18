@@ -143,8 +143,26 @@ create unique index folders_unique_live_name
 
 **Cost of the materialised `path`:** renames and moves must rewrite descendants.
 That is a write amplification on a deep tree, accepted because reads dominate and
-ancestry breadcrumbs are on every folder page. A trigger keeps it consistent; a
-test proves that a move of a 1,000-folder tree leaves no stale path.
+ancestry breadcrumbs are on every folder page.
+
+That cost was never paid. `set_folder_path()` (0004) fires **before update of
+parent_id on the row being moved** and rewrites only that row's `path` and `depth`, so
+a moved subtree kept the old prefix on every descendant. The tree still *looked*
+correct — `parent_id` never lied — while every ancestry read (breadcrumb, descendant
+query, "is this inside that") was answered from a stale string. **0026** adds
+`folders_rescore_descendants`, an AFTER trigger that rewrites the subtree with one
+statement (`rescore_folder_subtree`), and repairs existing rows by rebuilding every
+path and depth from `parent_id` recursively. Tests in
+`tests/db/drive-visibility.test.ts` move subtrees repeatedly, back to the root, and
+into new parents, and assert the descendants' paths and depths each time.
+
+**Child counts** come from `folder_child_counts(uuid[])` (0026): direct child folders
+plus direct `available` files, grouped, in one statement. Per-card counting would be
+one round trip per card; the function takes the whole page's folder ids at once. It is
+`security invoker`, so it can only count rows the caller can already read.
+
+**Ancestry** comes from `folder_ancestry(uuid)` (0026): the chain from the root to a
+folder, root first, resolved from the stored path and read through RLS.
 
 **Creation goes through `create_folder(name, parent_id)`** (0022), a definer function
 rather than an `insert … select()`. `folders_select` calls `has_folder_access()`, which
@@ -694,6 +712,10 @@ Migrations are forward-only and reviewed. Order matters because of foreign keys:
 15. 0017–0021 platform admin, admin aggregates, approved pricing and business
     workspaces, and the last-workspace columns.
 16. 0022 `create_folder` and `finalize_upload`.
+17. 0023–0025 business workspaces, the trash listing function and the share
+    permission narrowing.
+18. 0026 folder-tree integrity: descendant rescoring on a move, `folder_child_counts`,
+    `folder_ancestry`, and the global-listing index.
 
 Migration 0022 exists because of a trap worth stating once. PostgREST implements
 `.select()` on a write as `RETURNING`, and `RETURNING` is filtered by the table's

@@ -65,9 +65,25 @@ export type SortKey = "name" | "modifiedAt" | "size" | "category";
 export type SortDirection = "asc" | "desc";
 
 export interface ListQuery {
-  /** Which virtual collection to list. */
-  scope: "files" | "folders" | "recent" | "starred" | "shared" | "trash";
-  /** Restrict to a folder when scope is `files`/`folders`. Null = root. */
+  /**
+   * Which collection to list.
+   *
+   * `all` is the one a folder page needs: files *and* subfolders directly inside the
+   * requested parent, which is what "open this folder" means. It did not exist, so the
+   * folder page asked for `files` — and `files` means files only, so a folder that
+   * contained nothing but subfolders rendered as "This folder is empty" while those
+   * subfolders sat in the database and in Recent. There was no scope that could
+   * express the page's own question.
+   *
+   * The three parent semantics below are deliberately distinct, because collapsing
+   * them is how "My Files" ended up showing only the root:
+   *
+   *   omitted        every item in the account, at any depth
+   *   null           the root only
+   *   "<folder-id>"  that folder's direct contents
+   */
+  scope: "files" | "folders" | "all" | "recent" | "starred" | "shared" | "trash";
+  /** Restrict to a folder when scope is `files`/`folders`/`all`. Null = root. */
   parentId?: string | null;
   /**
    * Top-level folders only, at any depth of the tree.
@@ -80,6 +96,15 @@ export interface ListQuery {
    * separate for callers that mean root but must not be read as "unfiltered".
    */
   rootOnly?: boolean;
+  /**
+   * Resolve each item's ancestor chain (`DriveItem.path`).
+   *
+   * Off by default: a breadcrumb is only shown where an item's location matters — the
+   * global My Files view, where two files can share a name — and resolving a chain for
+   * every row of a large listing is work nobody asked for. On, it costs one extra read
+   * of the folder table, which is small and already cached by the database.
+   */
+  withPaths?: boolean;
   search?: string;
   sort?: SortKey;
   direction?: SortDirection;

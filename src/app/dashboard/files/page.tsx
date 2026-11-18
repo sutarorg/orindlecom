@@ -17,14 +17,24 @@ export const metadata: Metadata = pageMetadata({
 export const dynamic = "force-dynamic";
 
 /**
- * My Files.
+ * My Files — everything, everywhere in the tree.
  *
- * The canonical file manager. Folder navigation goes through
- * /dashboard/folders/[id] rather than client-side state, so a folder is a real
- * URL that can be bookmarked and reloaded into the same view.
+ * This page used to ask for `parentId: null`, which means the *root*: only the files
+ * sitting at the top level. Every file inside a folder was therefore absent from the one
+ * page named after "My Files", and the more organised an account was, the emptier that
+ * page looked. A file could be uploaded, be present, be found by its folder, and still
+ * be invisible here — which reads as data loss.
+ *
+ * The page now omits `parentId` entirely, which is a different request: the whole
+ * drive, at any depth. Each item's `path` is resolved so a nested file can say which
+ * folder it lives in — otherwise two files called `report.pdf` would be
+ * indistinguishable rows.
+ *
+ * `scope: "all"` is deliberate: folders appear here too. The description says "folders
+ * come first, then files", and it was describing something the query did not return.
  */
 export default async function FilesPage() {
-  const result = await getDriveRepository().list({ scope: "files", parentId: null });
+  const result = await getDriveRepository().list({ scope: "all", withPaths: true });
   const items = result.ok ? result.data.items : [];
 
   return (
@@ -38,6 +48,8 @@ export default async function FilesPage() {
 
       <FileManager
         items={items}
+        // No `parentId`: this view is the whole drive, so an upload from here lands at
+        // the root, which is the only place a global view can honestly put it.
         showUploadZone
         searchPlaceholder="Search files…"
         empty={{

@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
  * to be.
  */
 export default async function RecentPage() {
-  const result = await getDriveRepository().list({ scope: "recent" });
+  const result = await getDriveRepository().list({ scope: "recent", withPaths: true });
   const items = result.ok ? result.data.items : [];
 
   return (

@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { CheckSquare, Eye, FolderInput, MoreVertical, RotateCcw, Share2, Star, Trash2 } from "lucide-react";
+import {
+  CheckSquare,
+  Eye,
+  FolderInput,
+  FolderTree,
+  MoreVertical,
+  RotateCcw,
+  Share2,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { Menu, type MenuItem } from "@/components/ui/menu";
 import { formatBytes, formatRelative } from "@/lib/drive/format";
 import type { DriveItem } from "@/lib/drive/types";
@@ -389,6 +399,30 @@ const GridTile = React.forwardRef<
           {" · "}
           {formatRelative(item.modifiedAt)}
         </p>
+        {/*
+          * Where this item lives, when it is not the folder on screen.
+          *
+          * On the global My Files view a file can sit any number of levels down, and
+          * two files called `report.pdf` in different branches would otherwise be
+          * indistinguishable cards. The trail is present only when the repository was
+          * asked to resolve it, which is exactly the global views — a folder page's
+          * items are all in the folder you are looking at, and repeating it under every
+          * card would be noise.
+          *
+          * The scheme-style row keeps the card height predictable: a tile with a path and
+          * one without are still one line apart.
+        */}
+        {item.path.length > 0 && (
+          <p
+            className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-text-subtle"
+            title={`In ${item.path.map((crumb) => crumb.name || "Untitled folder").join(" / ")}`}
+          >
+            <FolderTree className="h-2.5 w-2.5 shrink-0" strokeWidth={2} aria-hidden="true" />
+            <span className="truncate">
+              {item.path.map((crumb) => crumb.name || "Untitled folder").join(" / ")}
+            </span>
+          </p>
+        )}
       </div>
 
       {/*
