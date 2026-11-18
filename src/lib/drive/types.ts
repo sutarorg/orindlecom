@@ -66,14 +66,27 @@ export type SortDirection = "asc" | "desc";
 
 export interface ListQuery {
   /**
-   * Which collection to list.
+   * Which collection to list, and therefore which tables are read.
+   *
+   *   all        files **and** direct child folders — a folder's contents
+   *   files      files only, still at any depth
+   *   folders    folders only
+   *   recent     files only (`folder_id is null` when no parent is given)
+   *   starred    both, starred only
+   *   shared     both, shared with the viewer
+   *   trash      both, deleted
    *
    * `all` is the one a folder page needs: files *and* subfolders directly inside the
    * requested parent, which is what "open this folder" means. It did not exist, so the
    * folder page asked for `files` — and `files` means files only, so a folder that
    * contained nothing but subfolders rendered as "This folder is empty" while those
-   * subfolders sat in the database and in Recent. There was no scope that could
-   * express the page's own question.
+   * subfolders sat in the database. There was no scope that could express the page's
+   * own question.
+   *
+   * **Only `all`, `folders` and `starred`/`shared`/`trash` read the folder table.** A
+   * page headed "My Files" or "Recent" reading folders as well was the bug: `recent`
+   * and `all` both included folders, so both listed directory cards under a heading
+   * that only ever meant files.
    *
    * The three parent semantics below are deliberately distinct, because collapsing
    * them is how "My Files" ended up showing only the root:

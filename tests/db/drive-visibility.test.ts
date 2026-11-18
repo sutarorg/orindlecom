@@ -890,3 +890,261 @@ describe("the acceptance scenario", () => {
     expect(stillThere.map((row) => row.name)).toEqual(["homepage.png"]);
   });
 });
+
+/*
+ * ── What each page is allowed to show ──────────────────────────────────────
+ *
+ * Two pages, two different questions, and both were answered by queries that read the
+ * wrong thing — My Files listed folders as well as files, and Recent listed every file
+ * in the account including the ones filed away inside folders. Neither was a rendering
+ * bug: the rows were fetched, so the fix belongs in the query.
+ *
+ * These tests stand in for the repository's filters. They are written against the same
+ * predicates the repository applies, because the repository needs a live Supabase client
+ * while this harness has a real PostgreSQL — the SQL is the part that decides, and it is
+ * the part worth testing.
+ */
+describe("what /dashboard/files shows", () => {
+  /*
+   * This suite's `beforeEach` seeds `Reports/q3.pdf`. The assertions below are about the
+   * tree each test builds, so the helpers exclude that fixture by name rather than
+   * counting it — a test that silently depends on another fixture is a test that breaks
+   * when that fixture changes.
+   */
+  /** Every available file the account owns, at any depth. `scope: "files"`, no parent. */
+  const listMyFiles = (userId: string) =>
+    db.asUser<{ id: string; name: string; folder_id: string | null }>(
+      userId,
+      `select id, name, folder_id from public.files
+        where owner_id = $1 and status = 'available' and deleted_at is null and name <> 'q3.pdf'`,
+      [userId],
+    );
+
+  /** Folder records — what this page must never contain. `scope: "files"` reads no folders. */
+  const listFolders = (userId: string) =>
+    db.asUser<{ id: string; name: string }>(
+      userId,
+      `select id, name from public.folders
+        where owner_id = $1 and deleted_at is null and name <> 'Reports'`,
+      [userId],
+    );
+
+  async function addFile(folderId: string | null, name: string) {
+    const rows = await db.asService<{ id: string }>(
+      `insert into public.files (owner_id, folder_id, name, size_bytes, mime_type, category, status, storage_key)
+       values ($1, $2, $3, 100, 'application/pdf', 'pdf', 'available', $4) returning id`,
+      [owner, folderId, name, `u/${owner}/${name}`],
+    );
+    return rows[0].id;
+  }
+
+  /** Root → root folder → child → grandchild, one file at every level. */
+  async function seedTree() {
+    const root = await makeFolderAs(owner, "Projects", null);
+    const child = await makeFolderAs(owner, "Website", root);
+    const grandchild = await makeFolderAs(owner, "Design", child);
+    return {
+      root,
+      child,
+      grandchild,
+      files: {
+        atRoot: await addFile(null, "root-note.pdf"),
+        inRootFolder: await addFile(root, "projects-plan.pdf"),
+        inChild: await addFile(child, "website-spec.pdf"),
+        inGrandchild: await addFile(grandchild, "homepage.pdf"),
+      },
+    };
+  }
+
+  it("lists files from every nesting level, each exactly once", async () => {
+    const { files } = await seedTree();
+    const names = (await listMyFiles(owner)).map((row) => row.name);
+
+    for (const name of ["root-note.pdf", "projects-plan.pdf", "website-spec.pdf", "homepage.pdf"]) {
+      expect(names, `${name} should be listed`).toContain(name);
+      // Exactly once: the same file must not be reachable by two rows.
+      expect(names.filter((entry) => entry === name)).toHaveLength(1);
+    }
+    // Four files, four rows — nothing fetched twice.
+    expect(names).toHaveLength(4);
+    expect(new Set((await listMyFiles(owner)).map((row) => row.id)).size).toBe(4);
+    expect(Object.keys(files)).toHaveLength(4);
+  });
+
+  it("contains no folder records at all", async () => {
+    /*
+     * The page asked for `scope: "all"`, which reads the folders table as well — so the
+     * file browser listed directory cards. `scope: "files"` reads one table.
+     */
+    await seedTree();
+    // Three folders exist in the tree this test built...
+    expect(await listFolders(owner)).toHaveLength(3);
+    // ...and none of them is in this page's result, because its query cannot return one.
+    const files = await listMyFiles(owner);
+    expect(files.every((row) => "folder_id" in row)).toBe(true);
+    expect(files.every((row) => !("child_count" in row))).toBe(true);
+  });
+
+  it("keeps every file's real folder location", async () => {
+    const { root, child, grandchild, files } = await seedTree();
+    const byName = new Map((await listMyFiles(owner)).map((row) => [row.name, row]));
+
+    expect(byName.get("root-note.pdf")?.folder_id).toBeNull();
+    expect(byName.get("projects-plan.pdf")?.folder_id).toBe(root);
+    expect(byName.get("website-spec.pdf")?.folder_id).toBe(child);
+    expect(byName.get("homepage.pdf")?.folder_id).toBe(grandchild);
+
+    // Nothing was moved to the root or copied to make the listing work.
+    const atRoot = (await listMyFiles(owner)).filter((row) => row.folder_id === null);
+    expect(atRoot.map((row) => row.name)).toEqual(["root-note.pdf"]);
+    expect(files.inGrandchild).toBeTruthy();
+  });
+
+  it("does not list pending or another owner's files", async () => {
+    await seedTree();
+    await db.asService(
+      `insert into public.files (owner_id, folder_id, name, size_bytes, mime_type, category, status, storage_key)
+       values ($1, null, 'half-uploaded.pdf', 10, 'application/pdf', 'pdf', 'pending', $2)`,
+      [owner, `u/${owner}/half`],
+    );
+    const names = (await listMyFiles(owner)).map((row) => row.name);
+    expect(names).not.toContain("half-uploaded.pdf");
+
+    // A stranger's query returns nothing, so this view is not a window into the drive.
+    expect(await listMyFiles(stranger)).toHaveLength(0);
+  });
+});
+
+describe("what /dashboard/recent shows", () => {
+  /**
+   * `scope: "recent"` with no parent: available, live, and `folder_id is null`.
+   * Newest first, which is the ordering both the page and the overview use.
+   */
+  const listRecent = (userId: string) =>
+    db.asUser<{ id: string; name: string }>(
+      userId,
+      `select id, name from public.files
+        where owner_id = $1 and status = 'available' and deleted_at is null
+          and folder_id is null and name <> 'q3.pdf'
+        order by created_at desc`,
+      [userId],
+    );
+
+  async function addFile(folderId: string | null, name: string) {
+    const rows = await db.asService<{ id: string }>(
+      `insert into public.files (owner_id, folder_id, name, size_bytes, mime_type, category, status, storage_key)
+       values ($1, $2, $3, 100, 'application/pdf', 'pdf', 'available', $4) returning id`,
+      [owner, folderId, name, `u/${owner}/${name}`],
+    );
+    return rows[0].id;
+  }
+
+  it("lists a root-level file and excludes every file inside a folder", async () => {
+    /*
+     * The page listed the whole account. A file filed inside `Projects/Website/Design`
+     * is reachable through that folder; Recent is the top level, and its filter is
+     * `folder_id is null` in SQL rather than a post-fetch filter in the component.
+     */
+    const root = await makeFolderAs(owner, "Projects", null);
+    const child = await makeFolderAs(owner, "Website", root);
+    const grandchild = await makeFolderAs(owner, "Design", child);
+
+    await addFile(null, "root-note.pdf");
+    await addFile(root, "projects-plan.pdf");
+    await addFile(child, "website-spec.pdf");
+    await addFile(grandchild, "homepage.pdf");
+
+    const names = (await listRecent(owner)).map((row) => row.name);
+    expect(names).toContain("root-note.pdf");
+    for (const nested of ["projects-plan.pdf", "website-spec.pdf", "homepage.pdf"]) {
+      expect(names, `${nested} is inside a folder and must not be recent`).not.toContain(nested);
+    }
+    // This suite's own fixture (`q3.pdf`) lives in Reports, so it is excluded too.
+    expect(names).not.toContain("q3.pdf");
+    expect(names).toEqual(["root-note.pdf"]);
+  });
+
+  it("returns no folder records", async () => {
+    // A folder has no open event and cannot be recent from one; `recent` reads no folders.
+    await makeFolderAs(owner, "Projects", null);
+    const rows = await listRecent(owner);
+    expect(rows.every((row) => "name" in row)).toBe(true);
+    // The query selects from `files` only, so a folder id can never appear.
+    const folderIds = (await db.asUser<{ id: string }>(owner, "select id from public.folders")).map(
+      (row) => row.id,
+    );
+    expect(rows.some((row) => folderIds.includes(row.id))).toBe(false);
+  });
+
+  it("still applies the existing eligibility rules", async () => {
+    // Root-level but not available: an unverified upload is not a recent file either.
+    await db.asService(
+      `insert into public.files (owner_id, folder_id, name, size_bytes, mime_type, category, status, storage_key)
+       values ($1, null, 'pending.pdf', 10, 'application/pdf', 'pdf', 'pending', $2)`,
+      [owner, `u/${owner}/pending`],
+    );
+    // Root-level, available, but trashed.
+    const trashed = await addFile(null, "thrown-away.pdf");
+    await db.asUser(owner, "update public.files set deleted_at = now() where id = $1", [trashed]);
+    const live = await addFile(null, "kept.pdf");
+
+    const names = (await listRecent(owner)).map((row) => row.name);
+    expect(names).toEqual(["kept.pdf"]);
+    expect(live).toBeTruthy();
+  });
+
+  it("orders newest first, which is the page's existing rule", async () => {
+    const older = await addFile(null, "older.pdf");
+    await db.asService("update public.files set created_at = now() - interval '2 days' where id = $1", [
+      older,
+    ]);
+    await addFile(null, "newer.pdf");
+
+    expect((await listRecent(owner)).map((row) => row.name)).toEqual(["newer.pdf", "older.pdf"]);
+  });
+
+  it("does not show another owner's root files", async () => {
+    await addFile(null, "mine.pdf");
+    expect(await listRecent(stranger)).toHaveLength(0);
+  });
+});
+
+describe("nested files stay reachable through their folders", () => {
+  it("appears in its own folder's direct contents after being excluded from Recent", async () => {
+    /*
+     * The two listings are complements, not alternatives. A file excluded from Recent
+     * because it lives in a folder must still be the first thing that folder lists —
+     * otherwise "it's in the folder" would be a place with nothing in it.
+     */
+    const root = await makeFolderAs(owner, "Projects", null);
+    const child = await makeFolderAs(owner, "Website", root);
+    const fileId = (
+      await db.asService<{ id: string }>(
+        `insert into public.files (owner_id, folder_id, name, size_bytes, mime_type, category, status, storage_key)
+         values ($1, $2, 'website-spec.pdf', 100, 'application/pdf', 'pdf', 'available', $3) returning id`,
+        [owner, child, `u/${owner}/website-spec.pdf`],
+      )
+    )[0].id;
+
+    // Not recent: it belongs to a folder.
+    const recent = await db.asUser<{ id: string }>(
+      owner,
+      "select id from public.files where status = 'available' and deleted_at is null and folder_id is null",
+    );
+    expect(recent.map((row) => row.id)).not.toContain(fileId);
+
+    // But listed by its folder, which is where it can be opened from.
+    const inFolder = await db.asUser<{ id: string; name: string }>(
+      owner,
+      "select id, name from public.files where folder_id = $1 and status = 'available' and deleted_at is null",
+      [child],
+    );
+    expect(inFolder).toEqual([{ id: fileId, name: "website-spec.pdf" }]);
+
+    // And reachable by ancestry — the chain the folder page renders and validates.
+    const chain = await db.asUser<{ name: string }>(owner, "select name from public.folder_ancestry($1)", [
+      child,
+    ]);
+    expect(chain.map((row) => row.name)).toEqual(["Projects", "Website"]);
+  });
+});

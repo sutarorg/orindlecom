@@ -148,7 +148,15 @@ function PopulatedOverview({
       <div className="space-y-4">
         {recent.length > 0 && (
           <section aria-labelledby="recent-heading" className="rounded-2xl border border-[var(--brand-border)] bg-white">
-            <SectionHead id="recent-heading" title="Recently opened" href="/dashboard/recent" icon={Clock} />
+            {/*
+              * "Recent files", not "Recently opened".
+              *
+              * Nothing records an open event — `DriveItem.openedAt` is null on every
+              * row — so a heading promising opened files was describing a feature that
+              * does not exist. The list below it is the newest files at the top level,
+              * which is what the heading now says.
+              */}
+            <SectionHead id="recent-heading" title="Recent files" href="/dashboard/recent" icon={Clock} />
             <ul className="divide-y divide-[var(--brand-border-soft)]">
               {recent.slice(0, 5).map((item) => (
                 <li key={item.id}>
@@ -191,10 +199,10 @@ function PopulatedOverview({
 
         {recent.length === 0 && activity.length === 0 && (
           <section className="rounded-2xl border border-[var(--brand-border)] bg-white px-5 py-8 text-center">
-            <p className="text-[13px] font-semibold text-ink">Nothing opened yet</p>
+            <p className="text-[13px] font-semibold text-ink">Nothing here yet</p>
             <p className="mx-auto mt-1 max-w-[320px] text-[12px] leading-relaxed text-text-muted">
-              Files you open will show up here. Recently opened and recent activity only appear once
-              there&apos;s something to report.
+              Your newest files and recent activity show up here once there&apos;s something
+              to report. Recent lists the files in your top level.
             </p>
             <Link
               href="/dashboard/files"

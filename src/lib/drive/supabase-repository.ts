@@ -439,18 +439,41 @@ export function createSupabaseDriveRepository(): DriveRepository {
        * Which tables this scope reads, and what it filters on.
        *
        *   all     files + folders, direct children of `parentId`   ← a folder's contents
-       *   files   files only
+       *   files   files only                                       ← My Files
        *   folders folders only
+       *   recent  files only, and the root by default
+       *
+       * **`files` and `recent` never read the folder table.** Both once did — `all`
+       * meant files+folders and My Files used it, `recent` was bundled in with the
+       * folder-reading scopes — so a page headed "everything you've stored" listed
+       * directory cards, and a page headed "Files you've opened" listed folders that
+       * have no open event and cannot have one. Which tables a scope reads is now a
+       * property of the scope's *name*, because that is the thing the heading promises.
        *
        * The parent filter is applied only when a parent was *asked for*: `undefined`
        * means "anywhere in the account", `null` means the root. Conflating those two
        * is exactly why `/dashboard/files` showed only files that sat at the top level
        * while everything inside a folder was invisible there.
        */
-      const wantsFolders = query.scope === "all" || query.scope === "folders" || query.scope === "starred" || query.scope === "recent";
-      const wantsFiles = query.scope === "all" || query.scope === "files" || query.scope === "starred" || query.scope === "recent";
       const starredOnly = query.scope === "starred";
+      const wantsFolders =
+        query.scope === "all" || query.scope === "folders" || query.scope === "starred";
+      const wantsFiles =
+        query.scope === "all" ||
+        query.scope === "files" ||
+        query.scope === "starred" ||
+        query.scope === "recent";
       const scopedToParent = query.parentId !== undefined && !starredOnly;
+
+      /*
+       * Recent means the top level unless a specific folder was asked for.
+       *
+       * A file that lives inside a folder is reachable through that folder, and Recent
+       * is a shortcut to the things sitting in plain sight — not a second, unnamed
+       * window onto somebody's entire tree. `folder_id is null` is applied in SQL, not
+       * filtered out afterwards, so a nested file is never fetched and discarded.
+       */
+      const rootFilesOnly = query.scope === "recent" && !scopedToParent;
 
       const items: DriveItem[] = [];
 
@@ -484,6 +507,8 @@ export function createSupabaseDriveRepository(): DriveRepository {
           q = q.eq("starred", true);
         } else if (scopedToParent) {
           q = query.parentId === null ? q.is("folder_id", null) : q.eq("folder_id", query.parentId);
+        } else if (rootFilesOnly) {
+          q = q.is("folder_id", null);
         }
         if (query.search) q = q.ilike("name", `%${query.search}%`);
         if (query.categories?.length) q = q.in("category", query.categories);
