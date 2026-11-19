@@ -3,8 +3,8 @@
  * platform administrators.
  *
  * **Presence, never values.** Every integration row is derived from whether a
- * variable is set, and for Razorpay from whether the key mode matches the
- * environment. No key, key prefix, hostname, bucket name or project reference is
+ * variable is set, and for Dodo from whether the configured environment
+ * matches the deployment. No key, key prefix, hostname, bucket name or project reference is
  * rendered — the same discipline `/api/health` applies in public.
  *
  * Nothing here is editable. Prices require an approval workflow that does not
@@ -19,7 +19,7 @@ import { getEmailState } from "@/lib/resend/client";
 import { isAuthConfigured } from "@/lib/auth/supabase/server";
 import { isServiceConfigured } from "@/lib/supabase/service";
 import { isStorageConfigured } from "@/lib/r2/client";
-import { isBillingConfigured } from "@/domain/billing/razorpay";
+import { dodoHealth } from "@/domain/billing/dodo";
 import {
   AdminCard,
   AdminCardHeader,
@@ -50,55 +50,57 @@ interface IntegrationRow {
   detail: string;
 }
 
-function razorpayRow(): IntegrationRow {
-  if (!isBillingConfigured()) {
+function dodoRow(): IntegrationRow {
+  const health = dodoHealth();
+
+  if (health === "missing") {
     return {
-      key: "razorpay",
-      label: "Razorpay",
+      key: "dodo",
+      label: "Dodo Payments",
       state: "Missing",
       tone: "neutral",
-      detail: "No payment keys are configured. Checkout is unavailable.",
+      detail: "No payment API key is configured. Checkout is unavailable.",
     };
   }
-  const id = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ?? "";
-  const isTest = id.startsWith("rzp_test_");
-  const isLive = id.startsWith("rzp_live_");
-
-  if (!isTest && !isLive) {
+  if (health === "mismatch") {
     return {
-      key: "razorpay",
-      label: "Razorpay",
-      state: "Unrecognised key mode",
-      tone: "red",
-      detail: "The key does not identify as test or live. Checkout will refuse to create orders.",
-    };
-  }
-  if (process.env.NODE_ENV === "production" && isTest) {
-    return {
-      key: "razorpay",
-      label: "Razorpay",
+      key: "dodo",
+      label: "Dodo Payments",
       state: "Mismatch",
       tone: "red",
-      detail: "Test keys are configured in a production build. Live payments cannot work.",
-    };
-  }
-  if (process.env.NODE_ENV !== "production" && isLive) {
-    return {
-      key: "razorpay",
-      label: "Razorpay",
-      state: "Mismatch",
-      tone: "red",
-      detail: "Live keys are configured outside production. This is how real money is taken by accident.",
+      detail:
+        "The configured Dodo environment does not match this deployment. Checkout will refuse to run.",
     };
   }
   return {
-    key: "razorpay",
-    label: "Razorpay",
-    state: isTest ? "Test mode" : "Configured",
-    tone: isTest ? "amber" : "green",
-    detail: isTest
-      ? "Test keys: no real payment can be taken."
-      : "Live keys, matching this environment.",
+    key: "dodo",
+    label: "Dodo Payments",
+    state: health === "test-mode" ? "Test mode" : "Configured",
+    tone: health === "test-mode" ? "amber" : "green",
+    detail:
+      health === "test-mode"
+        ? "Test mode: no real payment can be taken."
+        : "Live mode, matching this environment.",
+  };
+}
+
+/**
+ * The legacy Razorpay webhook handler.
+ *
+ * It stays mounted so historical subscriptions and delayed events keep
+ * working. It is not the provider that takes new payments, so it is reported
+ * separately and never claims to be able to take money.
+ */
+function legacyRazorpayRow(): IntegrationRow {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "";
+  return {
+    key: "legacy-razorpay",
+    label: "Razorpay (legacy)",
+    state: secret ? "Configured" : "Missing",
+    tone: secret ? "green" : "neutral",
+    detail: secret
+      ? "Legacy webhook secret present. Kept for historical Razorpay events only; no new checkouts use it."
+      : "No legacy webhook secret. Historical Razorpay events will not be processed.",
   };
 }
 
@@ -131,7 +133,8 @@ export default async function AdminSettingsPage() {
       tone: isStorageConfigured() ? "green" : "red",
       detail: "Private bucket; files are served through short-lived signed URLs.",
     },
-    razorpayRow(),
+    dodoRow(),
+    legacyRazorpayRow(),
     {
       key: "resend",
       label: "Resend",

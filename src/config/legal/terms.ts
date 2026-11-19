@@ -86,7 +86,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
     {
       id: "billing",
       heading: "Plans, payment, renewal and refunds",
-      gist: "Eight currencies, monthly or annual (20% off), handled by Razorpay.",
+      gist: "Eight currencies, monthly or annual (20% off), handled by Dodo Payments.",
       blocks: [
         {
           type: "p",
@@ -94,7 +94,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
         },
         {
           type: "p",
-          text: "All domestic and international payments are processed securely by Razorpay. Orindle never sees or stores your card number or banking credentials. Payment receipts are displayed in Dashboard → Billing and sent by email. GST and downloadable tax invoices are not currently enabled.",
+          text: "All domestic and international payments are processed securely by Dodo Payments. Orindle never sees or stores your card number or banking credentials. Payment receipts are displayed in Dashboard → Billing and sent by email. GST and downloadable tax invoices are not currently enabled.",
         },
         {
           type: "p",

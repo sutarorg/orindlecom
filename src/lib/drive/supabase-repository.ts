@@ -1307,7 +1307,9 @@ export function createSupabaseDriveRepository(): DriveRepository {
 
       const { data } = await c.supabase
         .from("subscriptions")
-        .select("plan_id, status, currency, billing_period, current_period_end, cancel_at_period_end, recovery_ends_at")
+        .select(
+          "plan_id, status, currency, billing_period, current_period_end, cancel_at_period_end, recovery_ends_at, billing_provider",
+        )
         .eq("owner_id", c.actor.userId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -1344,6 +1346,7 @@ export function createSupabaseDriveRepository(): DriveRepository {
           renewsAutomatically: Boolean(data?.current_period_end) &&
             (status === "active" || status === "past_due"),
           cancelAtPeriodEnd: Boolean(data?.cancel_at_period_end),
+          provider: (data?.billing_provider as "dodo" | "razorpay" | undefined) ?? "dodo",
         },
       };
     },
@@ -1378,11 +1381,13 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
-      // Checkout is not implemented yet, and it says so. Returning a fake URL, or
-      // a success, is the one thing this method must never do.
-      const configured = Boolean(
-        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET,
-      );
+      /*
+       * Checkout lives in `POST /api/billing/checkout`, which is where the
+       * approved price, the provider product mapping and the pending checkout
+       * record are resolved. This method is a repository-level convenience and
+       * deliberately says so rather than inventing a URL.
+       */
+      const configured = Boolean(process.env.DODO_PAYMENTS_API_KEY?.trim());
       if (!configured) {
         return {
           ok: false,
@@ -1403,6 +1408,13 @@ export function createSupabaseDriveRepository(): DriveRepository {
       const c = await ctx();
       if (!c.ok) return c.result;
 
+      /*
+       * Cancellation is made at the provider first (see
+       * `POST /api/billing/cancel`), because a local flag alone would leave the
+       * provider charging a plan the customer had cancelled. This repository
+       * method exists for the non-provider paths and only mirrors the local
+       * flag, so it is used where the provider has no arrangement to change.
+       */
       const { data, error } = await c.supabase
         .from("subscriptions")
         .update({ cancel_at_period_end: true })

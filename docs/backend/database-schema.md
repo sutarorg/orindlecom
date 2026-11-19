@@ -450,6 +450,10 @@ organization policy calls one of those two functions, never a subquery on `membe
 
 ## 8. Subscriptions and billing
 
+The billing schema has two generations. Migration `0005` created the original
+Razorpay-shaped tables; migration `0027` made them **provider-aware** and added
+three new tables for Dodo. Both generations coexist; nothing was dropped.
+
 ```sql
 create table public.subscriptions (
   id              uuid primary key default gen_random_uuid(),
@@ -457,11 +461,17 @@ create table public.subscriptions (
   plan_id         text not null references public.plans(id),
   -- Currency is fixed for the life of the subscription. Moving country does not
   -- silently re-price someone mid-term.
-  currency        text not null check (currency in ('INR','USD')),
+  currency        text not null,
   status          text not null default 'none'
                   check (status in ('none','active','past_due','cancelled','expired')),
-  -- Razorpay identifiers. Unique so a duplicate webhook cannot create a second row.
-  provider_subscription_id text unique,
+  -- Provider identifiers. Unique *per provider* (see 0027) so a duplicate
+  -- webhook cannot create a second row, while two providers may legitimately
+  -- mint the same external id.
+  provider_subscription_id text,
+  -- Added by 0027. Existing rows are backfilled to 'razorpay'.
+  billing_provider text not null default 'razorpay'
+                    check (billing_provider in ('razorpay','dodo')),
+  billing_period   text check (billing_period in ('monthly','yearly')),
   current_period_start timestamptz,
   current_period_end   timestamptz,
   cancel_at_period_end boolean not null default false,
@@ -476,7 +486,10 @@ create table public.invoices (
   id             uuid primary key default gen_random_uuid(),
   owner_id       uuid not null references auth.users(id) on delete cascade,
   subscription_id uuid references public.subscriptions(id) on delete set null,
-  provider_payment_id text unique,
+  provider_payment_id text,
+  -- Added by 0027. Existing rows are backfilled to 'razorpay'.
+  billing_provider text not null default 'razorpay'
+                    check (billing_provider in ('razorpay','dodo')),
   amount_minor   bigint not null,
   currency       text not null,
   status         text not null check (status in ('paid','failed','refunded')),
@@ -488,7 +501,7 @@ create table public.webhook_events (
   id            uuid primary key default gen_random_uuid(),
   provider      text not null default 'razorpay',
   -- Provider's event id. Unique: a duplicate delivery is a no-op, not a second
-  -- state transition.
+  -- state transition. For Dodo this is the Standard Webhooks `webhook-id`.
   event_id      text not null,
   event_type    text not null,
   payload       jsonb not null,
@@ -499,6 +512,104 @@ create table public.webhook_events (
   unique (provider, event_id)
 );
 ```
+
+### The three Dodo tables (migration 0027)
+
+These are **server-only**. Row-level security is enabled and **no policy is
+created**, so an ordinary authenticated user cannot read a single row — not the
+price mapping, not a checkout reference, not a provider customer id. Only the
+service role, which bypasses RLS, can reach them.
+
+```sql
+-- Which Dodo product serves which plan, currency and period.
+-- The mapping lives in the database, never in TypeScript: no Dodo product id
+-- appears in the source, and an administrator changes it without a deploy.
+create table public.billing_provider_prices (
+  id            uuid primary key default gen_random_uuid(),
+  provider      text not null default 'dodo',
+  -- Test and live mappings never mix. A test product id used against a live
+  -- key would charge the wrong product.
+  environment   text not null check (environment in ('test_mode','live_mode')),
+  plan_id       text not null references public.plans(id),
+  currency      text not null,
+  period        text not null check (period in ('monthly','yearly')),
+  product_id    text not null,
+  interval      text not null check (interval in ('Month','Year')),
+  -- The amount the product was configured with. Checked against plan_prices
+  -- before every checkout.
+  amount_minor  bigint not null check (amount_minor > 0),
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  unique (provider, environment, plan_id, currency, period)
+);
+
+-- A pending checkout. Holds the approved price so a webhook can be reconciled
+-- to the right customer without trusting anything in the event metadata.
+create table public.billing_checkout_sessions (
+  id            uuid primary key default gen_random_uuid(),
+  -- The reference sent to Dodo as metadata and returned on the event.
+  reference     text not null unique,
+  owner_id      uuid not null references auth.users(id) on delete cascade,
+  plan_id       text not null references public.plans(id),
+  currency      text not null,
+  period        text not null check (period in ('monthly','yearly')),
+  amount_minor  bigint not null,
+  product_id    text not null,
+  environment   text not null,
+  provider      text not null default 'dodo',
+  status        text not null default 'pending'
+                check (status in ('pending','completed','expired')),
+  expires_at    timestamptz not null,
+  completed_at  timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+-- One Orindle account to one provider customer.
+create table public.billing_customers (
+  id            uuid primary key default gen_random_uuid(),
+  owner_id      uuid not null references auth.users(id) on delete cascade,
+  provider      text not null default 'dodo',
+  customer_id   text not null,
+  email         text,
+  created_at    timestamptz not null default now(),
+  unique (provider, customer_id)
+);
+```
+
+### The billing functions
+
+| Function | What it does |
+| --- | --- |
+| `public.apply_renewal(...)` | Records a renewal in one transaction: one invoice keyed on the provider payment id, and the period advanced to the **provider's** date. Returns `false` and changes nothing if that payment id was already applied. |
+| `public.apply_scheduled_plan_change(subscription, confirmed_plan)` | Applies a provider-confirmed downgrade. It applies **only** if the confirmed plan matches the pending one, and it clears the pending pair together so the two cannot disagree. |
+
+### Provider-scoped uniqueness
+
+Migration 0027 replaces the global unique constraints on
+`subscriptions.provider_subscription_id` and `invoices.provider_payment_id` with
+**provider-scoped** unique indexes:
+
+```sql
+create unique index subscriptions_provider_subscription_id_key
+  on public.subscriptions (provider_subscription_id, billing_provider)
+  where provider_subscription_id is not null;
+
+create unique index invoices_provider_payment_id_key
+  on public.invoices (provider_payment_id, billing_provider)
+  where provider_payment_id is not null;
+```
+
+Two providers may hold the same external id — Dodo's `sub_1` and Razorpay's
+`sub_1` are different subscriptions. One provider may not hold it twice, which
+is what makes a replayed webhook a no-op.
+
+> The original global unique constraints had to be dropped **before** their
+> backing indexes, because PostgreSQL will not drop an index a constraint
+> depends on. Migration 0027 does this in the right order and is idempotent.
+
+The **one live subscription per owner** invariant is unchanged by the provider
+split, and it is what stops an account from holding a second recurring charge.
 
 ---
 
@@ -570,6 +681,9 @@ that an anonymous select returns zero rows.
 | `members` | org members | owner/admin | via `is_org_member` |
 | `subscriptions`, `invoices` | own | service only | **Billing is private; no member or admin sees another person's billing** |
 | `webhook_events` | service only | service only | |
+| `billing_provider_prices` | none | service only | Deny-all by design: the product mapping is server configuration, never readable by a user |
+| `billing_checkout_sessions` | none | service only | Deny-all by design: a checkout reference is a secret; one customer must never see another's |
+| `billing_customers` | none | service only | Deny-all by design: a provider customer id is a credential-adjacent identifier |
 | `activity_events` | org members / own | service | Append-only |
 | `support_requests` | submitter only | service | Not publicly readable |
 | `email_log` | service only | service only | |

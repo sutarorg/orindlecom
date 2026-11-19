@@ -81,6 +81,14 @@ describe("row level security", () => {
     // server-side exchange through the service role, so there is no client read
     // path that should exist — and no policy is the strongest way to say so.
     "email_verifications",
+    // Dodo Payments billing (0027). The provider price map is deployment
+    // configuration; the checkout table holds the internal reference that
+    // attributes a payment to a customer, and the customer table holds the
+    // provider customer id that a portal session is created from. None of them
+    // has any client read path, so no policy is the strongest way to say so.
+    "billing_provider_prices",
+    "billing_checkout_sessions",
+    "billing_customers",
   ]);
 
   it("every table with RLS has at least one policy, unless deny-all is the design", async () => {

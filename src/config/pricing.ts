@@ -6,7 +6,7 @@
  * publication on both monthly and annual (20% discount) billing.
  *
  * Every amount here matches `public.plan_prices` (seeded through migration
- * 0019) so display prices, Razorpay checkout totals, and admin MRR figures
+ * 0019) so display prices, checkout totals, and admin MRR figures
  * agree down to the minor unit.
  */
 

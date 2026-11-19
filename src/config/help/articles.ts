@@ -501,12 +501,12 @@ export const HELP_ARTICLES: HelpArticle[] = [
     body: [
       {
         type: "p",
-        text: "Every successful charge appears under Billing in the dashboard, with the amount, the currency and the date. Payment itself is processed by Razorpay, so the receipt in your inbox will come from them rather than from Orindle.",
+        text: "Every successful charge appears under Billing in the dashboard, with the amount, the currency and the date. Payment itself is processed by Dodo Payments, so the receipt in your inbox will come from them rather than from Orindle.",
       },
       {
         type: "note",
         tone: "info",
-        text: "Downloadable GST tax invoices are not currently generated. Standard payment receipts are available in Dashboard → Billing and by email from Razorpay.",
+        text: "Downloadable GST tax invoices are not currently generated. Standard payment receipts are available in Dashboard → Billing, and by email from Dodo Payments.",
       },
     ],
   },
@@ -559,7 +559,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       {
         type: "note",
         tone: "info",
-        text: "Card details are held by Razorpay, not by Orindle. Updating a card happens in their interface, which is why support cannot do it for you.",
+        text: "Card details are held by Dodo Payments, not by Orindle. Updating a card happens in their interface, which is why support cannot do it for you.",
       },
     ],
   },

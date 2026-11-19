@@ -1,9 +1,19 @@
 /**
  * POST /api/billing/verify
  *
- * Verifies Razorpay's browser-callback HMAC signature and order ownership
- * before activating a subscription. No path activates a plan from a client
- * claim alone.
+ * **Legacy Razorpay only.** New checkouts go through Dodo's hosted checkout
+ * (`POST /api/billing/checkout`) and are confirmed by a verified Dodo webhook
+ * (`POST /api/webhooks/dodo`). There is no browser callback in that flow,
+ * because a browser callback is not evidence of payment.
+ *
+ * This route remains mounted for the historical Razorpay flow: an order that
+ * was created before the migration may still have a payment in flight, and
+ * its HMAC signature is the only thing that proves it was paid. It does not
+ * create Razorpay orders any more — `POST /api/billing/checkout` no longer
+ * does — so it can only ever complete an order that already exists.
+ *
+ * It refuses outright when the Razorpay credentials are absent, rather than
+ * degrading into "assume valid".
  */
 
 import { enforceRateLimit, handle, ok, readJson, requireString, withActor } from "@/lib/api";
@@ -28,7 +38,7 @@ export async function POST(request: Request) {
     if (!isBillingConfigured()) {
       throw new AppError(
         "not_configured",
-        "Payments aren't connected on this deployment yet. Nothing was charged.",
+        "Legacy Razorpay payments aren't configured on this deployment.",
       );
     }
 

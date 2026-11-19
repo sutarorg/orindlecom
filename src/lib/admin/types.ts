@@ -105,6 +105,14 @@ export interface BillingSummary {
     refunded: number;
     revenue: Money[];
   };
+  /**
+   * How many live subscriptions each provider owns.
+   *
+   * Reported so an administrator can see, at a glance, how much is still on
+   * the legacy provider. It is a count of arrangements, not money: money is
+   * only ever reported per currency, and never summed across currencies.
+   */
+  providerCounts: Array<{ provider: string; subscriptions: number }>;
 }
 
 export interface StorageByPlanRow {

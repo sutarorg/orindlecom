@@ -13,9 +13,18 @@ Every row is marked ✅ verified · 🟡 designed, not built · ⬜ open · ➖ 
 > **Not ready for production, but for a different reason than before.** The backend
 > is now built and tested locally: schema, RLS across 20 tables, uploads, accounting,
 > billing verification, nine jobs, email, and 38 API route handlers. What remains is
-> not more code — it is (a) running it against real Supabase, R2 and Razorpay
+> not more code — it is (a) running it against real Supabase, R2 and Dodo Payments
 > projects, which has never happened, and (b) the decisions in §6 that no amount of
 > implementation can clear.
+>
+> **On billing specifically:** the Dodo Payments integration is code-complete and
+> the full lifecycle is covered by tests, but *no Dodo account has been
+> configured*. No product catalogue exists, no API key is set, no webhook endpoint
+> has been created, and no live payment has been taken. The administrator guide
+> [`docs/admin/DODO-PAYMENTS-ADMIN-SETUP.md`](../admin/DODO-PAYMENTS-ADMIN-SETUP.md)
+> lists everything that has to happen first. Until it has been worked through in
+> full, the honest status of Orindle's billing is **"code complete, account not
+> configured"**, and the admin console says exactly that.
 >
 > The honest summary: the code is ready to be deployed and tested. It has not been.
 
@@ -39,7 +48,7 @@ Anything claiming otherwise contradicts this table.
 | Storage units consistent (decimal) | fixed and re-verified |
 | RLS across 20 tables | `tests/db/rls.test.ts` (20) plus `rls-coverage.test.ts` (7), which enumerates tables from the catalogue rather than a list |
 | Quota cannot be bypassed by parallel uploads | 13 tests in `tests/db/storage.test.ts` |
-| Signature verification rejects replay and tampering | `tests/unit/billing-signature.test.ts` |
+| Signature verification rejects replay and tampering | `tests/unit/billing-signature.test.ts` (Razorpay, legacy) and `tests/unit/dodo-webhook-verification.test.ts` (Dodo, Standard Webhooks: tampered body, wrong secret, missing headers, stale timestamp, wrong webhook id) |
 | Rate limiting is atomic across instances | `tests/db/rate-limit.test.ts` |
 | Domain layer cannot see a request | `tests/unit/architecture.test.ts` |
 | Docs cannot claim an unbuilt route | `tests/unit/docs-fidelity.test.ts` |
@@ -48,7 +57,7 @@ Anything claiming otherwise contradicts this table.
 
 Every one of those runs against a real PostgreSQL engine (PGlite) or a real build,
 not a mock. What none of them proves is the same code against hosted Supabase, R2 or
-Razorpay — that is the gap that remains.
+Dodo Payments — that is the gap that remains.
 
 ---
 
@@ -66,7 +75,7 @@ Razorpay — that is the gap that remains.
 | Account deletion | ✅ two-stage, 7-day grace, daily purge job; owned objects removed before rows, auth user last | **Grace period is a proposal (§6)** |
 | Password change | ✅ re-authenticates with the current password; 5 attempts per 15 min | Needs a live project |
 | Organisations | 🟡 schema and RLS done; **routes specified, not built** — the screens say so rather than faking success | Needs the member/folder routes |
-| Billing | ✅ order, signature, webhook, activation, idempotency | **Blocked on merchant capability (§6)** |
+| Billing | ✅ hosted checkout, price validation, Standard Webhooks verification, activation, renewals, cancellation, plan changes, customer portal, idempotency | **Blocked on Dodo account configuration (§6.1)** — no products, no key, no webhook endpoint, no live transaction |
 | Email | ✅ 13 templates built, queue with payload and per-recipient dedupe, retry job | **Blocked on domain verification (§6)**; 10 templates specified but not built (§4.2 of `email-system.md`) |
 | Cron jobs | ✅ seven, scheduled in `vercel.json` | Needs deployment |
 
@@ -76,11 +85,11 @@ Razorpay — that is the gap that remains.
 
 | Item | State | Note |
 | --- | --- | --- |
-| RLS everywhere | ✅ | 20/20 tables, enumerated from `pg_tables` by `rls-coverage.test.ts`. Four tables are deny-all by design (RLS on, no policy) and a test proves they return zero rows |
+| RLS everywhere | ✅ | 20/20 tables, enumerated from `pg_tables` by `rls-coverage.test.ts`. Seven tables are deny-all by design (RLS on, no policy) and a test proves they return zero rows. The three new Dodo billing tables — the product mapping, the checkout sessions and the provider customers — are among them: a checkout reference and a provider customer id are not something a customer should be able to read |
 | Negative isolation tests | ✅ | `rls.test.ts` (20) and `rls-coverage.test.ts` (7); each negative case is paired with a positive one so a policy that denies everything cannot pass |
 | No client-supplied identity | ✅ | No route parses a `userId`; `architecture.test.ts` fails if `src/domain` names `NextRequest` |
-| Signature verification | ✅ | Raw-body HMAC, `timingSafeEqual`, replay across order and payment rejected; `/api/billing/verify` also checks the order's `notes.userId` against the session |
-| Webhook idempotency | ✅ | Unique `provider_payment_id`; a replayed webhook is acknowledged, not re-applied |
+| Signature verification | ✅ | Dodo: Standard Webhooks over the exact raw body, constant-time comparison, five-minute timestamp tolerance, all three headers required, no reason disclosed on rejection. Razorpay (legacy): raw-body HMAC, `timingSafeEqual`, replay across order and payment rejected; `/api/billing/verify` also checks the order's `notes.userId` against the session |
+| Webhook idempotency | ✅ | Three layers: unique `(provider, webhook_id)` on `webhook_events`, unique `(provider_payment_id, billing_provider)` on `invoices`, and `apply_renewal` returning false for an already-applied payment. `tests/db/dodo-billing.test.ts` proves a replayed renewal writes one invoice and does not extend the period twice |
 | Service key never in bundle | ✅ | `server-only` import makes a client import a build failure; backed by a grep over the build output |
 | Security headers | ✅ | CSP, HSTS, frame-ancestors, referrer policy in `next.config`; 220/220 visual captures with console-error detection prove the CSP does not break the app |
 | Rate limiting | ✅ | Postgres-backed `check_rate_limit`, atomic across instances; 7 tests |
@@ -112,11 +121,21 @@ Razorpay — that is the gap that remains.
 
 These cannot be resolved by writing software. Each needs a human answer.
 
-1. **Razorpay merchant capability.** Is the account enabled for international payments
-   and recurring charges? Until confirmed, `BILLING_CAPABILITIES` stays `false`, and the
-   server *refuses* such an order rather than creating one Razorpay will reject.
-2. **Approved payment methods.** Card? UPI? Net banking? Copy may not name a method the
-   account is not approved for.
+1. **Dodo Payments account configuration and approval.** This is the largest
+   remaining gap and it is entirely an account-and-configuration task, not a coding
+   one. It covers: business verification and KYC (including beneficial-owner
+   details), whether Dodo will underwrite the cloud-storage subscription model at
+   all, the 80-product recurring catalogue, the test and live API keys, the webhook
+   endpoint and its signing secret, and the Customer Portal policy settings. The
+   administrator guide lists each step and the exact amount to enter for every
+   plan, currency and period. Until the catalogue exists and is mapped in
+   `billing_provider_prices`, every checkout **fails closed** — which is the
+   intended behaviour, but it means no plan can be sold.
+2. **Approved payment methods and tax treatment.** Which methods may the copy
+   name? And is the tax exclusive or inclusive? The published prices in
+   `plan_prices` are exact amounts, so if tax were added on top the customer would
+   be charged more than the price shown — the tax configuration has to match the
+   pricing page.
 3. **Supabase plan and PITR.** Determines whether the RPO above is 5 minutes or 24
    hours. Must be known before promising customers anything about recovery.
 4. **R2 region.** Determines what can honestly be said about data residency. The
@@ -161,6 +180,7 @@ These cannot be resolved by writing software. Each needs a human answer.
 | `api-reference.md` | ✅ |
 | `storage-architecture.md` | ✅ |
 | `payment-lifecycle.md` | ✅ |
+| `admin/DODO-PAYMENTS-ADMIN-SETUP.md` | ✅ |
 | `email-system.md` | ✅ |
 | `security/threat-model.md` | ✅ |
 | `security/security-checklist.md` | ✅ |
@@ -185,9 +205,16 @@ All must be true simultaneously:
 - [ ] Storage accounting reconciles against real R2 objects
 - [ ] Trash cleanup runs and is observed running
 - [ ] Subscription expiry preserves files, verified by test
-- [ ] Billing verified end-to-end with test keys, then once with live keys at minimum
-      amount and refunded
+- [ ] Billing verified end-to-end with Dodo test mode, including a renewal, a failed
+      renewal, a scheduled cancellation, a scheduled downgrade and the Customer
+      Portal, then once with live keys at minimum amount
 - [ ] Duplicate webhook delivery produces exactly one invoice
+- [ ] A Dodo product catalogue exists for every approved plan, currency and period,
+      and every entry is mapped in `billing_provider_prices`
+- [ ] A real recurring subscription object exists in the Dodo dashboard, not just a
+      successful payment
+- [ ] Every legacy Razorpay subscription has been reviewed against the transition
+      procedure, and no customer holds two live arrangements
 - [ ] Email sends from a verified domain to a third-party address
 - [ ] Security headers set and verified
 - [ ] Restore rehearsal passed and recorded

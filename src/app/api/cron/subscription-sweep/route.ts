@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import { authoriseCron } from "@/lib/cron/auth";
 import { getServiceClient, isServiceConfigured } from "@/lib/supabase/service";
+import { expirePendingCheckouts } from "@/domain/billing/checkout-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -190,8 +191,15 @@ export async function GET(request: Request) {
     if (!queueError) warned += 1;
   }
 
+  // 4. Abandoned checkouts.
+  //
+  // A pending checkout that was never completed grants nothing — it is only a
+  // record that a checkout was started. Expiring it keeps the table honest
+  // and stops it growing without bound.
+  const expiredCheckouts = await expirePendingCheckouts();
+
   return NextResponse.json({
     ok: true,
-    data: { downgraded, expired, recoveryClosed, warned },
+    data: { downgraded, expired, recoveryClosed, warned, expiredCheckouts },
   });
 }

@@ -247,33 +247,109 @@ come from the business routes and are scoped to members.
 | | Method | Path | Purpose |
 | --- | --- | --- | --- |
 | ✅ | `GET` | `/api/billing/subscription` | | Current plan, status, period end, recovery window |
+| ✅ | `GET` | `/api/billing/status` | | Checkout/subscription state: `checkout_pending`, `active`, `past_due`, `cancelling`, `cancelled`, `expired`, `none` |
 | ✅ | `GET` | `/api/billing/invoices` | | The actor's invoices only |
-| ✅ | `POST` | `/api/billing/checkout` | | `{ planId, period }` → order + redirect/authorisation data (currency resolved server-side from location or existing subscription) |
-| ✅ | `POST` | `/api/billing/verify` | | `{ razorpayPaymentId, razorpayOrderId, razorpaySignature }` |
-| ✅ | `POST` | `/api/billing/cancel` | | Cancel at period end; never revokes access now |
-| ✅ | `POST` | `/api/billing/change-plan` | | `{ planId }` — schedule a downgrade for period end |
+| ✅ | `POST` | `/api/billing/checkout` | | `{ planId, period }` → `{ checkoutUrl, reference }` for Dodo's hosted checkout (currency resolved server-side from location or existing subscription) |
+| ✅ | `POST` | `/api/billing/portal` | | Opens a Dodo Customer Portal session for the actor's own provider customer |
+| ✅ | `POST` | `/api/billing/verify` | | **Legacy Razorpay only.** `{ razorpayPaymentId, razorpayOrderId, razorpaySignature }` |
+| ✅ | `POST` | `/api/billing/cancel` | | Cancel at period end, at the provider first; never revokes access now |
+| ✅ | `POST` | `/api/billing/change-plan` | | `{ planId }` — downgrade scheduled for period end, or an upgrade applied on the existing subscription |
 
-### Why `verify` exists
+### `POST /api/billing/checkout`
 
-`DriveRepository.startCheckout` returns `DriveResult<{ url: string }>`. The redirect
-flow satisfies that. The web-checkout overlay flow returns a signature to the
-browser, which must then be verified before anything is activated — hence an
-additional endpoint. `verify` exists so that neither flow can be completed without a
-server-side signature check. The repository method keeps its signature; the adapter
-returns the URL provided by Razorpay and the client calls `verify` if the overlay
-flow was used. **No path activates a plan from a client claim.**
+The request contains a plan id and a period. It contains **no amount, no currency, no
+provider product id and no user id** — the browser cannot choose what it is charged.
 
-Checkout request never contains an amount. The server resolves it from
-`plan_prices` where `approved = true`. A yearly request for a plan with no yearly
-price returns `unsupported` — there is no code path that invents one.
+The server, in order:
 
-### `POST /api/webhooks/razorpay`
+1. authenticates the actor and rate-limits them;
+2. refuses if the actor already has a live subscription;
+3. resolves the billing currency — the actor's existing paid subscription's currency
+   if they have one, otherwise the trusted edge geolocation headers, otherwise USD;
+4. resolves the approved amount from `plan_prices` where `approved = true`;
+5. resolves the provider product from `billing_provider_prices` for that exact
+   plan/currency/period, and refuses if it is missing;
+6. **re-validates the product against the provider's own catalog** — it must be a
+   recurring product, on the interval the period implies, in the approved currency,
+   at the approved amount;
+7. writes a pending `billing_checkout_sessions` row;
+8. creates the Dodo Checkout Session and returns `{ checkoutUrl, reference }`.
+
+Steps 5 and 6 are what make the mapping trustworthy: a stale or misconfigured
+product id cannot charge a different amount than the one Orindle published. A
+missing or mismatched mapping fails closed with `not_configured` — there is no
+fallback to another product, price or currency.
+
+The Free plan never creates a checkout session.
+
+### `GET /api/billing/status`
+
+The billing page polls this after the customer returns from hosted checkout. The
+return URL itself is informational: it says the customer came back, not that money
+moved. Only a verified provider webhook can activate a plan, and this endpoint
+reports what the server currently believes.
+
+### `POST /api/billing/portal`
+
+Resolves the actor's Dodo customer id from `billing_customers` — a server-side table
+the browser cannot write — and creates a Customer Portal session. A customer id in
+the request body is ignored entirely. The returned URL is the only thing sent back.
+
+The portal is used for viewing provider invoices and updating payment methods. It is
+not the route for changing a plan: a plan change moves Orindle's storage allowance,
+so it stays under `/api/billing/change-plan`, which enforces the end-of-period
+policy.
+
+### `POST /api/billing/verify` (legacy)
+
+`DriveRepository.startCheckout` returns `DriveResult<{ url: string }>`, and the
+repository method keeps its signature. The **new** flow does not use it: Dodo's
+hosted checkout produces no browser signature, and a browser callback is not
+evidence of payment. It remains mounted for historical Razorpay orders that were
+created before the migration and may still have a payment in flight — and it can
+only complete an order that already exists, because nothing creates Razorpay orders
+any more.
+
+**No path activates a plan from a client claim.**
+
+### `POST /api/webhooks/dodo`
+
+Not session-authenticated: Dodo is the caller. Authenticated by Standard Webhooks
+signature verification over the **raw** request body — the signed content is
+`{webhook-id}.{webhook-timestamp}.{raw-body}`, HMAC-SHA256, compared in constant
+time, with a five-minute timestamp tolerance. The SDK's `unwrap` performs the check.
+
+The event is stored raw by `(provider, webhook-id)` **before** processing; a
+duplicate delivery is acknowledged with `200` and not reprocessed. A processing
+failure is recorded on the stored row and answered with `500`, so Dodo retries and
+the stored event can be replayed.
+
+Attribution is the key property. A subscription event is matched to an Orindle owner
+through, in order: the checkout reference in the server-authored metadata resolved
+against the pending `billing_checkout_sessions` row; the existing subscription row
+carrying the provider subscription id; or the provider customer id through
+`billing_customers`. **A user id in provider metadata alone never activates
+anything.**
+
+Events handled: `subscription.active`, `subscription.updated`,
+`subscription.renewed`, `subscription.past_due`, `subscription.on_hold`,
+`subscription.failed`, `subscription.paused`, `subscription.unpaused`,
+`subscription.plan_changed`, `subscription.cancelled`, `subscription.expired`,
+`payment.succeeded`, `payment.failed`, `refund.succeeded`, `refund.failed`,
+`dispute.opened`, `dispute.lost`, `dispute.won`. Any other event is stored and
+ignored — a new provider event must not break the endpoint.
+
+### `POST /api/webhooks/razorpay` (legacy)
 
 Not session-authenticated. Verified by HMAC over the raw body with the webhook
 secret. The event is stored raw by `(provider, event_id)` before processing; a
 duplicate is acknowledged with `200` and not reprocessed. Handlers are idempotent: a
-`payment.captured` delivered twice produces one invoice, because `provider_payment_id`
-is unique.
+`payment.captured` delivered twice produces one invoice, because the invoice
+uniqueness is provider-scoped on `provider_payment_id`.
+
+This handler only touches rows whose `billing_provider` is `razorpay`, so a delayed
+legacy event cannot modify a Dodo subscription. It exists for historical
+subscriptions and delayed events; it can no longer create a payment.
 
 ---
 
@@ -509,12 +585,19 @@ like when nobody is watching.
 ## 14. Health
 
 `GET /api/health` returns configuration presence — never values — for Supabase, R2,
-Razorpay and Resend, plus whether each is usable:
+Dodo Payments, the legacy Razorpay handler and Resend, plus whether each is usable:
 
 ```json
 { "ok": true, "data": { "supabase": "configured", "r2": "missing",
-  "razorpay": "test-mode", "resend": "configured", "jobs": "configured" } }
+  "billingProvider": "dodo", "dodo": "test-mode",
+  "legacyRazorpay": "configured", "resend": "configured", "jobs": "configured" } }
 ```
+
+`dodo` is `configured` (live mode), `test-mode`, `missing` (no API key) or
+`mismatch` (the configured `DODO_PAYMENTS_ENVIRONMENT` disagrees with the
+deployment target — the mistake that would take money with the wrong
+credentials). `legacyRazorpay` reports only whether the historical webhook secret
+is present; it never claims the old provider can take a payment.
 
 It is public and deliberately says nothing an attacker can use: no hostnames, no key
 prefixes, no bucket names.

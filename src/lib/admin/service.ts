@@ -321,12 +321,17 @@ export async function getUserDetail(
 /* ------------------------------------------------------------------ */
 
 export async function getBillingSummary({ db }: AdminContext): Promise<BillingSummary> {
-  const [{ data: summaryRows, error: summaryError }, mrr, revenue] = await Promise.all([
+  const [{ data: summaryRows, error: summaryError }, mrr, revenue, providers] = await Promise.all([
     db.rpc("admin_billing_summary"),
     getMrr({ db } as AdminContext),
     db
       .from("invoices")
       .select("status, amount_minor, currency")
+      .limit(100_000),
+    db
+      .from("subscriptions")
+      .select("billing_provider")
+      .in("status", ["active", "past_due"])
       .limit(100_000),
   ]);
 
@@ -346,6 +351,17 @@ export async function getBillingSummary({ db }: AdminContext): Promise<BillingSu
     }
   }
 
+  /*
+   * How many live arrangements each provider owns. A count, not money: the
+   * revenue figures above stay separated by currency and are never summed
+   * across currencies.
+   */
+  const providerCounts = new Map<string, number>();
+  for (const row of providers.data ?? []) {
+    const provider = String(row.billing_provider ?? "unknown");
+    providerCounts.set(provider, (providerCounts.get(provider) ?? 0) + 1);
+  }
+
   return {
     mrr,
     statusCounts: ((summaryRows ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -360,6 +376,9 @@ export async function getBillingSummary({ db }: AdminContext): Promise<BillingSu
         .map(([currency, minor]) => ({ currency, minor }))
         .sort((a, b) => a.currency.localeCompare(b.currency)),
     },
+    providerCounts: [...providerCounts.entries()]
+      .map(([provider, subscriptions]) => ({ provider, subscriptions }))
+      .sort((a, b) => a.provider.localeCompare(b.provider)),
   };
 }
 
