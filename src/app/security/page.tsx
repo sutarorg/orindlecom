@@ -39,7 +39,7 @@ const PILLARS = [
   {
     icon: ScrollText,
     title: "Least-privilege billing",
-    body: "Payment processing is handled by Razorpay. Card data never touches Orindle's servers, and webhooks are signature-verified before they can change a subscription.",
+    body: "Payment processing is handled by Dodo Payments. Card data never touches Orindle's servers, and webhooks are signature-verified before they can change a subscription.",
   },
 ] as const;
 

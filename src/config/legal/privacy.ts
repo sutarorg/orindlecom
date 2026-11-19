@@ -73,7 +73,7 @@ export const PRIVACY_POLICY: LegalDocument = {
             [
               "Billing",
               "A provider-issued payment and subscription identifier, plan tier, billing interval (monthly or yearly), and billing currency (INR, USD, GBP, EUR, AED, SGD, AUD or CAD).",
-              "Razorpay, our payment processor",
+              "Dodo Payments, our payment processor",
             ],
             [
               "Technical and security",
@@ -89,7 +89,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         },
         {
           type: "p",
-          text: "Orindle does not collect or store your card number, bank credentials or UPI PIN. Payment details are entered directly into Razorpay's checkout interface and never reach Orindle's servers.",
+          text: "Orindle does not collect or store your card number, bank credentials or UPI PIN. Payment details are entered directly into Dodo Payments' hosted checkout and never reach Orindle's servers.",
         },
         {
           type: "p",
@@ -160,7 +160,7 @@ export const PRIVACY_POLICY: LegalDocument = {
               text: "Private object storage for file contents, encrypted at rest and stored under opaque random object keys.",
             },
             {
-              term: "Razorpay",
+              term: "Dodo Payments",
               text: "Domestic and international payment processing across all eight supported currencies. Orindle receives payment references, never card numbers.",
             },
             {

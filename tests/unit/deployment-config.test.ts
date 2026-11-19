@@ -191,11 +191,46 @@ describe(".env.example", () => {
     // Every secret must be present but empty. A filled-in value in the example is
     // how a credential reaches a public repository.
     for (const line of example.split("\n")) {
-      const match = line.match(/^(SUPABASE_SERVICE_ROLE_KEY|RAZORPAY_KEY_SECRET|RAZORPAY_WEBHOOK_SECRET|R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY|RESEND_API_KEY|CRON_SECRET)=(.*)$/);
+      const match = line.match(/^(SUPABASE_SERVICE_ROLE_KEY|DODO_PAYMENTS_API_KEY|DODO_PAYMENTS_WEBHOOK_KEY|RAZORPAY_KEY_SECRET|RAZORPAY_WEBHOOK_SECRET|R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY|RESEND_API_KEY|CRON_SECRET)=(.*)$/);
       if (match) {
         expect(match[2].trim(), `${match[1]} must be empty in .env.example`).toBe("");
       }
     }
+  });
+
+  it("never publishes a Dodo credential to the browser", async () => {
+    const example = await readFile(path.join(ROOT, ".env.example"), "utf8");
+    // A NEXT_PUBLIC_ variable is inlined into the client bundle. A payment
+    // credential there is a credential in a public place.
+    expect(example).not.toMatch(/^NEXT_PUBLIC_DODO_PAYMENTS_/m);
+    expect(example).not.toMatch(/^NEXT_PUBLIC_.*DODO/m);
+
+    const sourceFiles: string[] = [];
+    async function walk(dir: string): Promise<void> {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) await walk(full);
+        else if (/\.(ts|tsx)$/.test(entry.name)) sourceFiles.push(full);
+      }
+    }
+    await walk(path.join(ROOT, "src"));
+
+    for (const file of sourceFiles) {
+      const text = await readFile(file, "utf8");
+      expect(text, `${file} must not read a Dodo credential from a public env var`).not.toMatch(
+        /process\.env\.NEXT_PUBLIC_DODO/,
+      );
+    }
+  });
+
+  it("documents the Dodo billing configuration", async () => {
+    const example = await readFile(path.join(ROOT, ".env.example"), "utf8");
+    // The provider switch, the two server-only credentials and the explicit
+    // environment. All four are read by the application.
+    expect(example).toContain("BILLING_PROVIDER=");
+    expect(example).toContain("DODO_PAYMENTS_API_KEY=");
+    expect(example).toContain("DODO_PAYMENTS_WEBHOOK_KEY=");
+    expect(example).toContain("DODO_PAYMENTS_ENVIRONMENT=");
   });
 
   it("enables both approved billing capability flags by default", async () => {
@@ -232,7 +267,7 @@ describe("deployment guide", () => {
       13: "thirteen", 14: "fourteen", 15: "fifteen", 16: "sixteen",
       17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty",
       21: "twenty-one", 22: "twenty-two", 23: "twenty-three", 24: "twenty-four",
-      25: "twenty-five", 26: "twenty-six",
+      25: "twenty-five", 26: "twenty-six", 27: "twenty-seven",
     };
     expect(words[count], `add ${count} to the word map`).toBeTruthy();
     expect(guide).toContain(`${words[count]} migrations`);
@@ -273,6 +308,10 @@ describe("environment-variables.md", () => {
       "TRASH_RETENTION_DAYS",
       "RECOVERY_WINDOW_DAYS",
       "SUPABASE_SERVICE_ROLE_KEY",
+      "BILLING_PROVIDER",
+      "DODO_PAYMENTS_API_KEY",
+      "DODO_PAYMENTS_WEBHOOK_KEY",
+      "DODO_PAYMENTS_ENVIRONMENT",
     ]) {
       expect(doc, `${name} is undocumented`).toContain(name);
     }

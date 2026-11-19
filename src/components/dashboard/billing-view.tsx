@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, CreditCard, FileText, Globe, Lock, Minus, Receipt } from "lucide-react";
+import { Check, CreditCard, FileText, Globe, Lock, Minus, Receipt, Settings } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import {
@@ -35,6 +35,11 @@ export interface InvoiceRow {
   paidAt: string;
 }
 
+/** The provider's own reference for a payment, shown in the history. */
+export interface InvoiceProviderRow {
+  provider?: string | null;
+}
+
 function formatMinorAmount(amountMinor: number, currencyCode: string): string {
   const code = isSupportedCurrency(currencyCode) ? currencyCode : DEFAULT_CURRENCY;
   return formatPrice(amountMinor / 100, code);
@@ -45,9 +50,12 @@ function formatMinorAmount(amountMinor: number, currencyCode: string): string {
  *
  * Pricing currency is resolved authoritatively on the server from the user's
  * location (or their existing paid subscription) and cannot be changed manually.
- * `checkout()` opens Razorpay's overlay with an order created server-side from
- * `public.plan_prices` and resolves only after signature verification activates
- * the subscription.
+ *
+ * Checkout is Dodo's hosted checkout: the server resolves the approved price
+ * and the provider product, then hands back a URL to redirect to. What
+ * happens there is settled by a verified webhook, never by the browser coming
+ * back — so the page says "we're confirming your payment" until the server
+ * says otherwise.
  */
 export function BillingView({
   subscription,
@@ -70,13 +78,78 @@ export function BillingView({
   const [busyPlan, setBusyPlan] = React.useState<string | null>(null);
   const [pendingDowngrade, setPendingDowngrade] = React.useState<Plan | null>(null);
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [portalOpen, setPortalOpen] = React.useState(false);
+  const [confirming, setConfirming] = React.useState(false);
 
   const current = PLANS.find((plan) => plan.id === subscription.planId) ?? PLANS[0];
   const isActive = subscription.status === "active";
   const selectedCurrency = currencyMeta(currency);
 
+  /*
+   * After the customer returns from the hosted checkout, the page asks the
+   * server what it knows. The URL parameter only says "they came back" — it
+   * carries no authority about whether money moved.
+   */
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get("checkout");
+    if (checkout !== "returned" && checkout !== "cancelled") return;
+
+    let cancelled = false;
+
+    const check = async () => {
+      const result = await api.get<{
+        state: string;
+        planName: string;
+        currentPeriodEnd: string | null;
+      }>("/api/billing/status");
+
+      if (cancelled) return;
+
+      if (!result.ok) {
+        setConfirming(false);
+        return;
+      }
+
+      if (checkout === "cancelled") {
+        setConfirming(false);
+        toast({
+          tone: "info",
+          title: "Checkout closed",
+          description: "Nothing was charged.",
+        });
+        return;
+      }
+
+      if (result.data.state === "active") {
+        setConfirming(false);
+        toast({
+          tone: "success",
+          title: `${result.data.planName} is active`,
+          description: "Your new allowance is available now.",
+        });
+        router.refresh();
+        return;
+      }
+
+      // Not confirmed yet. Say so honestly rather than claiming success.
+      setConfirming(true);
+      toast({
+        tone: "info",
+        title: "Confirming your payment",
+        description:
+          "We're waiting for our payment provider to confirm. This usually takes a moment.",
+      });
+    };
+
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, toast]);
+
   const cancelSubscription = async () => {
-    const result = await api.post<{ status: string; currentPeriodEnd: string | null }>(
+    const result = await api.post<{ status: string; currentPeriodEnd: string | null; note: string }>(
       "/api/billing/cancel",
     );
 
@@ -96,8 +169,22 @@ export function BillingView({
     router.refresh();
   };
 
+  const openPortal = async () => {
+    setPortalOpen(true);
+    const result = await api.post<{ url: string }>("/api/billing/portal");
+
+    setPortalOpen(false);
+
+    if (!result.ok) {
+      toast({ tone: "error", title: "Billing portal unavailable", description: result.message });
+      return;
+    }
+
+    window.location.assign(result.data.url);
+  };
+
   const switchPlan = async (plan: Plan) => {
-    const result = await api.post<{ effectiveAt: string; note: string }>(
+    const result = await api.post<{ effectiveAt: string; note: string; scheduled?: boolean }>(
       "/api/billing/change-plan",
       { planId: plan.id },
     );
@@ -109,7 +196,7 @@ export function BillingView({
 
     toast({
       tone: "success",
-      title: `Switching to ${plan.name}`,
+      title: result.data.scheduled ? `Switching to ${plan.name}` : `You're on ${plan.name}`,
       description: result.data.note,
     });
     router.refresh();
@@ -120,28 +207,21 @@ export function BillingView({
 
     const outcome = await startCheckout({
       planId: plan.id,
-      planName: plan.name,
       period,
     });
 
-    setBusyPlan(null);
-
-    if (outcome.ok) {
-      toast({
-        tone: "success",
-        title: `${plan.name} is active`,
-        description: "Your new allowance is available now.",
-      });
-      router.refresh();
+    if (!outcome.ok) {
+      setBusyPlan(null);
+      if (outcome.code === "cancelled") {
+        toast({ tone: "info", title: "Checkout closed", description: outcome.message });
+        return;
+      }
+      toast({ tone: "error", title: "Payment wasn't completed", description: outcome.message });
       return;
     }
 
-    if (outcome.code === "cancelled") {
-      toast({ tone: "info", title: "Checkout closed", description: outcome.message });
-      return;
-    }
-
-    toast({ tone: "error", title: "Payment wasn't completed", description: outcome.message });
+    // The browser is navigating to the hosted checkout. `busyPlan` stays set so
+    // the button does not invite a second click while the page is leaving.
   };
 
   const currentMonthlyPrice = resolvePrice(current, currency, "monthly");
@@ -162,16 +242,10 @@ export function BillingView({
                 <span
                   className={cn(
                     "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]",
-                    isActive
-                      ? "bg-[#EAF9F1] text-[#1B8A57]"
-                      : "bg-[var(--brand-surface-muted)] text-text-muted",
+                    statusTone(subscription.status),
                   )}
                 >
-                  {isActive
-                    ? subscription.cancelAtPeriodEnd
-                      ? "Cancelling at period end"
-                      : "Active"
-                    : "No paid plan"}
+                  {statusLabel(subscription)}
                 </span>
               </div>
               <p className="mt-0.5 text-[11.5px] text-text-muted">
@@ -183,13 +257,31 @@ export function BillingView({
                     : `${formatPrice(currentMonthlyPrice, currency)}/month`}
               </p>
             </div>
-            <Link
-              href="/dashboard/storage"
-              className="inline-flex h-8 items-center rounded-lg border border-[var(--brand-border-strong)] bg-white px-2.5 text-[11.5px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              View storage
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void openPortal()}
+                disabled={portalOpen}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--brand-border-strong)] bg-white px-2.5 text-[11.5px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+              >
+                <Settings className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                {portalOpen ? "Opening…" : "Manage billing"}
+              </button>
+              <Link
+                href="/dashboard/storage"
+                className="inline-flex h-8 items-center rounded-lg border border-[var(--brand-border-strong)] bg-white px-2.5 text-[11.5px] font-semibold text-ink transition-colors hover:bg-[var(--brand-surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                View storage
+              </Link>
+            </div>
           </div>
+
+          {confirming && (
+            <p className="mt-3 rounded-xl bg-primary-soft px-3 py-2 text-[11.5px] font-medium text-primary">
+              Confirming your payment with our payment provider. Your plan activates as soon
+              as they confirm it — no need to pay again.
+            </p>
+          )}
 
           <dl className="mt-4 grid gap-3 sm:grid-cols-2">
             <Row
@@ -390,14 +482,10 @@ export function BillingView({
                 <span
                   className={cn(
                     "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]",
-                    inv.status === "paid"
-                      ? "bg-[#EAF9F1] text-[#1B8A57]"
-                      : inv.status === "refunded"
-                        ? "bg-[#FFF5E5] text-[#A16207]"
-                        : "bg-[var(--brand-surface-muted)] text-text-muted",
+                    invoiceTone(inv.status),
                   )}
                 >
-                  {inv.status}
+                  {invoiceLabel(inv.status)}
                 </span>
               </li>
             ))}
@@ -405,7 +493,8 @@ export function BillingView({
         )}
         <p className="flex items-center gap-1.5 border-t border-[var(--brand-border-soft)] px-4 py-2.5 text-[10.5px] text-text-subtle">
           <Lock className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden="true" />
-          Payments are processed by Razorpay. Card details are never stored on Orindle servers.
+          Payments are processed by Dodo Payments. Card details are never stored on Orindle
+          servers.
         </p>
       </section>
 
@@ -454,6 +543,73 @@ export function BillingView({
       </ConfirmDialog>
     </div>
   );
+}
+
+/**
+ * The subscription status label.
+ *
+ * The states are the ones a customer can actually be in, and each one says
+ * something different. "No paid plan" and "Payment failed" are not the same
+ * message and must not look the same.
+ */
+function statusLabel(subscription: Subscription): string {
+  if (subscription.cancelAtPeriodEnd && subscription.status === "active") {
+    return "Cancelling at period end";
+  }
+  switch (subscription.status) {
+    case "active":
+      return "Active";
+    case "past_due":
+      return "Payment failed";
+    case "cancelled":
+      return "Cancelled";
+    case "expired":
+      return "Expired";
+    case "trialing":
+      return "Trialling";
+    default:
+      return "No paid plan";
+  }
+}
+
+function statusTone(status: Subscription["status"]): string {
+  switch (status) {
+    case "active":
+      return "bg-[#EAF9F1] text-[#1B8A57]";
+    case "past_due":
+      return "bg-[#FFF5E5] text-[#A16207]";
+    case "cancelled":
+    case "expired":
+      return "bg-[var(--brand-surface-muted)] text-text-muted";
+    default:
+      return "bg-[var(--brand-surface-muted)] text-text-muted";
+  }
+}
+
+function invoiceTone(status: string): string {
+  switch (status) {
+    case "paid":
+      return "bg-[#EAF9F1] text-[#1B8A57]";
+    case "refunded":
+      return "bg-[#FFF5E5] text-[#A16207]";
+    case "failed":
+      return "bg-[#FDECEC] text-[#C93B2B]";
+    default:
+      return "bg-[var(--brand-surface-muted)] text-text-muted";
+  }
+}
+
+function invoiceLabel(status: string): string {
+  switch (status) {
+    case "paid":
+      return "Paid";
+    case "refunded":
+      return "Refunded";
+    case "failed":
+      return "Failed";
+    default:
+      return status;
+  }
 }
 
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {

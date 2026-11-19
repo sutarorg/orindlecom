@@ -1,6 +1,15 @@
 /**
  * POST /api/webhooks/razorpay
  *
+ * **Legacy.** New payments go through Dodo Payments
+ * (`POST /api/webhooks/dodo`). This handler stays mounted for historical
+ * Razorpay events: subscriptions created before the migration may still
+ * deliver delayed notifications, and their provider ids still live in
+ * Orindle's tables.
+ *
+ * It only ever touches rows whose `billing_provider` is 'razorpay', so a
+ * legacy event cannot modify a Dodo subscription.
+ *
  * Not session-authenticated: Razorpay is the caller. Authenticated instead by
  * HMAC over the RAW body, so the bytes that were signed are the bytes verified.
  *
@@ -183,6 +192,7 @@ async function processEvent(type: string, event: RazorpayEvent): Promise<void> {
       await supabase
         .from("subscriptions")
         .update({ cancel_at_period_end: true })
+        .eq("billing_provider", "razorpay")
         .eq("provider_subscription_id", sub.id);
       return;
     }
@@ -195,6 +205,7 @@ async function processEvent(type: string, event: RazorpayEvent): Promise<void> {
       await supabase
         .from("subscriptions")
         .update({ status: "past_due" })
+        .eq("billing_provider", "razorpay")
         .eq("provider_subscription_id", sub.id);
       return;
     }
@@ -208,6 +219,7 @@ async function processEvent(type: string, event: RazorpayEvent): Promise<void> {
       await supabase
         .from("invoices")
         .update({ status: "refunded" })
+        .eq("billing_provider", "razorpay")
         .eq("provider_payment_id", refund.payment_id);
       return;
     }

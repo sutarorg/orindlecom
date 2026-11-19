@@ -311,7 +311,7 @@ export interface ActivityEvent {
 export interface Subscription {
   planId: string;
   planName: string;
-  status: "active" | "trialing" | "past_due" | "cancelled" | "none";
+  status: "active" | "trialing" | "past_due" | "cancelled" | "expired" | "none";
   /** Currency code the account is billed in. */
   currency: string;
   /** Amount in minor units (paise/cents). */
@@ -323,6 +323,8 @@ export interface Subscription {
   renewsAutomatically: boolean;
   /** True when cancellation is scheduled for period end. */
   cancelAtPeriodEnd: boolean;
+  /** Which payment provider owns the subscription. */
+  provider?: "dodo" | "razorpay";
 }
 
 export interface Invoice {

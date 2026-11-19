@@ -2,7 +2,8 @@
  * GET /api/admin/settings — integration presence and the approved catalogue.
  *
  * **Presence, never values.** Each state is derived from whether a variable is
- * set (and, for Razorpay, whether the key mode matches the environment). No key,
+ * set (and, for Dodo, whether the configured environment matches the
+ * deployment). No key,
  * key prefix, bucket name, hostname or project reference is in this payload — the
  * same discipline `/api/health` already applies in public.
  */
@@ -16,23 +17,20 @@ import { isAuthConfigured } from "@/lib/auth/supabase/server";
 import { isServiceConfigured } from "@/lib/supabase/service";
 import { isStorageConfigured } from "@/lib/r2/client";
 import { getEmailState } from "@/lib/resend/client";
-import { isBillingConfigured } from "@/domain/billing/razorpay";
+import { dodoHealth } from "@/domain/billing/dodo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function razorpayState(): IntegrationState["state"] {
-  const id = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ?? "";
-  const secret = process.env.RAZORPAY_KEY_SECRET?.trim() ?? "";
-  if (!id || !secret) return "missing";
-
-  const isTest = id.startsWith("rzp_test_");
-  const isLive = id.startsWith("rzp_live_");
-  if (!isTest && !isLive) return "mismatch";
-  // The two mistakes that cost real money.
-  if (process.env.NODE_ENV === "production" && isTest) return "mismatch";
-  if (process.env.NODE_ENV !== "production" && isLive) return "mismatch";
-  return isTest ? "test-mode" : "configured";
+/**
+ * The Dodo configuration state.
+ *
+ * `dodoHealth()` already applies the two mistakes that cost real money — live
+ * credentials outside production and test credentials inside it — so the
+ * mapping here is a straight pass-through.
+ */
+function dodoState(): IntegrationState["state"] {
+  return dodoHealth();
 }
 
 export async function GET() {
@@ -66,10 +64,18 @@ export async function GET() {
             : "No storage bucket is configured. Uploads cannot complete.",
         },
         {
-          key: "razorpay",
-          label: "Razorpay (payments)",
-          state: isBillingConfigured() ? razorpayState() : "missing",
-          detail: "Key mode is checked against the environment so live keys never run in development.",
+          key: "dodo",
+          label: "Dodo Payments (payments)",
+          state: dodoState(),
+          detail:
+            "The configured Dodo environment is checked against the deployment so live credentials never run in development.",
+        },
+        {
+          key: "legacy-razorpay",
+          label: "Razorpay (legacy, historical events only)",
+          state: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ? "configured" : "missing",
+          detail:
+            "Kept so historical Razorpay subscriptions and delayed events still process. No new checkouts use it.",
         },
         {
           key: "resend",

@@ -8,7 +8,7 @@
  *
  *   1. Trash cleanup and other scheduled jobs (no user request to act as).
  *   2. Quota reconciliation against real storage objects.
- *   3. Webhook processing (Razorpay is the caller, not a person).
+ *   3. Webhook processing (Dodo is the caller, not a person).
  *   4. Invite acceptance lookups (the invitee has no session by definition).
  *   5. Writing support requests from the anonymous contact form.
  *

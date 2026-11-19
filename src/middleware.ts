@@ -55,7 +55,7 @@ function isApi(pathname: string): boolean {
 /**
  * API routes that authenticate by some other means and must not be redirected.
  *
- * A webhook is called by Razorpay, not a browser; a cron job is called by Vercel.
+ * A webhook is called by a payment provider, not a browser; a cron job is called by Vercel.
  * Both authenticate themselves (signature / bearer secret) and a redirect would
  * break them silently.
  */

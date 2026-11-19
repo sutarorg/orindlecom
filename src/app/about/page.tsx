@@ -104,7 +104,7 @@ export default function AboutPage() {
                 </p>
                 <p className="mt-2 text-[12.5px] leading-[1.7] text-text">
                   Next.js and TypeScript on Vercel, Supabase for Postgres and authentication,
-                  Cloudflare R2 for object storage, Razorpay for payments and Resend for email.
+                  Cloudflare R2 for object storage, Dodo Payments for payments and Resend for email.
                 </p>
               </div>
               <div>

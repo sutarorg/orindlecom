@@ -62,6 +62,10 @@ export default async function AdminBillingPage() {
 
   const unknownPeriods = summary.mrr.reduce((sum, row) => sum + row.unknownPeriod, 0);
   const totalPaidSubscribers = summary.mrr.reduce((sum, row) => sum + row.subscribers, 0);
+  const legacySubscriptions =
+    summary.providerCounts
+      .filter((row) => row.provider !== "dodo")
+      .reduce((sum, row) => sum + row.subscriptions, 0);
 
   return (
     <div>
@@ -100,6 +104,21 @@ export default async function AdminBillingPage() {
           hint="Cancellation scheduled, or term ended"
         />
       </div>
+
+      {legacySubscriptions > 0 && (
+        <div className="mt-3 rounded-[14px] border border-[#F1D9A8] bg-[#FEFBF3] p-3.5">
+          <p className="text-[12px] font-bold text-[#96610B]">
+            {formatNumber(legacySubscriptions)} live subscription
+            {legacySubscriptions === 1 ? "" : "s"} still on the legacy provider
+          </p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-[#96610B]">
+            These arrangements were created before the Dodo Payments migration and are still
+            collected by the old provider. They are counted in the MRR figures above, because
+            they are real recurring revenue. They are not migrated automatically, and no second
+            subscription is created for those customers.
+          </p>
+        </div>
+      )}
 
       {unknownPeriods > 0 && (
         <div className="mt-3 rounded-[14px] border border-[#F1D9A8] bg-[#FEFBF3] p-3.5">

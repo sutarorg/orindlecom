@@ -336,6 +336,10 @@ export async function activateSubscription(input: ActivationInput): Promise<void
     currency: input.currency,
     status: "active" as const,
     provider_subscription_id: input.subscriptionId ?? null,
+    // Historical Razorpay rows are labelled as such, so they stay
+    // distinguishable from Dodo rows and the two providers' external ids can
+    // never collide.
+    billing_provider: "razorpay" as const,
     current_period_start: new Date().toISOString(),
     current_period_end: input.periodEnd,
     billing_period: input.period,
@@ -361,6 +365,7 @@ export async function activateSubscription(input: ActivationInput): Promise<void
     owner_id: input.userId,
     subscription_id: subscriptionId ?? null,
     provider_payment_id: input.paymentId,
+    billing_provider: "razorpay",
     amount_minor: input.amountMinor,
     currency: input.currency,
     status: "paid",

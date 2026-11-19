@@ -2,7 +2,7 @@
   "name": "orindle",
   "version": "0.1.0",
   "private": true,
-  "description": "Orindle \u2014 personal and business cloud storage. Public website and product frontend.",
+  "description": "Orindle — personal and business cloud storage. Public website and product frontend.",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
@@ -23,6 +23,7 @@
     "@supabase/supabase-js": "^2.119.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "dodopayments": "^2.63.0",
     "lucide-react": "0.545.0",
     "next": "16.4.6",
     "react": "19.3.1",
